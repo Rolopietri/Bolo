@@ -1,0 +1,12 @@
+-- Cocina · POS: quitar un insumo de la receta SIN reemplazo ("sin X")
+-- ════════════════════════════════════════════════════════════════
+-- MOVIDA (dedupe): la lógica de "sin X" (swap_from sin swap_to → se quita ese
+-- insumo del descuento) ahora vive en las funciones canónicas
+-- descontar_stock_por_venta y revertir_stock_por_venta de
+-- cocina-zzz-motor-canonico.sql (que se aplica de último y manda).
+--
+-- Modelo: un ítem del POS que trae swap_from PERO swap_to = null salta ese
+-- insumo en el descuento (receta base y extra), con reverso simétrico al
+-- borrar la venta. Ver el motor canónico.
+--
+-- Este archivo se deja como marcador histórico; no crea nada.

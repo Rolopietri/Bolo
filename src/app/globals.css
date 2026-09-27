@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* ─── Identidad — La Quinta Mamá ─────────────────────────────────── */
+@theme inline {
+  --font-sans: var(--font-jost);
+  --font-display: var(--font-jost);
+  --font-cinzel: var(--font-cinzel);
+  --font-garamond: var(--font-garamond);
+
+  /* Texto en negro (editorial) */
+  --color-cacao: #0A0A0A;
+  --color-cacao-soft: #595959;
+  --color-cacao-mute: #999999;
+
+  /* Hairlines y fondos */
+  --color-marfil: #D5CECB;
+  --color-marfil-light: #EDE8E2;
+  --color-marfil-soft: #FAF6F0;
+
+  /* Acento único: terracotta (solo hover y detalles) */
+  --color-terracotta: #B53727;
+  --color-terracotta-deep: #952D20;
+
+  /* Heredados de marca, usados todavía en algunas páginas */
+  --color-oliva: #758F5F;
+  --color-azul-polvo: #9FB6D2;
+  --color-coral: #C8695C;
+  --color-coral-soft: #DA9B91;
+  --color-coral-light: #EDCDC6;
+}
+
+html, body {
+  background: #FFFFFF;
+  color: #0A0A0A;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: var(--font-jost), "Futura", "Avenir Next", sans-serif;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.font-cinzel {
+  font-family: var(--font-cinzel), "Cinzel", "Trajan Pro", serif;
+}
+
+.font-serif {
+  font-family: var(--font-garamond), "EB Garamond", "Garamond", Georgia, serif;
+}
