@@ -87,7 +87,7 @@ export function LoginForm() {
         type="button"
         onClick={handleGoogle}
         disabled={googleLoading}
-        className="w-full flex items-center justify-center gap-3 rounded-lg bg-white ring-1 ring-marfil py-2.5 font-medium text-cacao hover:bg-marfil-light disabled:opacity-50"
+        className="w-full flex items-center justify-center gap-3 rounded-xl bg-white ring-1 ring-marfil py-3 text-base font-semibold text-cacao hover:bg-marfil-light disabled:opacity-50"
       >
         <GoogleIcon />
         {googleLoading ? "Conectando..." : "Entrar con Google"}
@@ -104,26 +104,28 @@ export function LoginForm() {
         className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
       >
         <label className="block">
-          <span className="text-sm font-medium text-cacao">
-            Enlace mágico por correo
-          </span>
+          <span className="text-sm font-semibold text-cacao">Tu correo</span>
           <input
             type="email"
             required
             placeholder="tu@correo.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-cacao-soft"
+            className="mt-1.5 w-full rounded-xl ring-1 ring-marfil px-3.5 py-3 text-base text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
           />
         </label>
 
         <button
           type="submit"
           disabled={status === "sending"}
-          className="w-full rounded-lg bg-terracotta text-white py-2 font-medium hover:bg-terracotta-deep disabled:opacity-50 transition-colors"
+          className="w-full rounded-xl bg-terracotta text-white py-3 text-base font-bold hover:bg-terracotta-deep disabled:opacity-50 transition-colors"
         >
-          {status === "sending" ? "Enviando..." : "Enviar enlace"}
+          {status === "sending" ? "Enviando..." : "Enviar mi enlace"}
         </button>
+
+        <p className="text-xs text-cacao-mute text-center">
+          Te mandamos un enlace al correo. Ábrelo y entras.
+        </p>
       </form>
 
       {errorMsg && (

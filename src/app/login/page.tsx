@@ -4,23 +4,18 @@ import { LoginForm } from "./LoginForm";
 
 export default function LoginPage() {
   return (
-    <div className="flex-1 flex items-center justify-center px-5 py-12">
+    <div className="flex-1 flex items-center justify-center px-5 py-12 bg-marfil-soft">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <Image
-            src="/logo-black.svg"
-            alt="La Quinta Mamá"
-            width={80}
-            height={80}
-            className="mx-auto h-20 w-20 opacity-90"
+            src="/bolo-logo.png"
+            alt="bolo"
+            width={360}
+            height={144}
+            className="mx-auto h-16 w-auto"
             priority
           />
-          <h1 className="mt-5 font-display text-xl tracking-[0.25em] uppercase text-cacao">
-            La Quinta Mamá
-          </h1>
-          <p className="mt-2 text-cacao-soft text-sm italic">
-            Donde la cultura y el bienestar florecen.
-          </p>
+          <p className="mt-4 text-cacao-soft">Entra a tu panel de trabajo.</p>
         </div>
 
         <Suspense

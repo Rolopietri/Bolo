@@ -1,52 +1,66 @@
 @import "tailwindcss";
 
-/* ─── Identidad — La Quinta Mamá ─────────────────────────────────── */
+/* ─── Identidad — bolo ───────────────────────────────────────────────
+   Azul navy (#02197A) + Naranja (#F89000) sobre crema cálido.
+   Tipografía redondeada y amigable (Baloo 2 en títulos, Nunito en texto).
+   Simple, comercial y fácil de leer para cualquier persona. */
 @theme inline {
-  --font-sans: var(--font-jost);
-  --font-display: var(--font-jost);
-  --font-cinzel: var(--font-cinzel);
-  --font-garamond: var(--font-garamond);
+  --font-sans: "Nunito", system-ui, -apple-system, sans-serif;
+  --font-display: "Nunito", system-ui, -apple-system, sans-serif;
+  --font-cinzel: "Baloo 2", "Nunito", system-ui, sans-serif; /* títulos redondeados */
+  --font-garamond: "Nunito", system-ui, sans-serif; /* "serif" -> sans amigable */
 
-  /* Texto en negro (editorial) */
-  --color-cacao: #0A0A0A;
-  --color-cacao-soft: #595959;
-  --color-cacao-mute: #999999;
+  /* Texto (navy oscuro, alto contraste) */
+  --color-cacao: #14235c;
+  --color-cacao-soft: #566190;
+  --color-cacao-mute: #99a1c0;
 
-  /* Hairlines y fondos */
-  --color-marfil: #D5CECB;
-  --color-marfil-light: #EDE8E2;
-  --color-marfil-soft: #FAF6F0;
+  /* Neutros cálidos (fondos / hairlines) */
+  --color-marfil: #e6dfce;
+  --color-marfil-light: #f1ecdf;
+  --color-marfil-soft: #fbf8f0;
 
-  /* Acento único: terracotta (solo hover y detalles) */
-  --color-terracotta: #B53727;
-  --color-terracotta-deep: #952D20;
+  /* Acento principal: NARANJA (botones y CTAs) */
+  --color-terracotta: #f89000;
+  --color-terracotta-deep: #dd7d00;
 
-  /* Heredados de marca, usados todavía en algunas páginas */
-  --color-oliva: #758F5F;
-  --color-azul-polvo: #9FB6D2;
-  --color-coral: #C8695C;
-  --color-coral-soft: #DA9B91;
-  --color-coral-light: #EDCDC6;
+  /* Marca AZUL (navy) */
+  --color-navy: #02197a;
+  --color-navy-soft: #2a3b90;
+  --color-naranja: #f89000;
+  --color-naranja-soft: #ffd9a1;
+
+  /* Heredados (usados en gráficos) — se conservan */
+  --color-oliva: #758f5f;
+  --color-azul-polvo: #9fb6d2;
+  --color-coral: #c8695c;
+  --color-coral-soft: #da9b91;
+  --color-coral-light: #edcdc6;
 }
 
-html, body {
-  background: #FFFFFF;
-  color: #0A0A0A;
-  font-feature-settings: "ss01", "cv11";
+html,
+body {
+  background: #fbf8f0;
+  color: #14235c;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Etiquetas pequeñas (eyebrows). Limpias, no editoriales. */
 .font-display {
-  font-family: var(--font-jost), "Futura", "Avenir Next", sans-serif;
-  font-weight: 500;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-family: "Nunito", system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
 }
 
+/* Títulos: redondeados y amigables. */
 .font-cinzel {
-  font-family: var(--font-cinzel), "Cinzel", "Trajan Pro", serif;
+  font-family: "Baloo 2", "Nunito", system-ui, sans-serif;
+  font-weight: 700;
+  letter-spacing: 0;
 }
 
+/* Antes "serif" editorial; ahora sans amigable. */
 .font-serif {
-  font-family: var(--font-garamond), "EB Garamond", "Garamond", Georgia, serif;
+  font-family: "Nunito", system-ui, sans-serif;
+  font-style: normal;
 }

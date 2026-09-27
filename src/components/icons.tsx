@@ -133,6 +133,16 @@ export function PlusIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Barras (para finanzas / administración). */
+export function ChartIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M3 21h18" />
+      <path d="M6 21V11M11 21V5M16 21v-8" />
+    </Svg>
+  );
+}
+
 /** Lápiz para editar. */
 export function PencilIcon(props: SVGProps<SVGSVGElement>) {
   return (

@@ -1,167 +1,113 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { ComponentType, SVGProps } from "react";
 import { Header } from "@/components/Header";
 import { CalendarioClient } from "./calendario/CalendarioClient";
+import {
+  CheckIcon,
+  CalendarIcon,
+  UsersIcon,
+  PinIcon,
+  DocIcon,
+  CartIcon,
+  ChartIcon,
+  WifiIcon,
+  ChevronIcon,
+} from "@/components/icons";
+
+type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 const cards: {
   href: string;
-  index: string;
-  eyebrow: string;
   title: string;
   desc: string;
+  Icon: IconType;
 }[] = [
-  {
-    href: "/tareas",
-    index: "01",
-    eyebrow: "Operaciones",
-    title: "Mis Tareas",
-    desc: "Lo que tengo que hacer.",
-  },
-  {
-    href: "/eventos",
-    index: "02",
-    eyebrow: "Agenda",
-    title: "Eventos",
-    desc: "Próximos eventos.",
-  },
-  {
-    href: "/como-trabajamos",
-    index: "03",
-    eyebrow: "Manual",
-    title: "Cómo Trabajamos",
-    desc: "Protocolos y a quién acudir.",
-  },
-  {
-    href: "/la-quinta",
-    index: "04",
-    eyebrow: "El Espacio",
-    title: "La Quinta",
-    desc: "La casa, equipo, inquilinos.",
-  },
-  {
-    href: "/presupuestos",
-    index: "05",
-    eyebrow: "Documentos",
-    title: "Presupuestos",
-    desc: "Cotizaciones, catálogo, inventario y contratistas.",
-  },
-  {
-    href: "/cocina",
-    index: "06",
-    eyebrow: "Operación",
-    title: "Cocina",
-    desc: "Insumos, recetas, costos e inventario.",
-  },
-  {
-    href: "/administracion",
-    index: "07",
-    eyebrow: "Finanzas · Privado",
-    title: "Administración",
-    desc: "Estados financieros: gastos, ingresos y resultado. Requiere contraseña.",
-  },
-  {
-    href: "/admin/wifi",
-    index: "08",
-    eyebrow: "Clientes",
-    title: "WiFi de Invitados",
-    desc: "QR de las mesas, clave del WiFi y base de clientes registrados.",
-  },
+  { href: "/tareas", title: "Tareas", desc: "Lo que hay que hacer.", Icon: CheckIcon },
+  { href: "/eventos", title: "Eventos", desc: "Próximos eventos.", Icon: CalendarIcon },
+  { href: "/como-trabajamos", title: "Cómo trabajamos", desc: "Cómo hacemos las cosas.", Icon: UsersIcon },
+  { href: "/la-quinta", title: "La Quinta", desc: "La casa y el equipo.", Icon: PinIcon },
+  { href: "/presupuestos", title: "Presupuestos", desc: "Cotizaciones y precios.", Icon: DocIcon },
+  { href: "/cocina", title: "Cocina", desc: "Insumos, recetas y compras.", Icon: CartIcon },
+  { href: "/administracion", title: "Administración", desc: "Cuentas y dinero.", Icon: ChartIcon },
+  { href: "/admin/wifi", title: "WiFi", desc: "Clave del WiFi y clientes.", Icon: WifiIcon },
 ];
 
 export default function Home() {
   return (
     <>
       <Header />
-      <main className="flex-1 mx-auto w-full max-w-3xl px-5 py-14 sm:py-20">
+      <main className="flex-1 mx-auto w-full max-w-3xl px-4 sm:px-5 py-10 sm:py-14">
         {/* Hero */}
-        <section className="text-center mb-16 sm:mb-20">
+        <section className="text-center mb-10 sm:mb-12">
           <Image
-            src="/logo-black.svg"
-            alt="La Quinta Mamá"
-            width={260}
-            height={260}
-            className="mx-auto h-44 w-44 sm:h-56 sm:w-56"
+            src="/bolo-logo.png"
+            alt="bolo"
+            width={560}
+            height={224}
+            className="mx-auto h-16 sm:h-20 w-auto"
             priority
           />
-
-          <p className="mt-8 font-display text-[11px] sm:text-xs tracking-[0.4em] text-cacao-soft">
-            Casa de salud y cultura · Caracas
+          <p className="mt-5 text-lg sm:text-xl text-cacao-soft">
+            Tu panel de trabajo,{" "}
+            <span className="text-navy font-bold">simple y fácil</span>.
           </p>
+        </section>
 
-          <h1 className="mt-4 font-cinzel text-4xl sm:text-5xl tracking-[0.12em] uppercase text-cacao">
-            La Quinta Mamá
-          </h1>
-
-          <p className="mt-5 font-serif italic text-lg sm:text-xl text-cacao-soft max-w-md mx-auto leading-snug">
-            Donde la cultura y el bienestar florecen.
-          </p>
-
-          <hr className="mt-12 mx-auto w-16 border-0 border-t border-marfil" />
+        {/* Accesos */}
+        <section className="mb-12 sm:mb-14">
+          <h2 className="font-cinzel text-xl text-cacao mb-4">
+            ¿Qué quieres hacer?
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {cards.map((c) => (
+              <Link
+                key={c.href}
+                href={c.href}
+                className="group flex items-center gap-4 rounded-2xl bg-white ring-1 ring-marfil p-4 hover:ring-navy/30 hover:shadow-sm transition"
+              >
+                <span className="grid place-items-center size-12 shrink-0 rounded-xl bg-naranja-soft/60 text-navy group-hover:bg-terracotta group-hover:text-white transition-colors">
+                  <c.Icon className="size-6" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-cinzel text-lg text-cacao leading-tight">
+                    {c.title}
+                  </h3>
+                  <p className="text-sm text-cacao-soft leading-snug">
+                    {c.desc}
+                  </p>
+                </div>
+                <ChevronIcon className="size-5 text-cacao-mute group-hover:text-terracotta group-hover:translate-x-0.5 transition" />
+              </Link>
+            ))}
+          </div>
         </section>
 
         {/* Calendario */}
-        <section className="mb-16 sm:mb-20">
+        <section className="mb-10">
           <div className="flex items-baseline justify-between mb-4">
-            <div>
-              <span className="font-display text-[10px] tracking-[0.35em] text-cacao-soft">
-                AGENDA
-              </span>
-              <h2 className="mt-1 text-2xl font-medium tracking-tight text-cacao">
-                Calendario
-              </h2>
-            </div>
+            <h2 className="font-cinzel text-xl text-cacao">Calendario</h2>
             <Link
               href="/calendario"
-              className="text-sm text-cacao-soft hover:text-terracotta transition-colors whitespace-nowrap"
+              className="text-sm font-semibold text-terracotta hover:text-terracotta-deep transition-colors whitespace-nowrap"
             >
-              Pantalla completa →
+              Ver todo →
             </Link>
           </div>
           <CalendarioClient />
         </section>
 
-        {/* Cards */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-marfil sm:border sm:border-marfil">
-          {cards.map((c) => (
-            <Link
-              key={c.href}
-              href={c.href}
-              className="group bg-white p-7 sm:p-9 transition-colors duration-300 hover:bg-marfil-soft"
-            >
-              <div className="flex items-baseline justify-between">
-                <span className="font-cinzel text-base text-cacao-mute">
-                  {c.index}
-                </span>
-                <span className="font-display text-[10px] tracking-[0.35em] text-cacao-soft">
-                  {c.eyebrow.toUpperCase()}
-                </span>
-              </div>
-
-              <h2 className="mt-8 text-2xl sm:text-[1.5rem] font-medium tracking-tight text-cacao">
-                {c.title}
-              </h2>
-
-              <p className="mt-3 font-serif italic text-base text-cacao-soft leading-relaxed">
-                {c.desc}
-              </p>
-
-              <div className="mt-8 flex justify-end items-center text-cacao group-hover:text-terracotta transition-colors">
-                <span className="text-lg group-hover:translate-x-1 transition-transform duration-300">
-                  →
-                </span>
-              </div>
-            </Link>
-          ))}
-        </section>
-
         {/* Footer */}
-        <footer className="mt-20 sm:mt-24 text-center">
-          <hr className="mx-auto w-16 border-0 border-t border-marfil mb-6" />
-          <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">
-            La Quinta Mamá · Caracas
-          </p>
-          <p className="mt-3 font-serif italic text-sm text-cacao-mute">
-            Donde la cultura y el bienestar florecen.
+        <footer className="mt-14 text-center">
+          <Image
+            src="/bolo-logo.png"
+            alt="bolo"
+            width={200}
+            height={80}
+            className="mx-auto h-6 w-auto opacity-70"
+          />
+          <p className="mt-3 text-sm text-cacao-mute">
+            Tu panel de trabajo.
           </p>
         </footer>
       </main>
