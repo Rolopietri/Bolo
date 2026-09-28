@@ -67,7 +67,31 @@ export default function CocinaHub() {
 
         <BcvRateBanner />
 
-        <section className="mt-8 grid grid-cols-1 sm:grid-cols-2 gap-px bg-marfil sm:border sm:border-marfil">
+        <Link
+          href="/cocina/plato"
+          className="group mt-8 flex items-center gap-4 rounded-2xl bg-white ring-1 ring-terracotta/40 p-6 shadow-sm transition-colors hover:bg-marfil-soft"
+        >
+          <span className="grid h-12 w-12 flex-none place-items-center rounded-full bg-terracotta text-white text-2xl">
+            ★
+          </span>
+          <span className="min-w-0">
+            <span className="font-display text-[10px] tracking-[0.35em] text-terracotta-deep">
+              RÁPIDO
+            </span>
+            <span className="mt-1 block text-xl font-medium tracking-tight text-cacao">
+              Crear un plato y ver su costo
+            </span>
+            <span className="mt-1 block font-serif italic text-sm text-cacao-soft">
+              La forma fácil: escribe qué lleva el plato y bolo te dice cuánto
+              cuesta y a qué precio venderlo. Se guarda en tu recetario.
+            </span>
+          </span>
+          <span className="ml-auto hidden sm:block text-lg text-cacao group-hover:translate-x-1 group-hover:text-terracotta transition-all">
+            →
+          </span>
+        </Link>
+
+        <section className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-px bg-marfil sm:border sm:border-marfil">
           {modulos.map((m) =>
             m.disabled ? (
               <div
