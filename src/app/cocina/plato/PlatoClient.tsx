@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { Insumo, Receta, CocinaConfig } from "@/lib/types";
 import { calcRentabilidad } from "@/lib/types";
@@ -49,6 +49,14 @@ function money(n: number): string {
   return "$" + n.toFixed(2);
 }
 
+/** minúsculas + sin acentos, para buscar sin que importe la tilde. */
+function norm(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 const SEMAFORO: Record<
   string,
   { pill: string; dot: string; texto: string }
@@ -84,9 +92,14 @@ export function PlatoClient() {
 
   const [nombre, setNombre] = useState("");
   const [porciones, setPorciones] = useState("1");
-  const [lineas, setLineas] = useState<Linea[]>([nuevaLinea(1)]);
+  const [lineas, setLineas] = useState<Linea[]>([]);
   const [precioVenta, setPrecioVenta] = useState("");
   const [vista, setVista] = useState<"simple" | "desglose">("simple");
+
+  // Buscador de ingredientes
+  const [buscando, setBuscando] = useState(false);
+  const [query, setQuery] = useState("");
+  const [catFiltro, setCatFiltro] = useState("");
 
   const [guardando, setGuardando] = useState(false);
   const [guardadoId, setGuardadoId] = useState("");
@@ -124,6 +137,24 @@ export function PlatoClient() {
     for (const i of insumos) m.set(i.id, i);
     return m;
   }, [insumos]);
+
+  // Categorías presentes en el catálogo (para los chips del buscador).
+  const categorias = useMemo(() => {
+    const s = new Set<string>();
+    for (const i of insumos) if (i.categoria) s.add(i.categoria);
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "es"));
+  }, [insumos]);
+
+  // Resultado del buscador: por palabra y/o por categoría.
+  const insumosFiltrados = useMemo(
+    () =>
+      insumos.filter(
+        (i) =>
+          (catFiltro === "" || i.categoria === catFiltro) &&
+          (query.trim() === "" || norm(i.nombre).includes(norm(query))),
+      ),
+    [insumos, catFiltro, query],
+  );
 
   // Receta en memoria para el motor de costo (mismo que usa Costeo).
   const receta = useMemo<Receta>(
@@ -175,20 +206,29 @@ export function PlatoClient() {
       prev.map((l) => (l.key === key ? { ...l, ...patch } : l)),
     );
   }
-  function elegirInsumo(key: number, insumoId: string) {
-    const ins = insumoId ? byId.get(insumoId) : undefined;
-    setLinea(key, {
-      insumoId,
-      nombre: ins ? ins.nombre : "",
-      unidad: ins ? ins.unidadBase : "",
-      precioManual: "",
-    });
+  function agregarInsumo(insumoId: string) {
+    const ins = byId.get(insumoId);
+    setLineas((prev) => [
+      ...prev,
+      {
+        key: (prev[prev.length - 1]?.key ?? 0) + 1,
+        insumoId,
+        nombre: ins?.nombre ?? "",
+        cantidad: "",
+        unidad: ins?.unidadBase ?? "",
+        precioManual: "",
+      },
+    ]);
+    setQuery("");
   }
-  function agregarLinea() {
+  function agregarManual() {
     setLineas((prev) => [
       ...prev,
       nuevaLinea((prev[prev.length - 1]?.key ?? 0) + 1),
     ]);
+    setBuscando(false);
+    setQuery("");
+    setCatFiltro("");
   }
   function quitarLinea(key: number) {
     setLineas((prev) =>
@@ -294,9 +334,12 @@ export function PlatoClient() {
               setGuardadoId("");
               setNombre("");
               setPorciones("1");
-              setLineas([nuevaLinea(1)]);
+              setLineas([]);
               setPrecioVenta("");
               setVista("simple");
+              setBuscando(false);
+              setQuery("");
+              setCatFiltro("");
             }}
             className="rounded-xl ring-1 ring-marfil py-3 font-bold text-cacao hover:bg-marfil-soft transition-colors"
           >
@@ -417,10 +460,19 @@ export function PlatoClient() {
               }
             />
           </div>
-          <p className="mt-3 text-xs text-cacao-mute">
-            Sin cuentas a la vista. Toca “Ver el desglose” para revisar de dónde
-            sale cada número.
-          </p>
+          {lineas.length === 0 ? (
+            <button
+              onClick={() => setVista("desglose")}
+              className="mt-4 w-full rounded-xl ring-1 ring-marfil bg-marfil-soft py-3 font-bold text-terracotta-deep hover:ring-terracotta"
+            >
+              Agrega los ingredientes del plato →
+            </button>
+          ) : (
+            <p className="mt-3 text-xs text-cacao-mute">
+              Sin cuentas a la vista. Toca “Ver el desglose” para revisar de
+              dónde sale cada número.
+            </p>
+          )}
         </section>
       )}
 
@@ -434,6 +486,13 @@ export function PlatoClient() {
             </span>
           </div>
 
+          {lineas.length === 0 && (
+            <p className="border-t border-marfil-light px-4 py-6 text-center text-sm text-cacao-soft">
+              Aún no agregaste ingredientes. Toca{" "}
+              <b>“+ Agregar ingrediente”</b>.
+            </p>
+          )}
+
           <div>
             {lineas.map((l, i) => {
               const ins = l.insumoId ? byId.get(l.insumoId) : undefined;
@@ -444,33 +503,25 @@ export function PlatoClient() {
                   className="border-t border-marfil-light px-4 py-3 space-y-2"
                 >
                   <div className="flex items-start justify-between gap-3">
-                    <select
-                      aria-label="Ingrediente"
-                      value={l.insumoId}
-                      onChange={(e) => elegirInsumo(l.key, e.target.value)}
-                      className="flex-1 min-w-0 rounded-lg ring-1 ring-marfil bg-marfil-soft px-2.5 py-2 font-bold text-cacao focus:outline-none focus:ring-2 focus:ring-terracotta"
-                    >
-                      <option value="">✎ Escribir a mano…</option>
-                      {insumos.map((i2) => (
-                        <option key={i2.id} value={i2.id}>
-                          {i2.nombre}
-                        </option>
-                      ))}
-                    </select>
+                    {l.insumoId ? (
+                      <span className="font-bold text-cacao pt-1">
+                        {byId.get(l.insumoId)?.nombre ?? l.nombre}
+                      </span>
+                    ) : (
+                      <input
+                        aria-label="Nombre del ingrediente"
+                        value={l.nombre}
+                        onChange={(e) =>
+                          setLinea(l.key, { nombre: e.target.value })
+                        }
+                        placeholder="Nombre del ingrediente"
+                        className="flex-1 min-w-0 rounded-lg ring-1 ring-marfil bg-marfil-soft px-2.5 py-2 font-bold text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+                      />
+                    )}
                     <span className="font-cinzel text-lg text-cacao tabular-nums whitespace-nowrap pt-1">
                       {money(subtotal)}
                     </span>
                   </div>
-
-                  {!l.insumoId && (
-                    <input
-                      aria-label="Nombre del ingrediente"
-                      value={l.nombre}
-                      onChange={(e) => setLinea(l.key, { nombre: e.target.value })}
-                      placeholder="Nombre del ingrediente"
-                      className="w-full rounded-lg ring-1 ring-marfil px-2.5 py-2 text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
-                    />
-                  )}
 
                   <div className="flex flex-wrap items-end gap-2">
                     <label className="flex flex-col gap-1">
@@ -554,12 +605,86 @@ export function PlatoClient() {
             })}
           </div>
 
-          <button
-            onClick={agregarLinea}
-            className="w-full border-t border-marfil-light py-3 font-bold text-terracotta-deep hover:bg-marfil-soft"
-          >
-            + Agregar ingrediente
-          </button>
+          {buscando ? (
+            <div className="border-t border-marfil-light bg-marfil-soft p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  autoFocus
+                  aria-label="Buscar ingrediente"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Buscar ingrediente…"
+                  className="flex-1 rounded-xl ring-1 ring-marfil bg-white px-3.5 py-2.5 text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+                />
+                <button
+                  onClick={() => {
+                    setBuscando(false);
+                    setQuery("");
+                    setCatFiltro("");
+                  }}
+                  className="rounded-xl px-3 py-2.5 font-bold text-cacao-soft hover:text-cacao"
+                >
+                  Listo
+                </button>
+              </div>
+
+              {categorias.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  <Chip activo={catFiltro === ""} onClick={() => setCatFiltro("")}>
+                    Todas
+                  </Chip>
+                  {categorias.map((c) => (
+                    <Chip
+                      key={c}
+                      activo={catFiltro === c}
+                      onClick={() => setCatFiltro(c)}
+                    >
+                      {c}
+                    </Chip>
+                  ))}
+                </div>
+              )}
+
+              <div className="max-h-64 overflow-y-auto rounded-xl ring-1 ring-marfil bg-white divide-y divide-marfil-light">
+                {insumosFiltrados.length === 0 && (
+                  <p className="px-3 py-3 text-sm text-cacao-soft">
+                    {insumos.length === 0
+                      ? "Tu catálogo está vacío — escribe el ingrediente a mano."
+                      : "No encontré ese ingrediente."}
+                  </p>
+                )}
+                {insumosFiltrados.map((i) => (
+                  <button
+                    key={i.id}
+                    onClick={() => agregarInsumo(i.id)}
+                    className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-marfil-soft"
+                  >
+                    <span className="font-bold text-cacao">{i.nombre}</span>
+                    <span className="text-xs text-cacao-mute whitespace-nowrap">
+                      {i.categoria}
+                      {i.precioBaseUsd != null
+                        ? ` · $${i.precioBaseUsd}/${i.unidadBase}`
+                        : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={agregarManual}
+                className="w-full rounded-xl ring-1 ring-marfil bg-white py-2.5 font-bold text-terracotta-deep hover:ring-terracotta"
+              >
+                ✎ Escribir uno a mano
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setBuscando(true)}
+              className="w-full border-t border-marfil-light py-3 font-bold text-terracotta-deep hover:bg-marfil-soft"
+            >
+              + Agregar ingrediente
+            </button>
+          )}
 
           <div className="flex items-center justify-between border-t-2 border-marfil px-4 py-4">
             <span className="font-cinzel text-lg text-cacao">
@@ -633,6 +758,30 @@ export function PlatoClient() {
         Se guarda en tu recetario · también aparece en Costeo y Rentabilidad
       </p>
     </div>
+  );
+}
+
+function Chip({
+  activo,
+  onClick,
+  children,
+}: {
+  activo: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        "rounded-full px-3 py-1.5 text-xs font-bold transition-colors " +
+        (activo
+          ? "bg-cacao text-white"
+          : "bg-white ring-1 ring-marfil text-cacao-soft hover:text-cacao")
+      }
+    >
+      {children}
+    </button>
   );
 }
 
