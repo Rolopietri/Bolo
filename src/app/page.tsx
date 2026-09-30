@@ -6,8 +6,6 @@ import { CalendarioClient } from "./calendario/CalendarioClient";
 import {
   CheckIcon,
   CalendarIcon,
-  UsersIcon,
-  PinIcon,
   DocIcon,
   CartIcon,
   ChartIcon,
@@ -25,8 +23,6 @@ const cards: {
 }[] = [
   { href: "/tareas", title: "Tareas", desc: "Lo que hay que hacer.", Icon: CheckIcon },
   { href: "/eventos", title: "Eventos", desc: "Próximos eventos.", Icon: CalendarIcon },
-  { href: "/como-trabajamos", title: "Cómo trabajamos", desc: "Cómo hacemos las cosas.", Icon: UsersIcon },
-  { href: "/la-quinta", title: "La Quinta", desc: "La casa y el equipo.", Icon: PinIcon },
   { href: "/presupuestos", title: "Presupuestos", desc: "Cotizaciones y precios.", Icon: DocIcon },
   { href: "/cocina", title: "Cocina", desc: "Insumos, recetas y compras.", Icon: CartIcon },
   { href: "/administracion", title: "Administración", desc: "Cuentas y dinero.", Icon: ChartIcon },
