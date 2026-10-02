@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ComponentType, SVGProps } from "react";
 import { Header } from "@/components/Header";
-import { CalendarioClient } from "./calendario/CalendarioClient";
+import { MODULOS, modulosActivos } from "@/lib/modulos.mjs";
 import {
   CheckIcon,
   CalendarIcon,
@@ -15,21 +15,24 @@ import {
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
-const cards: {
-  href: string;
-  title: string;
-  desc: string;
-  Icon: IconType;
-}[] = [
-  { href: "/tareas", title: "Tareas", desc: "Lo que hay que hacer.", Icon: CheckIcon },
-  { href: "/eventos", title: "Eventos", desc: "Próximos eventos.", Icon: CalendarIcon },
-  { href: "/presupuestos", title: "Presupuestos", desc: "Cotizaciones y precios.", Icon: DocIcon },
-  { href: "/cocina", title: "Cocina", desc: "Insumos, recetas y compras.", Icon: CartIcon },
-  { href: "/administracion", title: "Administración", desc: "Cuentas y dinero.", Icon: ChartIcon },
-  { href: "/admin/wifi", title: "WiFi", desc: "Clave del WiFi y clientes.", Icon: WifiIcon },
-];
+const ICONOS: Record<(typeof MODULOS)[number]["id"], IconType> = {
+  cocina: CartIcon,
+  administracion: ChartIcon,
+  tareas: CheckIcon,
+  eventos: CalendarIcon,
+  presupuestos: DocIcon,
+  wifi: WifiIcon,
+};
 
 export default function Home() {
+  // Tareas, Eventos, Presupuestos y WiFi salen del menú, pero sus rutas siguen
+  // vivas. Ver src/lib/modulos.mjs.
+  const activos = new Set(modulosActivos(process.env.BOLO_MODULOS));
+  const cards = MODULOS.filter((m) => activos.has(m.id)).map((m) => ({
+    ...m,
+    Icon: ICONOS[m.id],
+  }));
+
   return (
     <>
       <Header />
@@ -77,20 +80,6 @@ export default function Home() {
               </Link>
             ))}
           </div>
-        </section>
-
-        {/* Calendario */}
-        <section className="mb-10">
-          <div className="flex items-baseline justify-between mb-4">
-            <h2 className="font-cinzel text-xl text-cacao">Calendario</h2>
-            <Link
-              href="/calendario"
-              className="text-sm font-semibold text-terracotta hover:text-terracotta-deep transition-colors whitespace-nowrap"
-            >
-              Ver todo →
-            </Link>
-          </div>
-          <CalendarioClient />
         </section>
 
         {/* Footer */}

@@ -7,6 +7,8 @@
  */
 import Image from "next/image";
 import { cookies } from "next/headers";
+import { notFound } from "next/navigation";
+import { moduloActivo } from "@/lib/modulos.mjs";
 import { COOKIE_WIFI, credencialesWifi } from "@/lib/wifi-server";
 import { WifiForm } from "./WifiForm";
 import { ClaveWifi } from "./ClaveWifi";
@@ -23,6 +25,9 @@ export default async function WifiPage({
 }: {
   searchParams: Promise<{ p?: string; nuevo?: string }>;
 }) {
+  // Módulo retirado en Bolo: solo existe si BOLO_MODULOS incluye "wifi".
+  if (!moduloActivo("wifi", process.env.BOLO_MODULOS)) notFound();
+
   const { p, nuevo } = await searchParams;
   const galletas = await cookies();
   const yaRegistrado = !nuevo && !!galletas.get(COOKIE_WIFI)?.value;

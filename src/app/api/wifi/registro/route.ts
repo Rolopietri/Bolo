@@ -20,6 +20,7 @@ import {
   normalizarTelefono,
   validarRegistro,
 } from "@/lib/wifi";
+import { moduloActivo } from "@/lib/modulos.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +39,11 @@ function pasaLimite(ip: string): boolean {
 }
 
 export async function POST(request: NextRequest) {
+  // Módulo retirado en Bolo: solo existe si BOLO_MODULOS incluye "wifi".
+  if (!moduloActivo("wifi", process.env.BOLO_MODULOS)) {
+    return NextResponse.json({ error: "No encontrado." }, { status: 404 });
+  }
+
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anon";
   if (!pasaLimite(ip)) {

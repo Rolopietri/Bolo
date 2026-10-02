@@ -82,7 +82,19 @@ export function AlertasClient() {
         <StatCard label="Sin mínimo" value={sinMinimo.length} accent="bg-stone-50 ring-stone-200" dot="bg-stone-400" />
       </section>
 
-      {agotados.length === 0 && bajos.length === 0 ? (
+      {insumos.length === 0 ? (
+        <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center">
+          <h2 className="font-display tracking-widest uppercase text-cacao text-sm">
+            Aún no tienes insumos
+          </h2>
+          <p className="mt-2 font-serif italic text-cacao-soft">
+            Las alertas aparecen cuando tus insumos tienen stock y un mínimo definido.{" "}
+            <Link href="/cocina/insumos" className="not-italic font-semibold underline hover:text-terracotta">
+              Crear el primer insumo
+            </Link>
+          </p>
+        </div>
+      ) : agotados.length === 0 && bajos.length === 0 ? (
         <div className="rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-8 text-center">
           <div className="mb-2 flex justify-center text-emerald-600">
             <svg

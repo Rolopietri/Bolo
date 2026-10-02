@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
+import { notFound } from "next/navigation";
 import { Header } from "@/components/Header";
+import { moduloActivo } from "@/lib/modulos.mjs";
 import { WifiAdminClient } from "./WifiAdminClient";
 
 export const metadata = { title: "WiFi de invitados · La Quinta Mamá" };
@@ -13,6 +15,9 @@ async function baseUrl(): Promise<string> {
 }
 
 export default async function WifiAdminPage() {
+  // Módulo retirado en Bolo: solo existe si BOLO_MODULOS incluye "wifi".
+  if (!moduloActivo("wifi", process.env.BOLO_MODULOS)) notFound();
+
   const base = await baseUrl();
   return (
     <>

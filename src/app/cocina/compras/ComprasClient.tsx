@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   MODALIDADES_PAGO,
   type Compra,
@@ -602,6 +603,16 @@ export function ComprasClient() {
           <h2 className="font-display text-sm tracking-[0.2em] uppercase text-cacao">
             {editingId ? "Editar compra" : "Nueva compra"}
           </h2>
+
+          {!loading && insumos.length === 0 && (
+            <p className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm text-cacao">
+              Para registrar una compra, primero crea tus insumos en{" "}
+              <Link href="/cocina/insumos" className="font-semibold underline hover:text-terracotta">
+                Insumos y stock
+              </Link>
+              .
+            </p>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-sm text-cacao">

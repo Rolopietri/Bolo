@@ -60,12 +60,39 @@ export default function CocinaHub() {
             Cocina
           </h1>
           <p className="mt-3 font-serif italic text-cacao-soft max-w-2xl">
-            Catálogo de insumos, recetas, costos e inventario. Cinco módulos
-            encadenados — cargamos el primero y vamos abriendo los siguientes.
+            Catálogo de insumos, recetas, costos e inventario. Cada módulo usa
+            los datos del anterior.
           </p>
         </section>
 
         <BcvRateBanner />
+
+        <section className="mt-6 rounded-2xl bg-white ring-1 ring-marfil p-5">
+          <p className="font-display text-[11px] tracking-[0.3em] uppercase text-cacao-soft">
+            Para empezar
+          </p>
+          <ol className="mt-3 grid grid-cols-1 sm:grid-cols-4 gap-2 text-sm">
+            {[
+              { href: "/cocina/proveedores", label: "Proveedores", desc: "A quién le compras" },
+              { href: "/cocina/insumos", label: "Insumos", desc: "Qué compras y en qué unidad" },
+              { href: "/cocina/recetas", label: "Recetas", desc: "Qué preparas con ellos" },
+              { href: "/cocina/compras", label: "Compras", desc: "Precios y stock reales" },
+            ].map((paso, i) => (
+              <li key={paso.href}>
+                <Link
+                  href={paso.href}
+                  className="flex h-full items-start gap-2 rounded-xl ring-1 ring-marfil px-3 py-2 hover:ring-terracotta/40 hover:bg-marfil-soft transition-colors"
+                >
+                  <span className="font-semibold text-terracotta">{i + 1}.</span>
+                  <span>
+                    <span className="block font-semibold text-cacao">{paso.label}</span>
+                    <span className="block text-xs text-cacao-soft">{paso.desc}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
+        </section>
 
         <Link
           href="/cocina/plato"

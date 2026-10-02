@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/admin-service";
 import { parseReporteFacturas, metodoCanonico, metodosDe } from "@/lib/admin/factura";
 import { getTasaEurUsd } from "@/lib/admin/tasa";
 import { sincronizarClientesDesdeFacturas } from "@/lib/wifi-clientes";
+import { moduloActivo } from "@/lib/modulos.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -201,11 +202,14 @@ export async function PUT(req: NextRequest) {
 
   // ── Base de clientes: cada nombre/cédula del reporte alimenta `wifi_invitados`
   //    (la misma base del WiFi), sin duplicar. Si falla, no bloquea la carga.
+  //    Solo si el módulo WiFi está activo (en Bolo está retirado por defecto).
   let clientes = { nuevos: 0, actualizados: 0, ignorados: 0 };
-  try {
-    clientes = await sincronizarClientesDesdeFacturas(sb, reporte.filas, "cafetin");
-  } catch (e) {
-    console.error("[clientes] sync falló:", e instanceof Error ? e.message : e);
+  if (moduloActivo("wifi", process.env.BOLO_MODULOS)) {
+    try {
+      clientes = await sincronizarClientesDesdeFacturas(sb, reporte.filas, "cafetin");
+    } catch (e) {
+      console.error("[clientes] sync falló:", e instanceof Error ? e.message : e);
+    }
   }
 
   return NextResponse.json({
