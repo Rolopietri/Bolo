@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listAjustesConteo, type AjusteConteo } from "@/lib/data/stock-movimientos";
-import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 function fNum(n: number): string {
   const a = Math.abs(n);
@@ -24,7 +24,9 @@ const valorDe = (a: AjusteConteo) => (a.precioBase != null ? Math.abs(a.cantidad
 export function MermaClient() {
   const [items, setItems] = useState<AjusteConteo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [abierto, setAbierto] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,13 +36,19 @@ export function MermaClient() {
         const d = await listAjustesConteo();
         if (!cancel) setItems(d);
       } catch (e) {
-        if (!cancel) setError(e instanceof Error ? e.message : "Error cargando la merma");
+        if (!cancel) setErrorCarga(e instanceof Error ? e.message : "Error cargando la merma");
       } finally {
         if (!cancel) setLoading(false);
       }
     })();
     return () => { cancel = true; };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   // Agrupar por fecha (cada conteo es una fecha).
   const conteos = useMemo(() => {
@@ -66,10 +74,19 @@ export function MermaClient() {
   if (loading) {
     return <div className="rounded-2xl bg-white ring-1 ring-marfil p-10 text-center text-cacao-soft">Cargando…</div>;
   }
+  if (errorCarga) {
+    return (
+      <ErrorCarga
+        que="las mermas"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
+    );
+  }
+
 
   return (
     <div className="space-y-4">
-      {error && <ErrorBanner>{error}</ErrorBanner>}
       <p className="text-[12px] text-cacao-soft">
         La <b>merma</b> es lo que faltó frente a lo que el sistema esperaba (stock − conteo real):
         desperdicio, sobre-porción, daño o error. Se valora al precio base del insumo. Un

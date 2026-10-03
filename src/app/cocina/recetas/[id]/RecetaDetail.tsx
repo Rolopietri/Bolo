@@ -17,6 +17,7 @@ import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { ordenarPorCantidadDesc } from "@/lib/units";
 import { RecetaForm } from "../RecetaForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export function RecetaDetail({
   id,
@@ -32,6 +33,11 @@ export function RecetaDetail({
   const [config, setConfig] = useState<CocinaConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la receta (los errores de borrar/desactivar van aparte,
+   *  en un aviso dentro de la página). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [noEncontrada, setNoEncontrada] = useState(false);
+  const [intento, setIntento] = useState(0);
   const [editing, setEditing] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -54,8 +60,11 @@ export function RecetaDetail({
           setConfig(cfg);
         }
       } catch (e) {
-        if (!cancelled)
-          setError(e instanceof Error ? e.message : "No encontrada");
+        if (!cancelled) {
+          // PGRST116 = la consulta no devolvió la receta (no existe o se borró).
+          if ((e as { code?: string })?.code === "PGRST116") setNoEncontrada(true);
+          else setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -63,7 +72,13 @@ export function RecetaDetail({
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   async function handleDelete() {
     if (!receta) return;
@@ -120,12 +135,21 @@ export function RecetaDetail({
       </div>
     );
   }
-  if (error || !receta) {
+  if (errorCarga) {
+    return (
+      <ErrorCarga
+        que="la receta"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
+    );
+  }
+  if (noEncontrada || !receta) {
     return (
       <ErrorBanner>
-        {error || "No encontrada"}{" "}
+        Esta receta no existe o fue borrada.{" "}
         <Link href="/cocina/recetas" className="underline ml-2">
-          Volver
+          Volver a Recetas
         </Link>
       </ErrorBanner>
     );

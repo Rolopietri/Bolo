@@ -14,7 +14,7 @@ import { listInsumos } from "@/lib/data/cocina";
 import { listCategoriasProducto, type CategoriaProducto } from "@/lib/data/categorias";
 import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { normalizarBusqueda } from "@/lib/text";
-import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 const SIN_CATEGORIA = "__sin_categoria__";
 
@@ -34,7 +34,9 @@ export function RecetasList() {
   const [margenVerdeMin, setMargenVerdeMin] = useState(70);
   const [margenAmarilloMin, setMargenAmarilloMin] = useState(50);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [q, setQ] = useState("");
   /** El filtro puede ser: "todas", "subreceta" (categoría virtual: recetas con
    *  esSubreceta=true), SIN_CATEGORIA (recetas sin categoría) o el nombre de
@@ -62,7 +64,7 @@ export function RecetasList() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -70,7 +72,13 @@ export function RecetasList() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   /**
    * Después de crear una receta (o cuando alguien comparte el link con
@@ -160,11 +168,16 @@ export function RecetasList() {
       </div>
     );
   }
-  if (error) {
+  if (errorCarga) {
     return (
-      <ErrorBanner>{error}</ErrorBanner>
+      <ErrorCarga
+        que="las recetas"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
     );
   }
+
 
   return (
     <div>

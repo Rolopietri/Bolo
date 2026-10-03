@@ -26,6 +26,7 @@ import { normalizarBusqueda } from "@/lib/text";
 import { UnitCalculator } from "@/components/UnitCalculator";
 import { UnidadSelect } from "@/components/UnidadSelect";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import {
   convertirParaCosto,
   areCompatible,
@@ -93,6 +94,9 @@ export function RecetaForm({
   const [loadingIns, setLoadingIns] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [info, setInfo] = useState<string | null>(null);
   /** Quick search dentro del catálogo de insumos. */
   const [insumoSearch, setInsumoSearch] = useState("");
@@ -162,7 +166,7 @@ export function RecetaForm({
           setCategoriasUser(cats);
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Error");
+        if (!cancelled) setErrorCarga(e instanceof Error ? e.message : "Error");
       } finally {
         if (!cancelled) setLoadingIns(false);
       }
@@ -170,7 +174,13 @@ export function RecetaForm({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoadingIns(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   // Subrecetas disponibles (excluyendo la actual si estás editándola)
   const subrecetasDisponibles = useMemo(() => {
@@ -972,7 +982,13 @@ export function RecetaForm({
         )}
         {loadingIns ? (
           <div className="text-sm text-cacao-soft">Cargando catálogo...</div>
-        ) : insumosPorCategoria.length === 0 ? (
+        ) : errorCarga ? (
+        <ErrorCarga
+          que="el catálogo de insumos"
+          detalle={errorCarga}
+          onReintentar={reintentarCarga}
+        />
+      ) : insumosPorCategoria.length === 0 ? (
           <div className="text-sm text-cacao-soft italic font-serif">
             {insumoSearch
               ? `Sin resultados para "${insumoSearch}".`

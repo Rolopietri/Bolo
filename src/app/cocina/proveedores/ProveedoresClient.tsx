@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/cocina";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 type FormState = {
   nombre: string;
@@ -51,6 +52,9 @@ export function ProveedoresClient() {
   const [items, setItems] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
@@ -64,7 +68,7 @@ export function ProveedoresClient() {
         if (!cancelled) setItems(data);
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -72,7 +76,13 @@ export function ProveedoresClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   function resetForm() {
     setForm({ ...emptyForm });
@@ -282,6 +292,12 @@ export function ProveedoresClient() {
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
           Cargando proveedores...
         </div>
+      ) : errorCarga ? (
+        <ErrorCarga
+          que="los proveedores"
+          detalle={errorCarga}
+          onReintentar={reintentarCarga}
+        />
       ) : items.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
           <p className="font-serif italic text-cacao-soft mb-4">

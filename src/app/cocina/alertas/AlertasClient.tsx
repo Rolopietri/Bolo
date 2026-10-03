@@ -6,13 +6,15 @@ import type { Insumo, Proveedor } from "@/lib/types";
 import { stockLibre } from "@/lib/types";
 import { displayCantidad } from "@/lib/units";
 import { listInsumos, listProveedores } from "@/lib/data/cocina";
-import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 export function AlertasClient() {
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +30,7 @@ export function AlertasClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -36,7 +38,13 @@ export function AlertasClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   const { agotados, bajos, sinMinimo } = useMemo(() => {
     const ag: Insumo[] = [];
@@ -67,11 +75,16 @@ export function AlertasClient() {
       </div>
     );
   }
-  if (error) {
+  if (errorCarga) {
     return (
-      <ErrorBanner>{error}</ErrorBanner>
+      <ErrorCarga
+        que="los insumos para las alertas"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
     );
   }
+
 
   return (
     <div className="space-y-6">

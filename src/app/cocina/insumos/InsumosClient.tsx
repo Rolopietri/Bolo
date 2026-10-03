@@ -39,6 +39,7 @@ import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { listMovimientos, deleteMovimiento } from "@/lib/data/stock-movimientos";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /**
  * Cuántas unidadBase hay en 1 unidadCompra cuando son convertibles.
@@ -111,6 +112,9 @@ export function InsumosClient() {
   const unidadesSistema = useMemo(() => unidadesEnUso(items), [items]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores de guardar/borrar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [filterCat, setFilterCat] = useState<string>("todas");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
@@ -168,7 +172,7 @@ export function InsumosClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -176,7 +180,13 @@ export function InsumosClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   function resetForm() {
     setForm({ ...emptyForm });
@@ -937,9 +947,17 @@ export function InsumosClient() {
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
           Cargando catálogo...
         </div>
+      ) : errorCarga ? (
+        <ErrorCarga
+          que="los insumos"
+          detalle={errorCarga}
+          onReintentar={reintentarCarga}
+        />
       ) : grouped.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
-          No hay insumos en esta vista.
+          {items.length === 0
+            ? "Aún no tienes insumos. Crea el primero con “+ Nuevo insumo”."
+            : "Ningún insumo coincide con estos filtros."}
         </div>
       ) : (
         <div className="space-y-6">

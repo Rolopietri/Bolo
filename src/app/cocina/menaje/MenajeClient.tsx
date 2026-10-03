@@ -12,6 +12,7 @@ import {
 } from "@/lib/types";
 import { hoyISO, pillClass } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import {
   listMenaje,
   listMovimientosMenaje,
@@ -54,6 +55,11 @@ export function MenajeClient() {
   const [movs, setMovs] = useState<MovimientoMenaje[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  /** No se pudo leer el historial de movimientos. */
+  const [movsError, setMovsError] = useState(false);
+  const [intento, setIntento] = useState(0);
   const [info, setInfo] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState<string>("todas");
@@ -136,12 +142,17 @@ export function MenajeClient() {
         setItems(its);
         try {
           const ms = await listMovimientosMenaje({ limit: 500 });
-          if (!cancelled) setMovs(ms);
+          if (!cancelled) {
+            setMovs(ms);
+            setMovsError(false);
+          }
         } catch {
-          // Tabla pendiente — seguimos sin movimientos
+          // Sin historial: el resto de la pantalla funciona, pero no se dice
+          // "Sin movimientos" (sería falso).
+          if (!cancelled) setMovsError(true);
         }
       } catch (e) {
-        if (!cancelled) setError(extractError(e, "Error cargando"));
+        if (!cancelled) setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -149,7 +160,13 @@ export function MenajeClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   useEffect(() => {
     if (!info) return;
@@ -582,6 +599,16 @@ export function MenajeClient() {
       </div>
     );
   }
+  if (errorCarga) {
+    return (
+      <ErrorCarga
+        que="el menaje"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
+    );
+  }
+
 
   return (
     <div className="space-y-6">
@@ -1029,7 +1056,12 @@ export function MenajeClient() {
                           <div className="font-display text-[10px] tracking-[0.3em] uppercase text-cacao-mute mt-3">
                             Historial
                           </div>
-                          {movsItem.length === 0 ? (
+                          {movsError ? (
+                            <p className="text-xs text-[#7A2419] py-2">
+                              No se pudo cargar el historial de movimientos.
+                              Recarga la página para intentarlo de nuevo.
+                            </p>
+                          ) : movsItem.length === 0 ? (
                             <p className="text-xs text-cacao-soft italic font-serif py-2">
                               Sin movimientos registrados.
                             </p>

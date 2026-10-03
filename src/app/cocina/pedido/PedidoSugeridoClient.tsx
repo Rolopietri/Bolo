@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarIcon, ChevronIcon, SaveIcon } from "@/components/icons";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import type {
   Receta,
   Insumo,
@@ -46,6 +47,11 @@ export function PedidoSugeridoClient({
   const [pedidosGuardados, setPedidosGuardados] = useState<PedidoCocina[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
+  /** No se pudieron leer los pedidos guardados (el cálculo sí funciona). */
+  const [pedidosError, setPedidosError] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
 
   const [objetivos, setObjetivos] = useState<Objetivo[]>([]);
@@ -97,12 +103,15 @@ export function PedidoSugeridoClient({
         // no existe (SQL pendiente), no rompemos toda la pantalla.
         try {
           const pg = await listPedidosCocina();
-          if (!cancelled) setPedidosGuardados(pg);
+          if (!cancelled) {
+            setPedidosGuardados(pg);
+            setPedidosError(false);
+          }
         } catch {
-          // silent
+          if (!cancelled) setPedidosError(true);
         }
       } catch (e) {
-        if (!cancelled) setError(extractError(e, "Error cargando"));
+        if (!cancelled) setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -110,7 +119,13 @@ export function PedidoSugeridoClient({
     return () => {
       cancelled = true;
     };
-  }, [planesActivos]);
+  }, [planesActivos, intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   // Auto-cerrar banner de info
   useEffect(() => {
@@ -385,9 +400,27 @@ export function PedidoSugeridoClient({
     );
   }
 
+  // Sin recetas ni insumos no se puede calcular el pedido: no se muestran
+  // listas ni faltantes como si estuvieran vacíos.
+  if (errorCarga) {
+    return (
+      <ErrorCarga
+        que="las recetas e insumos para el pedido"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       {error && <ErrorBanner>{error}</ErrorBanner>}
+      {pedidosError && (
+        <ErrorBanner>
+          No se pudieron cargar los pedidos guardados. El cálculo del pedido
+          funciona; recarga la página para volver a intentarlo.
+        </ErrorBanner>
+      )}
       {info && (
         <div className="rounded-lg bg-[#F1F4ED] ring-1 ring-[#C9D6BC] p-3 text-sm text-[#2F4A1F]">
           {info}

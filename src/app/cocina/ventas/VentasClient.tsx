@@ -31,6 +31,7 @@ import { normalizarBusqueda } from "@/lib/text";
 import { CalendarIcon, ChevronIcon, WarningIcon } from "@/components/icons";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 /** Xetux nombra el archivo con la fecha en que se generó el reporte, ej.
  *  "Detallado_por_ProductoThu_Sep_03_22_25_34_VET_2026.xls" → 2026-09-03. El
@@ -102,6 +103,12 @@ export function VentasClient() {
   const [rmSwapTo, setRmSwapTo] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
+  /** La recarga del historial tras importar falló: lo que se ve es anterior. */
+  const [historialDesactualizado, setHistorialDesactualizado] = useState<string | null>(null);
+  const [recargandoHistorial, setRecargandoHistorial] = useState(false);
   const [totalesMes, setTotalesMes] = useState<Record<string, number>>({});
   const [tasaEurUsd, setTasaEurUsd] = useState(1.17);
 
@@ -166,7 +173,7 @@ export function VentasClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -174,7 +181,29 @@ export function VentasClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
+
+  /** Vuelve a leer el historial y los totales del mes. Si falla, se conserva lo
+   *  que había y se marca como no actualizado. */
+  async function recargarHistorial() {
+    setRecargandoHistorial(true);
+    try {
+      const [v, tm] = await Promise.all([listVentasDiasCompletos(30), totalesVentasPorMes()]);
+      setVentas(v);
+      setTotalesMes(tm);
+      setHistorialDesactualizado(null);
+    } catch (e) {
+      setHistorialDesactualizado(e instanceof Error ? e.message : "Error cargando");
+    } finally {
+      setRecargandoHistorial(false);
+    }
+  }
 
   async function handleRegistroManual(e: React.FormEvent) {
     e.preventDefault();
@@ -528,9 +557,9 @@ export function VentasClient() {
       // Si hubo reemplazo (o fechas de varios días), recargamos desde la BD para
       // reflejar los borrados/nuevas fechas con fidelidad; si no, basta con anteponer.
       if (reemplazarRango && usarFechaLinea) {
-        const [v, tm] = await Promise.all([listVentasDiasCompletos(30), totalesVentasPorMes()]);
-        setVentas(v);
-        setTotalesMes(tm);
+        // La importación ya quedó guardada; si la recarga falla, el historial
+        // se marca como no actualizado (no como error de importación).
+        await recargarHistorial();
       } else {
         setVentas((prev) => [...created, ...prev]);
       }
@@ -585,6 +614,25 @@ export function VentasClient() {
   const sinClasCount =
     clasif?.filter((c) => c.tipo === "sin_clasificar").length ?? 0;
   const totalRows = clasif?.length ?? 0;
+
+  // Mientras carga, o si la carga falló, no se muestran pestañas con listas
+  // vacías ni totales en cero.
+  if (loading) {
+    return (
+      <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
+        Cargando ventas...
+      </div>
+    );
+  }
+  if (errorCarga) {
+    return (
+      <ErrorCarga
+        que="las ventas"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -1290,6 +1338,16 @@ export function VentasClient() {
                   ))}
               </ul>
             </div>
+          )}
+          {historialDesactualizado && (
+            <ErrorCarga
+              className="mb-4"
+              que="el historial de ventas"
+              detalle={historialDesactualizado}
+              onReintentar={recargarHistorial}
+              reintentando={recargandoHistorial}
+              desactualizado
+            />
           )}
           {loading ? (
             <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">

@@ -12,6 +12,7 @@ import { listInsumos } from "@/lib/data/cocina";
 import { ajustarStockConteo } from "@/lib/data/stock-movimientos";
 import { ultimaVentaFecha } from "@/lib/data/ventas";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 // Formatea una fecha ISO (YYYY-MM-DD) a dd/mm/yyyy.
 function fFecha(iso: string): string {
@@ -38,6 +39,9 @@ export function ConteoFisicoClient() {
   const [items, setItems] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState<string>("todas");
   const [soloDif, setSoloDif] = useState(false);
@@ -55,13 +59,19 @@ export function ConteoFisicoClient() {
         const [ins, uv] = await Promise.all([listInsumos(), ultimaVentaFecha()]);
         if (!cancel) { setItems(ins.filter((i) => i.activo)); setUltimaVenta(uv); }
       } catch (e) {
-        if (!cancel) setError(e instanceof Error ? e.message : "Error cargando insumos");
+        if (!cancel) setErrorCarga(e instanceof Error ? e.message : "Error cargando insumos");
       } finally {
         if (!cancel) setLoading(false);
       }
     })();
     return () => { cancel = true; };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   // Diferencia (nuevo - actual) para un insumo, o null si no hay conteo válido.
   function delta(ins: Insumo): number | null {
@@ -212,6 +222,16 @@ export function ConteoFisicoClient() {
   if (loading) {
     return <div className="rounded-2xl bg-white ring-1 ring-marfil p-10 text-center text-cacao-soft">Cargando insumos…</div>;
   }
+  if (errorCarga) {
+    return (
+      <ErrorCarga
+        que="los insumos para el conteo"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
+    );
+  }
+
 
   const selCls = "rounded-lg ring-1 ring-marfil px-2 py-1.5 text-sm bg-white";
 

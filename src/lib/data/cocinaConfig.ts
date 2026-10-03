@@ -38,10 +38,10 @@ export async function getCocinaConfig(): Promise<CocinaConfig> {
     .select("*")
     .eq("id", 1)
     .maybeSingle();
-  if (error) {
-    console.warn("[cocinaConfig] fallback a default:", error.message);
-    return DEFAULT_CONFIG;
-  }
+  // Un fallo de la consulta se propaga: mostrar los valores por defecto como si
+  // fueran los del negocio daría precios y márgenes falsos. Solo si la fila aún
+  // no existe (negocio sin configurar) se usan los valores por defecto.
+  if (error) throw error;
   if (!data) return DEFAULT_CONFIG;
   return rowToConfig(data as Row);
 }

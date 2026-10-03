@@ -11,7 +11,7 @@ import { extractError } from "@/lib/data/error";
 import { displayCantidad } from "@/lib/units";
 import type { Insumo } from "@/lib/types";
 import { normalizarBusqueda } from "@/lib/text";
-import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 type FiltroOrigen = "todos" | OrigenAuditoria;
 
@@ -85,7 +85,9 @@ export function AuditoriaClient() {
   const [entries, setEntries] = useState<StockAuditoria[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   /** True cuando la tabla stock_auditoria todavía no existe en la base
    *  (falta correr el SQL). Mostramos un aviso amable, no un error. */
   const [sinActivar, setSinActivar] = useState(false);
@@ -116,7 +118,7 @@ export function AuditoriaClient() {
         ) {
           setSinActivar(true);
         } else {
-          setError(msg);
+          setErrorCarga(msg);
         }
       } finally {
         if (vivo) setLoading(false);
@@ -125,7 +127,13 @@ export function AuditoriaClient() {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   const insumosOrdenados = useMemo(
     () => [...insumos].sort((a, b) => a.nombre.localeCompare(b.nombre)),
@@ -170,6 +178,16 @@ export function AuditoriaClient() {
       </div>
     );
   }
+  if (errorCarga) {
+    return (
+      <ErrorCarga
+        que="la auditoría de stock"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
+    );
+  }
+
 
   if (sinActivar) {
     return (
@@ -188,7 +206,6 @@ export function AuditoriaClient() {
 
   return (
     <div className="space-y-5">
-      {error && <ErrorBanner>{error}</ErrorBanner>}
 
       <div className="rounded-xl bg-marfil-soft ring-1 ring-marfil p-4 text-sm text-cacao-soft font-serif">
         Cada cambio de stock queda registrado automáticamente: el antes, el

@@ -11,6 +11,7 @@ import {
 } from "@/lib/data/recetas";
 import { listInsumos } from "@/lib/data/cocina";
 import { getCocinaConfig } from "@/lib/data/cocinaConfig";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import { UNIDADES_COMUNES } from "@/lib/units";
 
 /**
@@ -89,6 +90,7 @@ export function PlatoClient() {
   const [cfg, setCfg] = useState<CocinaConfig | null>(null);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState("");
+  const [intento, setIntento] = useState(0);
 
   const [nombre, setNombre] = useState("");
   const [porciones, setPorciones] = useState("1");
@@ -130,7 +132,13 @@ export function PlatoClient() {
     return () => {
       vivo = false;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setCargando(true);
+    setErrorCarga("");
+    setIntento((n) => n + 1);
+  }
 
   const byId = useMemo(() => {
     const m = new Map<string, Insumo>();
@@ -305,10 +313,11 @@ export function PlatoClient() {
   }
   if (errorCarga) {
     return (
-      <div className="rounded-2xl bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-6 text-[#7A2419]">
-        <p className="font-bold">No se pudo cargar la información.</p>
-        <p className="mt-1 text-sm">{errorCarga}</p>
-      </div>
+      <ErrorCarga
+        que="tus ingredientes y recetas"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
     );
   }
   if (guardadoId) {

@@ -28,6 +28,7 @@ import { CalendarIcon, ChevronIcon } from "@/components/icons";
 import { displayCantidad } from "@/lib/units";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 
 type FormState = {
   insumoId: string;
@@ -104,6 +105,9 @@ export function ComprasClient() {
   const [tasa, setTasa] = useState<TasaBcv | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
@@ -138,7 +142,7 @@ export function ComprasClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -146,7 +150,13 @@ export function ComprasClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   // La tasa BCV sugerida sigue la FECHA de la compra, no la de hoy: al cambiar la
   // fecha se carga la tasa vigente de ese día. Al AGREGAR (no editar) re-aplica esa
@@ -604,7 +614,7 @@ export function ComprasClient() {
             {editingId ? "Editar compra" : "Nueva compra"}
           </h2>
 
-          {!loading && insumos.length === 0 && (
+          {!loading && !errorCarga && insumos.length === 0 && (
             <p className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm text-cacao">
               Para registrar una compra, primero crea tus insumos en{" "}
               <Link href="/cocina/insumos" className="font-semibold underline hover:text-terracotta">
@@ -1022,6 +1032,12 @@ export function ComprasClient() {
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
           Cargando compras...
         </div>
+      ) : errorCarga ? (
+        <ErrorCarga
+          que="las compras"
+          detalle={errorCarga}
+          onReintentar={reintentarCarga}
+        />
       ) : compras.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
           <p className="font-serif italic text-cacao-soft">

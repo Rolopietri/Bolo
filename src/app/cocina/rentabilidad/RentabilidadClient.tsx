@@ -12,6 +12,7 @@ import {
 } from "@/lib/types";
 import { pillClass } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import { listRecetas, calcularCostoReceta } from "@/lib/data/recetas";
 import { listInsumos } from "@/lib/data/cocina";
 import { getCocinaConfig, updateCocinaConfig } from "@/lib/data/cocinaConfig";
@@ -47,6 +48,9 @@ export function RentabilidadClient() {
   const [historial, setHistorial] = useState<ConfigHistorialEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [editingConfig, setEditingConfig] = useState(false);
   const [savingConfig, setSavingConfig] = useState(false);
   const [showingHistorial, setShowingHistorial] = useState(false);
@@ -78,7 +82,7 @@ export function RentabilidadClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setError(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -86,7 +90,13 @@ export function RentabilidadClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   // Calcular rentabilidad por receta (excluyendo sub-recetas — no se venden directo)
   const filas = useMemo(() => {
@@ -161,7 +171,7 @@ export function RentabilidadClient() {
     }
   }
 
-  if (loading || !config) {
+  if (loading) {
     return (
       <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
         Cargando...
@@ -169,14 +179,20 @@ export function RentabilidadClient() {
     );
   }
 
-  if (error) {
+  // Sin datos válidos no se muestran márgenes ni semáforos (serían incompletos).
+  if (errorCarga || !config) {
     return (
-      <ErrorBanner>{error}</ErrorBanner>
+      <ErrorCarga
+        que="las recetas y los parámetros de rentabilidad"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
     );
   }
 
   return (
     <div className="space-y-6">
+      {error && <ErrorBanner>{error}</ErrorBanner>}
       {/* CONFIG BANNER */}
       <section className="rounded-2xl bg-white ring-1 ring-marfil p-5">
         <div className="flex flex-wrap items-start justify-between gap-3 mb-3">

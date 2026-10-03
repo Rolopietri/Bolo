@@ -16,6 +16,7 @@ import {
 } from "@/lib/types";
 import { hoyISO, pillClass } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { ErrorCarga } from "@/components/ErrorCarga";
 import {
   listRecetas,
   calcularCostoReceta,
@@ -34,6 +35,9 @@ export function CosteoClient() {
   const [config, setConfig] = useState<CocinaConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [intento, setIntento] = useState(0);
   const [info, setInfo] = useState<string | null>(null);
 
   const [orden, setOrden] = useState<OrdenarPor>("nombre");
@@ -57,7 +61,7 @@ export function CosteoClient() {
         setInsumos(ins);
         setConfig(cfg);
       } catch (e) {
-        if (!cancelled) setError(extractError(e, "Error cargando"));
+        if (!cancelled) setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -65,7 +69,13 @@ export function CosteoClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [intento]);
+
+  function reintentarCarga() {
+    setLoading(true);
+    setErrorCarga(null);
+    setIntento((n) => n + 1);
+  }
 
   // Auto-cerrar banner de info
   useEffect(() => {
@@ -166,11 +176,22 @@ export function CosteoClient() {
     }
   }
 
-  if (loading || !config) {
+  if (loading) {
     return (
       <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
         Cargando...
       </div>
+    );
+  }
+
+  // Sin datos válidos no se muestran costos ni precios (serían incompletos).
+  if (errorCarga || !config) {
+    return (
+      <ErrorCarga
+        que="las recetas y los parámetros de costeo"
+        detalle={errorCarga}
+        onReintentar={reintentarCarga}
+      />
     );
   }
 
