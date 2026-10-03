@@ -240,7 +240,7 @@ export async function POST(req: NextRequest) {
       .single();
     if (eIng) {
       const falta = (eIng as { code?: string }).code === "42P01" || /does not exist|no existe|schema cache/i.test(eIng.message);
-      return NextResponse.json({ error: falta ? "Falta preparar la base de datos. Corre el SQL de 'supabase/admin-cxc-v2.sql' en Supabase." : eIng.message }, { status: 500 });
+      return NextResponse.json({ error: falta ? "Falta una actualización de la base de datos para esta función. Avisa a soporte (referencia: admin-cxc-v2)." : eIng.message }, { status: 500 });
     }
 
     // 2) Un pago (el cobro) enlazado al ingreso, con las asignaciones por cuenta.
@@ -264,7 +264,7 @@ export async function POST(req: NextRequest) {
     if (ePago) {
       await sb.from("admin_ingreso").delete().eq("id", ingreso.id);
       const falta = (ePago as { code?: string }).code === "42P01" || /does not exist|no existe|schema cache/i.test(ePago.message);
-      return NextResponse.json({ error: falta ? "Falta la tabla de pagos o la columna 'asignaciones'. Corre 'supabase/admin-cxc-v2.sql' y 'supabase/admin-cxc-asignaciones.sql'." : ePago.message }, { status: 500 });
+      return NextResponse.json({ error: falta ? "Falta una actualización de la base de datos para esta función. Avisa a soporte (referencia: admin-cxc-asignaciones)." : ePago.message }, { status: 500 });
     }
     return NextResponse.json({ ok: true, pago_id: pago.id, ingreso_id: ingreso.id, cobrado_eur: r2(montoEur), favor_eur: favorEur });
   }
@@ -299,7 +299,7 @@ export async function POST(req: NextRequest) {
     if (eUp) {
       await sb.from("admin_egreso").delete().eq("id", eg.id); // rollback
       const falta = (eUp as { code?: string }).code === "42703" || /incobrable|schema cache|column/i.test(eUp.message);
-      return NextResponse.json({ error: falta ? "Faltan columnas de incobrable. Corre 'supabase/admin-cxc-incobrable.sql'." : eUp.message }, { status: 500 });
+      return NextResponse.json({ error: falta ? "Falta una actualización de la base de datos para esta función. Avisa a soporte (referencia: admin-cxc-incobrable)." : eUp.message }, { status: 500 });
     }
     return NextResponse.json({ ok: true });
   }

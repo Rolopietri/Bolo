@@ -5,7 +5,7 @@
  * Config del cron en vercel.json (07:00 hora Caracas). Requiere en Vercel:
  *   - SUPABASE_SERVICE_ROLE_KEY  (leer/escribir sin sesión de usuario)
  *   - RESEND_API_KEY             (enviar correos)
- *   - RESEND_FROM                (remitente, ej. "Quinta Mamá <operaciones@quintamama.com>")
+ *   - RESEND_FROM                (remitente, ej. "bolo <operaciones@tu-dominio.com>")
  *   - CRON_SECRET                (opcional; si está, se exige en el header)
  *
  * Si falta RESEND_API_KEY, la ruta no hace nada (no rompe el deploy).
@@ -54,7 +54,7 @@ export async function GET(request: Request) {
   if (!resendKey) {
     return NextResponse.json({ skipped: "RESEND_API_KEY no configurada" });
   }
-  const from = process.env.RESEND_FROM || "Quinta Mamá <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM || "bolo <onboarding@resend.dev>";
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
@@ -117,7 +117,7 @@ export async function GET(request: Request) {
           "",
           "Entra al Panel de Administración → Cuentas por cobrar para cobrarlas.",
           "",
-          "— Administración · Quinta Mamá",
+          "— Administración · bolo",
         ].filter(Boolean).join("\n");
         for (const to of alertaTo) {
           const ok = await enviarResend(resendKey, from, to, subject, text);
@@ -164,7 +164,7 @@ export async function GET(request: Request) {
           `Sub-eje: ${t.sub_eje_id}`,
           `Vence: ${t.vence ?? "sin fecha"}`,
           "",
-          "— Sistema Operativo · Quinta Mamá",
+          "— bolo",
         ].join("\n");
 
         const ok = await enviarResend(resendKey, from, persona.correo, subject, text);

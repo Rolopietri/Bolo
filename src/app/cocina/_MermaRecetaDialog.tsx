@@ -98,14 +98,14 @@ export function MermaRecetaDialog({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!receta) {
-      setError("Elegí una receta.");
+      setError("Elige una receta.");
       return;
     }
     if (!Number.isFinite(racionesCalc) || racionesCalc <= 0) {
       setError(
         unidad === "gramos"
-          ? "Ingresá un gramaje válido (la receta debe tener rendimiento definido)."
-          : "Ingresá una cantidad de raciones válida.",
+          ? "Ingresa un gramaje válido (la receta debe tener rendimiento definido)."
+          : "Ingresa una cantidad de raciones válida.",
       );
       return;
     }
@@ -150,7 +150,7 @@ export function MermaRecetaDialog({
         </h2>
         {error && <ErrorBanner>{error}</ErrorBanner>}
         <p className="text-sm text-cacao-soft font-serif leading-relaxed">
-          Registrá una ración (o varias) de algo pre-producido que se perdió por
+          Registra una ración (o varias) de algo pre-producido que se perdió por
           un fallo interno (no es una venta). Descuenta los insumos del stock y
           libera el compromiso del plan, sin sumar ingresos.
         </p>
@@ -163,7 +163,7 @@ export function MermaRecetaDialog({
             autoFocus
             className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
           >
-            <option value="">— Seleccioná —</option>
+            <option value="">— Selecciona —</option>
             {recetasOpciones.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.nombre}
@@ -264,8 +264,8 @@ export function MermaRecetaDialog({
         </div>
         {unidad === "gramos" && receta && !gramosPorRacion && (
           <p className="text-xs text-terracotta font-serif leading-relaxed">
-            Esta receta no tiene rendimiento definido. Registrá por raciones, o
-            agregá el rendimiento (g/ml) en la ficha de la receta.
+            Esta receta no tiene rendimiento definido. Registra por raciones, o
+            agrega el rendimiento (g/ml) en la ficha de la receta.
           </p>
         )}
         {unidad === "gramos" && gramosPorRacion && (

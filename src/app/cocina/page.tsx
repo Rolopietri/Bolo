@@ -7,57 +7,58 @@ const modulos: {
   href: string;
   label: string;
   desc: string;
-  index: string;
+  /** Identificador interno (no se muestra). */
+  clave: string;
   disabled?: boolean;
 }[] = [
   {
     href: "/cocina/catalogo",
     label: "Insumos e Inventario",
     desc: "Insumos, proveedores, stock, pérdidas, auditoría y alertas.",
-    index: "M1",
+    clave: "insumos",
   },
   {
     href: "/cocina/recetas",
     label: "Recetario y Subrecetas",
     desc: "Fichas técnicas con expansión de subrecetas hasta materia prima.",
-    index: "M2",
+    clave: "recetas",
   },
   {
     href: "/cocina/costeo",
     label: "Costeo",
     desc: "Costo por receta + decisión del precio de venta (editable inline sin / con IVA).",
-    index: "M3",
+    clave: "costeo",
   },
   {
     href: "/cocina/rentabilidad",
     label: "Rentabilidad y Precio de Venta",
     desc: "Margen bruto, margen neto, food cost y semáforo por receta.",
-    index: "M4",
+    clave: "rentabilidad",
   },
   {
     href: "/cocina/inventario",
     label: "Compras, Ventas y Pedidos",
     desc: "Registra compras y ventas y consulta el pedido sugerido.",
-    index: "M5",
+    clave: "operaciones",
   },
   {
     href: "/cocina/menaje",
     label: "Menaje",
     desc: "Vajilla, cristalería, cubiertos y utensilios — bajas y compras con factura.",
-    index: "M6",
+    clave: "menaje",
   },
 ];
 
-// Con Planes de producción activos (BOLO_MODULOS incluye "planes"), M5 vuelve
-// a presentarse como centro de producción.
-const M5_CON_PLANES = {
+// Con Planes de producción activos (BOLO_MODULOS incluye "planes"), la tarjeta
+// de Compras, Ventas y Pedidos vuelve a presentarse como centro de producción.
+const OPERACIONES_CON_PLANES = {
   label: "Producción, Compras y Ventas",
   desc: "Planes de producción, compras, ventas y pedido sugerido.",
 };
 
 export default function CocinaHub() {
   const modulosVisibles = funcionActiva("planes", process.env.BOLO_MODULOS)
-    ? modulos.map((m) => (m.index === "M5" ? { ...m, ...M5_CON_PLANES } : m))
+    ? modulos.map((m) => (m.clave === "operaciones" ? { ...m, ...OPERACIONES_CON_PLANES } : m))
     : modulos;
   return (
     <>
@@ -71,8 +72,8 @@ export default function CocinaHub() {
             Cocina
           </h1>
           <p className="mt-3 font-serif italic text-cacao-soft max-w-2xl">
-            Catálogo de insumos, recetas, costos e inventario. Cada módulo usa
-            los datos del anterior.
+            Catálogo de insumos, recetas, costos e inventario. Sigue los pasos
+            de “Para empezar”: cada sección usa los datos de la anterior.
           </p>
         </section>
 
@@ -136,10 +137,7 @@ export default function CocinaHub() {
                 key={m.label}
                 className="bg-white p-7 sm:p-8 opacity-50 cursor-not-allowed"
               >
-                <div className="flex items-baseline justify-between">
-                  <span className="font-cinzel text-base text-cacao-mute">
-                    {m.index}
-                  </span>
+                <div className="flex items-baseline justify-end">
                   <span className="font-display text-[10px] tracking-[0.35em] text-cacao-mute">
                     PRÓXIMAMENTE
                   </span>
@@ -157,10 +155,7 @@ export default function CocinaHub() {
                 href={m.href}
                 className="group bg-white p-7 sm:p-8 transition-colors duration-300 hover:bg-marfil-soft"
               >
-                <div className="flex items-baseline justify-between">
-                  <span className="font-cinzel text-base text-cacao-mute">
-                    {m.index}
-                  </span>
+                <div className="flex items-baseline justify-end">
                   <span className="font-display text-[10px] tracking-[0.35em] text-cacao-soft">
                     DISPONIBLE
                   </span>

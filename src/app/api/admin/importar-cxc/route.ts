@@ -162,7 +162,7 @@ export async function PUT(req: NextRequest) {
     const { data, error } = await sb.from("admin_egreso").insert(egresosRpp).select("id");
     if (error) {
       const falta = (error as { code?: string }).code === "42703" || /fuente|schema cache|column/i.test(error.message);
-      return NextResponse.json({ error: falta ? "Falta la columna 'fuente' en admin_egreso. Corre 'supabase/admin-egreso-fuente.sql'." : error.message }, { status: 500 });
+      return NextResponse.json({ error: falta ? "Falta una actualización de la base de datos para esta función. Avisa a soporte (referencia: admin-egreso-fuente)." : error.message }, { status: 500 });
     }
     cortesiasGuardadas = data?.length ?? 0;
   }

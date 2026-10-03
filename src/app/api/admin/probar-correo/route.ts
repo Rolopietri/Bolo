@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
 
   const key = process.env.RESEND_API_KEY;
   if (!key) return NextResponse.json({ sinConfig: true, error: "Falta RESEND_API_KEY en Vercel." });
-  const from = process.env.RESEND_FROM || "Quinta Mamá <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM || "bolo <onboarding@resend.dev>";
 
   const sb = createServiceClient();
   if (!sb) return NextResponse.json({ error: "servidor no configurado" }, { status: 500 });
@@ -45,8 +45,8 @@ export async function POST(req: NextRequest) {
       key,
       from,
       to,
-      "Prueba · Panel de Quinta Mamá",
-      "Este es un correo de prueba del Panel de Administración de Quinta Mamá.\n\nSi lo recibes, Resend está funcionando y los recordatorios de cuentas por cobrar llegarán bien.\n\n— Administración · Quinta Mamá",
+      "Prueba · Panel de bolo",
+      "Este es un correo de prueba del Panel de Administración de bolo.\n\nSi lo recibes, Resend está funcionando y los recordatorios de cuentas por cobrar llegarán bien.\n\n— Administración · bolo",
     );
     if (res.ok) enviados++;
     else { fallidos.push(to); if (!detalle) detalle = res.error ?? null; }

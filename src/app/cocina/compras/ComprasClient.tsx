@@ -608,7 +608,7 @@ export function ComprasClient() {
             <p className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm text-cacao">
               Para registrar una compra, primero crea tus insumos en{" "}
               <Link href="/cocina/insumos" className="font-semibold underline hover:text-terracotta">
-                Insumos y stock
+                Insumos
               </Link>
               .
             </p>

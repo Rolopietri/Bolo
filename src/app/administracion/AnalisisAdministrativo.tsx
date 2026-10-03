@@ -7,6 +7,7 @@ import { AnalisisVentas } from "./AnalisisVentas";
 import { AnalisisCompras } from "./AnalisisCompras";
 import { listComprasRango } from "@/lib/data/cocina";
 import { hoyISO } from "@/lib/ui";
+import { WarningIcon } from "@/components/icons";
 
 type Sub = "ventas" | "compras" | "resumen";
 
@@ -143,9 +144,9 @@ function ResumenUtilidad() {
           {guard !== "ok" && (
             <div className={`rounded-xl p-3 text-[12px] ring-1 ${guard === "doble" ? "bg-[#FBF3E2] ring-[#E7D4A6] text-[#7A5A18]" : "bg-marfil-soft ring-marfil text-cacao-soft"}`}>
               {guard === "doble" ? (
-                <>⚠️ <strong>Posible doble conteo de insumos:</strong> hay {fEUR(insumoEgreso)} en Egresos categoría “Insumos” y {fEUR(cogsCaja)} en Compras de Cocina para el mismo período. La utilidad usa <strong>solo</strong> las compras de Cocina como costo de insumos (los “Insumos” de Egresos se excluyen a propósito). Si registras en los dos lados, elige uno para no distorsionar.</>
+                <><WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" /><strong>Posible doble conteo de insumos:</strong> hay {fEUR(insumoEgreso)} en Egresos categoría “Insumos” y {fEUR(cogsCaja)} en Compras de Cocina para el mismo período. La utilidad usa <strong>solo</strong> las compras de Cocina como costo de insumos (los “Insumos” de Egresos se excluyen a propósito). Si registras en los dos lados, elige uno para no distorsionar.</>
               ) : (
-                <>Los insumos parecen registrarse en <strong>Egresos</strong> ({fEUR(insumoEgreso)}) y no en Compras de Cocina ({fEUR(cogsCaja)}). Hoy la utilidad toma el costo de insumos desde <strong>Cocina → Compras</strong>. Si prefieres seguir en Egresos, dime y cambio la fuente del costo.</>
+                <>Los insumos parecen registrarse en <strong>Egresos</strong> ({fEUR(insumoEgreso)}) y no en Compras de Cocina ({fEUR(cogsCaja)}). Hoy la utilidad toma el costo de insumos desde <strong>Cocina → Compras</strong>. Para que la utilidad sea correcta, registra las compras de insumos en Cocina → Compras.</>
               )}
             </div>
           )}
@@ -175,7 +176,7 @@ function ResumenUtilidad() {
             </section>
           )}
 
-          <p className="text-[11px] text-cacao-soft italic">Costo de insumos en base <strong>caja</strong> (lo comprado en el período). El costo por <strong>consumo de recetas</strong> (food cost real del menú) está en la pestaña <strong>Ventas</strong> → “Rentabilidad”. Montos en €.</p>
+          <p className="text-[11px] text-cacao-soft italic">Costo de insumos en base <strong>caja</strong> (lo comprado en el período). El costo por <strong>consumo de recetas</strong> (food cost real del menú) está en la pestaña <strong>Ingresos</strong> → “Rentabilidad (margen)”. Montos en €.</p>
         </>
       )}
     </div>

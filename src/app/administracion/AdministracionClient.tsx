@@ -2616,7 +2616,7 @@ function IngresosMes() {
               ))}
             </div>
           )}
-          {monedasPresentes.length > 1 && <div className="text-[10px] text-[#9A938B] mt-1.5">Cada moneda por separado (Xetux en €, alquileres en $).</div>}
+          {monedasPresentes.length > 1 && <div className="text-[10px] text-[#9A938B] mt-1.5">Cada moneda por separado.</div>}
           {/* Ingreso: total y comparación con Cocina, juntos arriba */}
           <div className="mt-2 pt-2 border-t border-[#333]">
             <div className="text-[9px] tracking-[0.2em] uppercase text-[#9A938B]">Ventas en Cocina (POS)</div>
@@ -2814,7 +2814,7 @@ function FormIngreso({
           </select>
         </Campo>
       </div>
-      <Campo label="Pagador / Inquilino (opcional)"><input value={f.pagador} onChange={(e) => set("pagador", e.target.value)} placeholder="Quién pagó" className="w-full border border-marfil rounded-lg px-3 py-2 text-sm text-cacao" /></Campo>
+      <Campo label="Pagador (opcional)"><input value={f.pagador} onChange={(e) => set("pagador", e.target.value)} placeholder="Quién pagó" className="w-full border border-marfil rounded-lg px-3 py-2 text-sm text-cacao" /></Campo>
       <Campo label="Concepto"><input value={f.concepto} onChange={(e) => set("concepto", e.target.value)} className="w-full border border-marfil rounded-lg px-3 py-2 text-sm text-cacao" /></Campo>
       <div className="grid grid-cols-3 gap-2">
         <Campo label="Monto"><input inputMode="decimal" value={f.monto} onChange={(e) => set("monto", e.target.value)} placeholder="0,00" className="w-full border border-marfil rounded-lg px-3 py-2 text-sm text-cacao" /></Campo>
@@ -3095,7 +3095,7 @@ function SeccionEstado() {
               <div className="grid gap-4">
                 <DesgloseUnico titulo="Egresos por categoría" filas={catUni(egresosAll)} moneda={monedaUni} />
               </div>
-              <p className="text-[11px] text-cacao-soft italic">Cada egreso conserva su moneda y tasa originales en su registro; el detalle por moneda está en Análisis administrativo. Los pagos en Bs sin equivalente calculado no se convierten.</p>
+              <p className="text-[11px] text-cacao-soft italic">Cada egreso conserva su moneda y tasa originales en su registro. Los pagos en Bs sin equivalente calculado no se convierten.</p>
             </>
           )}
 
@@ -3353,11 +3353,11 @@ function SeccionCuentasCobrar() {
       setMsg(motivo === "sobrante" ? "Sobrante marcado; el saldo a favor pasó a cero." : "Saldo ajustado a cero."); recargar();
     } catch (e) { setError(e instanceof Error ? e.message : "No se pudo ajustar."); }
   }
-  // Sobrante de redondeo: el cliente pagó de más y no pidió vuelto. La Quinta se
+  // Sobrante de redondeo: el cliente pagó de más y no pidió vuelto. El negocio se
   // queda el excedente (ya está en ingresos); solo se cierra el falso "a favor".
   async function marcarSobrante(c: ClienteCXC) {
     const eur = eurDe(Math.abs(c.saldo_usd));
-    if (!confirm(`${c.cliente} pagó de más ${fmtMonto(eur, "EUR")} y no pidió vuelto. Se marca como sobrante (la Quinta se queda ese dinero, ya contado en ingresos) y el saldo a favor pasa a cero. ¿Continuar?`)) return;
+    if (!confirm(`${c.cliente} pagó de más ${fmtMonto(eur, "EUR")} y no pidió vuelto. Se marca como sobrante (el negocio se queda ese dinero, ya contado en ingresos) y el saldo a favor pasa a cero. ¿Continuar?`)) return;
     await ajustarSaldo(c.cliente, "sobrante");
   }
   async function marcarIncobrable(cuentaId: string) {
@@ -3483,7 +3483,7 @@ function SeccionCuentasCobrar() {
             <div className="rounded-2xl bg-white ring-1 ring-marfil p-4 space-y-2">
               <label className="block font-display text-[10px] tracking-[0.2em] uppercase text-cacao-mute">Correos para el recordatorio de cobros</label>
               <div className="flex flex-wrap items-center gap-2">
-                <input value={correosInput} onChange={(e) => setCorreosInput(e.target.value)} placeholder="beatriz@…, lucia@…, tu@…" className="flex-1 min-w-[16rem] border border-marfil rounded-lg px-3 py-2 text-sm text-cacao" />
+                <input value={correosInput} onChange={(e) => setCorreosInput(e.target.value)} placeholder="correo1@…, correo2@…" className="flex-1 min-w-[16rem] border border-marfil rounded-lg px-3 py-2 text-sm text-cacao" />
                 <button type="button" onClick={guardarCorreos} disabled={guardandoCorreos} className="rounded-lg bg-cacao text-white px-4 py-2 text-xs uppercase tracking-widest hover:bg-terracotta disabled:bg-marfil disabled:text-cacao-mute">{guardandoCorreos ? "Guardando…" : "Guardar"}</button>
                 <button type="button" onClick={probarCorreo} disabled={probando} className="rounded-lg ring-1 ring-marfil text-cacao px-4 py-2 text-xs uppercase tracking-widest hover:bg-marfil-soft disabled:text-cacao-mute">{probando ? "Enviando…" : "Enviar correo de prueba"}</button>
               </div>
@@ -3515,7 +3515,7 @@ function SeccionCuentasCobrar() {
         {cargando ? (
           <p className="p-5 text-cacao-soft italic font-serif">Cargando…</p>
         ) : deudores.length === 0 && aFavor.length === 0 ? (
-          <p className="p-8 text-center text-cacao-soft italic font-serif">No hay clientes con saldo pendiente. Importa el reporte detallado de Zetux para empezar.</p>
+          <p className="p-8 text-center text-cacao-soft italic font-serif">No hay clientes con saldo pendiente. Importa el reporte detallado de Xetux para empezar.</p>
         ) : (
           <ul className="divide-y divide-marfil">
             {[...deudores, ...aFavor, ...(verSaldados ? saldados : [])].map((c) => {
@@ -3540,7 +3540,7 @@ function SeccionCuentasCobrar() {
                     <div className="flex items-center gap-2 justify-end">
                       <button type="button" onClick={() => setAbierto(abiertoAqui ? null : c.key)} className="rounded-lg ring-1 ring-marfil text-cacao px-3 py-1.5 text-[11px] uppercase tracking-widest hover:bg-marfil-soft">{abiertoAqui ? "Ocultar" : "Ver"}</button>
                       {enFavor && eurDe(Math.abs(c.saldo_usd)) <= SOBRANTE_MAX_EUR && (
-                        <button type="button" onClick={() => marcarSobrante(c)} title="Pagó de más y no pidió vuelto: la Quinta se queda el sobrante" className="rounded-lg ring-1 ring-[#CBD9BC] text-[#2F4A1F] px-3 py-1.5 text-[11px] uppercase tracking-widest hover:bg-[#F1F4ED]">Marcar sobrante</button>
+                        <button type="button" onClick={() => marcarSobrante(c)} title="Pagó de más y no pidió vuelto: el negocio se queda el sobrante" className="rounded-lg ring-1 ring-[#CBD9BC] text-[#2F4A1F] px-3 py-1.5 text-[11px] uppercase tracking-widest hover:bg-[#F1F4ED]">Marcar sobrante</button>
                       )}
                       {c.saldo_usd > 0.005 && <button type="button" onClick={() => setCobrando(c)} className="rounded-lg bg-cacao text-white px-3 py-1.5 text-[11px] uppercase tracking-widest hover:bg-terracotta">Cobrar</button>}
                     </div>
@@ -3599,7 +3599,7 @@ function SeccionCuentasCobrar() {
                           {eurDe(Math.abs(c.saldo_usd)) <= SOBRANTE_MAX_EUR ? (
                             <>
                               <button type="button" onClick={() => marcarSobrante(c)} className="rounded-lg ring-1 ring-[#CBD9BC] text-[#2F4A1F] px-3 py-1.5 text-[11px] uppercase tracking-widest hover:bg-[#F1F4ED]">Marcar sobrante</button>
-                              <span className="text-[11px] text-cacao-mute">Pagó de más y no pidió vuelto: la Quinta se queda el sobrante (ya está en ingresos); el saldo pasa a cero.</span>
+                              <span className="text-[11px] text-cacao-mute">Pagó de más y no pidió vuelto: el negocio se queda el sobrante (ya está en ingresos); el saldo pasa a cero.</span>
                             </>
                           ) : (
                             <>
@@ -3610,7 +3610,7 @@ function SeccionCuentasCobrar() {
                         </div>
                       )}
 
-                      {/* Unir con otro cliente (mismo cliente, distinto nombre en Zetux) */}
+                      {/* Unir con otro cliente (mismo cliente, distinto nombre en Xetux) */}
                       <div className="px-1 pt-1 flex items-center gap-2 flex-wrap">
                         {unirDesde === c.key ? (
                           <>

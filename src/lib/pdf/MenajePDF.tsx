@@ -1,8 +1,8 @@
 /**
- * PDF de lista de menaje para evento — La Quinta Mamá
+ * PDF de lista de menaje (cabecera con el nombre del negocio).
  * Se arma al vuelo desde una selección de ítems (no persiste).
- * Dos modos: lista de preparación (sin precios) o cotización de alquiler
- * (con precio unitario, subtotales y total).
+ * Dos modos: lista sin precios o cotización (con precio unitario,
+ * subtotales y total).
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -266,6 +266,8 @@ export type MenajePDFData = {
   notas?: string;
   conPrecios: boolean;
   items: MenajePDFItem[];
+  /** Nombre del negocio para la cabecera y el pie. */
+  negocio?: string;
 };
 
 function money(n: number): string {
@@ -274,6 +276,7 @@ function money(n: number): string {
 
 export function MenajePDF({ data }: { data: MenajePDFData }) {
   const { evento, cliente, fecha, notas, conPrecios, items } = data;
+  const negocio = data.negocio?.trim() || "bolo";
   const total = conPrecios
     ? items.reduce((acc, it) => acc + it.cantidad * (it.precioUnit ?? 0), 0)
     : 0;
@@ -285,11 +288,11 @@ export function MenajePDF({ data }: { data: MenajePDFData }) {
         {/* Encabezado */}
         <View style={styles.headerRow}>
           <View>
-            <Text style={styles.brandWordmark}>QUINTA MAMÁ</Text>
-            <Text style={styles.brandLine}>Menaje · Eventos</Text>
+            <Text style={styles.brandWordmark}>{negocio.toUpperCase()}</Text>
+            <Text style={styles.brandLine}>Menaje</Text>
           </View>
           <Text style={styles.titleEyebrow}>
-            {conPrecios ? "Cotización de alquiler" : "Lista de menaje"}
+            {conPrecios ? "Cotización" : "Lista de menaje"}
           </Text>
         </View>
 
@@ -297,7 +300,7 @@ export function MenajePDF({ data }: { data: MenajePDFData }) {
 
         <View style={styles.hr} />
 
-        {/* Datos del evento */}
+        {/* Datos de la lista */}
         <View style={styles.metaRow}>
           {cliente?.trim() ? (
             <View>
@@ -384,7 +387,7 @@ export function MenajePDF({ data }: { data: MenajePDFData }) {
         ) : null}
 
         <Text style={styles.footer} fixed>
-          La Quinta Mamá · Lista de menaje generada desde el sistema de cocina.
+          {negocio} · Lista de menaje generada desde bolo.
           Los valores en rojo indican que la cantidad pedida supera el stock
           disponible.
         </Text>

@@ -276,7 +276,7 @@ export function PlanesClient() {
     const rec = recetas.find((r) => r.id === formRecetaId);
     const raciones = Number(formRaciones);
     if (!rec || raciones <= 0) {
-      setError("Seleccioná una receta y un número de raciones válido.");
+      setError("Selecciona una receta y un número de raciones válido.");
       return;
     }
     setSaving(true);
@@ -599,7 +599,7 @@ export function PlanesClient() {
                 required
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
               >
-                <option value="">— Seleccioná —</option>
+                <option value="">— Selecciona —</option>
                 {recetasOpciones.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.nombre}
@@ -710,9 +710,9 @@ export function PlanesClient() {
               {previewWarnings.length > 0 && (
                 <div className="text-xs text-terracotta mt-2">
                   <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />
-                  No tenés stock libre suficiente para{" "}
+                  No tienes stock libre suficiente para{" "}
                   {previewWarnings.length} ingrediente
-                  {previewWarnings.length === 1 ? "" : "s"}. Podes crear el
+                  {previewWarnings.length === 1 ? "" : "s"}. Puedes crear el
                   plan igual — el stock comprometido va a quedar mayor al total
                   y vas a verlo reflejado.
                 </div>

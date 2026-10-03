@@ -44,7 +44,7 @@ function traducir(error: { message?: string; code?: string }): Error {
   const code = error?.code ?? "";
   if (code === "42P01" || code === "PGRST205" || /categoria_por_nombre/i.test(msg)) {
     return new Error(
-      "Falta crear la tabla en Supabase. Corre el SQL de supabase/categoria-por-nombre.sql (SQL Editor → pega el contenido → Run) y recarga.",
+      "Falta una actualización de la base de datos para esta función. Avisa a soporte (referencia: categoria-por-nombre).",
     );
   }
   return new Error(msg || "No se pudo guardar la categoría");

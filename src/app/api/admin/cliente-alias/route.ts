@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
     .upsert({ alias_key: aliasKey, canonico }, { onConflict: "alias_key" });
   if (error) {
     const falta = (error as { code?: string }).code === "42P01" || /does not exist|schema cache/i.test(error.message);
-    return NextResponse.json({ error: falta ? "Falta la tabla admin_cliente_alias. Corre 'supabase/admin-cliente-alias.sql'." : error.message }, { status: 500 });
+    return NextResponse.json({ error: falta ? "Falta una actualización de la base de datos para esta función. Avisa a soporte (referencia: admin-cliente-alias)." : error.message }, { status: 500 });
   }
   return NextResponse.json({ ok: true, canonico });
 }

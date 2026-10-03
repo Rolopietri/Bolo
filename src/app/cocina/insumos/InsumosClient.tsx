@@ -1019,19 +1019,19 @@ export function InsumosClient() {
                       </div>
                       <div className="col-span-4 sm:col-span-2">
                         <div className="text-xs text-cacao-mute uppercase tracking-widest">
-                          Stock libre
+                          {i.stockComprometido > 0 ? "Stock libre" : "Stock"}
                         </div>
                         <div
                           className={`text-sm ${lowStock ? "text-terracotta font-medium" : "text-cacao"}`}
                         >
                           {displayCantidad(libre, i.unidadBase)}
                         </div>
-                        <div className="text-xs text-cacao-mute">
-                          {displayCantidad(i.stockTotal, i.unidadBase)} total
-                          {i.stockComprometido > 0 && (
-                            <> · {displayCantidad(i.stockComprometido, i.unidadBase)} comp.</>
-                          )}
-                        </div>
+                        {i.stockComprometido > 0 && (
+                          <div className="text-xs text-cacao-mute">
+                            {displayCantidad(i.stockTotal, i.unidadBase)} total ·{" "}
+                            {displayCantidad(i.stockComprometido, i.unidadBase)} comp.
+                          </div>
+                        )}
                         {i.stockMinimo !== null && i.stockMinimo > 0 && (
                           <div className="text-xs text-cacao-mute">
                             min: {i.stockMinimo}

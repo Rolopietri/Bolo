@@ -5,12 +5,12 @@ import { MermaClient } from "./MermaClient";
 export default function MermaPage() {
   return (
     <>
-      <Header subtitle="Cocina · Inventario" />
+      <Header subtitle="Mermas" />
       <main className="flex-1 mx-auto w-full max-w-4xl px-5 py-10">
         <section className="mb-6 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">
-              Cocina · Inventario
+              Insumos e Inventario
             </p>
             <h1 className="mt-2 font-cinzel text-2xl sm:text-3xl tracking-[0.12em] uppercase text-cacao">
               Merma por conteo

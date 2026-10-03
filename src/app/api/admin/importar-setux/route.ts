@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
   }
   if (!reporte.lineas.length) {
     return NextResponse.json(
-      { error: "No encontré la tabla de ventas por forma de pago. ¿Es el consolidado de Setux?" },
+      { error: "No encontré la tabla de ventas por forma de pago. ¿Es el consolidado de Xetux?" },
       { status: 422 },
     );
   }

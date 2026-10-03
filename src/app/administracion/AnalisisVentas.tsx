@@ -815,7 +815,7 @@ export function AnalisisVentas() {
       await setCategoriaExcluirRanking(id, excluir);
     } catch (e) {
       setCategorias((prev) => prev.map((c) => (c.id === id ? { ...c, excluirRanking: !excluir } : c)));
-      setError(e instanceof Error ? e.message : "No se pudo actualizar. ¿Corriste el ALTER de excluir_ranking?");
+      setError(e instanceof Error ? e.message : "No se pudo actualizar la categoría. Intenta de nuevo.");
     }
   }
 

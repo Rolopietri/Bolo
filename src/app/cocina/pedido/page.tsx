@@ -11,7 +11,7 @@ export default function PedidoSugeridoPage() {
         <section className="mb-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">
-              M5 · Pedido sugerido
+              Compras, Ventas y Pedidos
             </p>
             <h1 className="mt-2 font-cinzel text-2xl sm:text-3xl tracking-[0.12em] uppercase text-cacao">
               Pedido sugerido
@@ -23,10 +23,10 @@ export default function PedidoSugeridoPage() {
             </p>
           </div>
           <Link
-            href="/cocina"
+            href="/cocina/inventario"
             className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao"
           >
-            ← Volver
+            ← Compras, Ventas y Pedidos
           </Link>
         </section>
         <PedidoSugeridoClient

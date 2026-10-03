@@ -640,10 +640,10 @@ function GastosOperativosCalculator({
             Ayuda
           </p>
           <div className="text-sm font-medium text-cacao mt-0.5">
-            Calculá tu % de gastos operativos
+            Calcula tu % de gastos operativos
           </div>
           <p className="text-xs text-cacao-soft italic font-serif">
-            Sumás tus gastos fijos mensuales y dividís por tu venta promedio.
+            Suma tus gastos fijos mensuales y divide entre tu venta promedio.
           </p>
         </div>
         <span
@@ -726,7 +726,7 @@ function GastosOperativosCalculator({
               className="w-full rounded ring-1 ring-marfil px-3 py-2 text-sm bg-white"
             />
             <span className="text-[10px] text-cacao-mute mt-1 block">
-              Usá un promedio realista de los últimos 3 meses.
+              Usa un promedio realista de los últimos 3 meses.
             </span>
           </label>
 
@@ -754,7 +754,7 @@ function GastosOperativosCalculator({
             </div>
           ) : (
             <div className="text-xs text-cacao-mute italic font-serif">
-              Cargá los gastos y la venta mensual para ver el porcentaje.
+              Ingresa los gastos y la venta mensual para ver el porcentaje.
             </div>
           )}
         </div>

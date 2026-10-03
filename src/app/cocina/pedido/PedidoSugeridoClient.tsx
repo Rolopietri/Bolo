@@ -814,14 +814,14 @@ export function PedidoSugeridoClient({
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
               />
               <span className="text-[10px] text-cacao-mute block mt-1">
-                Ej: día del evento, día de preparación.
+                Ej: día de entrega o de preparación.
               </span>
             </label>
             <label className="text-sm text-cacao block">
               Nota{" "}
               <span className="text-cacao-mute font-normal">(opcional)</span>
               <textarea
-                placeholder="Para qué evento, recordatorios, contexto..."
+                placeholder="Para qué es, recordatorios, contexto..."
                 value={saveNota}
                 onChange={(e) => setSaveNota(e.target.value)}
                 rows={3}

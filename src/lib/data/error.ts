@@ -44,15 +44,15 @@ export function extractError(e: unknown, fallback = "Error inesperado"): string 
     code === "42P01" // undefined_table
   ) {
     pista =
-      " · La tabla no existe todavía en Supabase. Corre el SQL en supabase/presupuestos-inventario-contratistas.sql.";
+      " · Falta una actualización de la base de datos para esta función. Avisa a soporte.";
   } else if (lower.includes("permission denied") || code === "42501") {
-    pista = " · No hay permiso (RLS). Verifica las policies de la tabla.";
+    pista = " · No tienes permiso para esta acción.";
   } else if (
     lower.includes("violates row-level security") ||
     lower.includes("rls")
   ) {
     pista =
-      " · Bloqueado por Row Level Security. ¿Tienes sesión activa? Cierra sesión y entra de nuevo.";
+      " · Acción bloqueada. ¿Tienes sesión activa? Cierra sesión y entra de nuevo.";
   }
 
   const extras = [details, hint].filter(Boolean).join(" · ");

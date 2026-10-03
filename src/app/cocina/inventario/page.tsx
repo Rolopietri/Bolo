@@ -6,7 +6,7 @@ import { SubHubGrid, type SubModulo } from "../_SubHub";
 const PLANES: SubModulo = {
   href: "/cocina/inventario/planes",
   label: "Planes de producción",
-  desc: "Reservá stock por adelantado para producciones planificadas (eventos, batches).",
+  desc: "Reserva stock por adelantado para producciones planificadas (eventos, batches).",
 };
 
 const SUBMODULOS: SubModulo[] = [
@@ -33,20 +33,20 @@ export default function InventarioHubPage() {
   const modulos = planes ? [PLANES, ...SUBMODULOS] : SUBMODULOS;
   return (
     <>
-      <Header subtitle="Cocina · M5" />
+      <Header subtitle={planes ? "Producción, Compras y Ventas" : "Compras, Ventas y Pedidos"} />
       <main className="flex-1 mx-auto w-full max-w-4xl px-5 py-10">
         <section className="mb-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">
-              Cocina · Módulo 5
+              Cocina
             </p>
             <h1 className="mt-2 font-cinzel text-2xl sm:text-3xl tracking-[0.12em] uppercase text-cacao">
               {planes ? "Producción, Compras y Ventas" : "Compras, Ventas y Pedidos"}
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft max-w-2xl">
               {planes
-                ? "Centro de operaciones: planes de producción, registro de compras y ventas, y el pedido sugerido. Lo que mueve el inventario que ves en M1."
-                : "Registra compras y ventas y consulta el pedido sugerido. Lo que mueve el inventario que ves en M1."}
+                ? "Centro de operaciones: planes de producción, registro de compras y ventas, y el pedido sugerido. Lo que mueve el inventario que ves en Insumos e Inventario."
+                : "Registra compras y ventas y consulta el pedido sugerido. Lo que mueve el inventario que ves en Insumos e Inventario."}
             </p>
           </div>
           <Link

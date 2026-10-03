@@ -1,5 +1,6 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { MenajePDF, type MenajePDFData } from "@/lib/pdf/MenajePDF";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,13 +40,25 @@ export async function POST(req: Request) {
     })),
   };
 
+  // Nombre del negocio (configuración de Bolo) para la cabecera del PDF.
+  try {
+    const sb = await createSupabaseServerClient();
+    const { data: cfg } = await sb
+      .from("negocio_config")
+      .select("nombre")
+      .maybeSingle();
+    if (cfg?.nombre?.trim()) data.negocio = cfg.nombre.trim();
+  } catch {
+    /* sin configuración: el PDF usa "bolo" */
+  }
+
   try {
     const buffer = await renderToBuffer(MenajePDF({ data }));
-    const nombreArchivo = `menaje-${(data.evento || "evento")
+    const nombreArchivo = `menaje-${(data.evento || "lista")
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 40) || "evento"}.pdf`;
+      .slice(0, 40) || "lista"}.pdf`;
     return new Response(new Uint8Array(buffer), {
       status: 200,
       headers: {

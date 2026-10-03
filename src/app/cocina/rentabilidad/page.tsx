@@ -5,12 +5,12 @@ import { RentabilidadClient } from "./RentabilidadClient";
 export default function RentabilidadPage() {
   return (
     <>
-      <Header subtitle="Cocina · M4" />
+      <Header subtitle="Rentabilidad" />
       <main className="flex-1 mx-auto w-full max-w-6xl px-5 py-10">
         <section className="mb-8 flex items-end justify-between gap-4 flex-wrap">
           <div>
             <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">
-              Cocina · Módulo 4
+              Cocina
             </p>
             <h1 className="mt-2 font-cinzel text-2xl sm:text-3xl tracking-[0.12em] uppercase text-cacao">
               Rentabilidad y Precio de Venta
@@ -22,7 +22,7 @@ export default function RentabilidadPage() {
                 href="/cocina/costeo"
                 className="underline hover:text-cacao"
               >
-                Costeo (M3)
+                Costeo
               </Link>
               .
             </p>

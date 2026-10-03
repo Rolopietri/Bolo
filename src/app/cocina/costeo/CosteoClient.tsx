@@ -190,7 +190,7 @@ export function CosteoClient() {
           {insumosViejos.length === 1 ? "" : "s"} con precio de más de{" "}
           {PRECIO_VIEJO_DIAS} días. El costeo puede estar desactualizado —{" "}
           <Link href="/cocina/insumos" className="underline hover:text-cacao">
-            revisá y actualizá precios en el Catálogo
+            revisa y actualiza los precios en Insumos
           </Link>
           .
         </ErrorBanner>
@@ -210,7 +210,7 @@ export function CosteoClient() {
                 href="/cocina/rentabilidad"
                 className="underline hover:text-cacao"
               >
-                Rentabilidad (M4)
+                Rentabilidad
               </Link>
               .
             </p>
@@ -312,8 +312,8 @@ export function CosteoClient() {
                 Sin precio definido — requieren atención
               </h2>
               <p className="text-xs text-amber-800/80 italic font-serif mt-0.5">
-                Estas recetas no tienen precio de venta cargado. Usá el
-                sugerido como guía o escribí tu propio precio.
+                Estas recetas no tienen precio de venta cargado. Usa el
+                sugerido como guía o escribe tu propio precio.
               </p>
             </div>
             <span className="text-[10px] uppercase tracking-widest text-amber-900">
@@ -350,7 +350,7 @@ export function CosteoClient() {
           href="/cocina/rentabilidad"
           className="underline hover:text-cacao"
         >
-          Rentabilidad (M4)
+          Rentabilidad
         </Link>
       </p>
     </div>

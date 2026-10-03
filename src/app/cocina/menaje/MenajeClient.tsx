@@ -360,7 +360,7 @@ export function MenajeClient() {
     }
     if (cant > bajaItem.cantidadActual) {
       setError(
-        `No podés dar de baja ${cant}: solo hay ${bajaItem.cantidadActual} disponibles.`,
+        `No puedes dar de baja ${cant}: solo hay ${bajaItem.cantidadActual} disponibles.`,
       );
       return;
     }
@@ -551,7 +551,7 @@ export function MenajeClient() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `menaje-${listaEvento || "evento"}.pdf`;
+      a.download = `menaje-${listaEvento || "lista"}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       setListaOpen(false);
@@ -628,7 +628,7 @@ export function MenajeClient() {
         className="w-full rounded-xl ring-1 ring-cacao text-cacao py-2.5 font-medium hover:bg-marfil-soft transition-colors"
       >
         <DocIcon className="inline size-4 align-[-0.2em] mr-1.5" />
-        Lista de menaje para evento (PDF)
+        Lista de menaje (PDF)
       </button>
 
       {/* Nuevo item */}
@@ -819,8 +819,8 @@ export function MenajeClient() {
               </summary>
               <div className="px-3 pb-3 space-y-3 border-t border-marfil pt-3">
                 <p className="text-xs text-cacao-soft italic font-serif">
-                  Si estás cargando este item porque acabás de comprarlo,
-                  podés adjuntar la factura acá. Va a quedar como el primer
+                  Si estás cargando este ítem porque acabas de comprarlo,
+                  puedes adjuntar la factura aquí. Quedará como el primer
                   movimiento del historial.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -908,7 +908,7 @@ export function MenajeClient() {
       {grouped.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
           <p className="font-serif italic text-cacao-soft">
-            Sin items en el menaje. Agregá el primero arriba.
+            Aún no hay ítems en el menaje. Agrega el primero arriba.
           </p>
         </div>
       ) : (
@@ -1222,7 +1222,7 @@ export function MenajeClient() {
               <span className="text-cacao-mute font-normal">(opcional)</span>
               <input
                 type="text"
-                placeholder="Ej: se rompió durante el evento del sábado"
+                placeholder="Ej: se rompió durante el servicio del sábado"
                 value={bajaMotivo}
                 onChange={(e) => setBajaMotivo(e.target.value)}
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
@@ -1500,24 +1500,24 @@ export function MenajeClient() {
             className="my-6 rounded-2xl bg-white ring-1 ring-marfil p-6 max-w-2xl w-full shadow-xl"
           >
             <h2 className="font-cinzel text-xl tracking-[0.08em] text-cacao">
-              Lista de menaje para evento
+              Lista de menaje
             </h2>
             <p className="mt-1 text-sm text-cacao-soft font-serif">
               Escoge las piezas y las cantidades. Genera un PDF como lista de
-              preparación, o una cotización con precio de alquiler.
+              preparación, o una cotización con precios.
             </p>
 
             {/* Datos del evento */}
             <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">
                 <span className="text-[11px] uppercase tracking-widest text-cacao-mute">
-                  Evento
+                  Título
                 </span>
                 <input
                   type="text"
                   value={listaEvento}
                   onChange={(e) => setListaEvento(e.target.value)}
-                  placeholder="Ej. Boda García"
+                  placeholder="Ej. Pedido del viernes"
                   className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
                 />
               </label>
@@ -1567,7 +1567,7 @@ export function MenajeClient() {
                   className="h-4 w-4 accent-cacao"
                 />
                 <span className="text-sm text-cacao font-medium">
-                  Incluir precios (cotización de alquiler)
+                  Incluir precios (cotización)
                 </span>
               </label>
               {listaConPrecios && (

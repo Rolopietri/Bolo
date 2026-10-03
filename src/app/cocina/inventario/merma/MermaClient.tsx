@@ -78,7 +78,7 @@ export function MermaClient() {
 
       {conteos.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-10 text-center font-serif italic text-cacao-soft">
-          Aún no hay conteos registrados. Haz un conteo físico (Inventario → Conteo físico) y aquí verás la merma de cada uno.
+          Aún no hay conteos registrados. Haz un conteo físico (Insumos e Inventario → Conteo físico y mermas) y aquí verás la merma de cada uno.
         </div>
       ) : (
         conteos.map((c) => {

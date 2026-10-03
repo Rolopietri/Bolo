@@ -276,7 +276,7 @@ export function ConteoFisicoClient() {
       </div>
 
       <p className="text-[11px] text-cacao-mute px-1">
-        Escribí lo que tenés físicamente (en la unidad indicada). Deja en blanco lo
+        Escribe lo que tienes físicamente (en la unidad indicada). Deja en blanco lo
         que no cuentes — solo se ajustan los que escribas y difieran del actual.
         {/* Solo hay stock reservado cuando se usan Planes de producción. */}
         {items.some((i) => i.stockComprometido > 0) &&

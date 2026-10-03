@@ -28,7 +28,7 @@ const ORIGEN_META: Record<
     className: "bg-[#EEF3EA] text-[#3B5A2A] ring-[#CBD9BC]",
   },
   directo: {
-    label: "Directo (SQL)",
+    label: "Directo",
     className: "bg-[#F6EEDD] text-[#8A5A15] ring-[#E4CE9E]",
   },
 };
@@ -148,6 +148,16 @@ export function AuditoriaClient() {
     });
   }, [entries, filterInsumo, filterOrigen, soloFisico, search]);
 
+  // La columna "Reservado" solo tiene sentido si hubo stock reservado
+  // (Planes de producción); si nunca cambió, no se muestra.
+  const hayReservas = useMemo(
+    () =>
+      entries.some(
+        (e) => (e.comprometidoAnterior ?? 0) !== (e.comprometidoNuevo ?? 0),
+      ),
+    [entries],
+  );
+
   const nDirectos = useMemo(
     () => entries.filter((e) => e.origen === "directo").length,
     [entries],
@@ -168,10 +178,9 @@ export function AuditoriaClient() {
           Auditoría por activar
         </p>
         <p className="mt-3 text-sm text-cacao-soft font-serif max-w-md mx-auto">
-          El registro automático de cambios de stock todavía no está activo en
-          la base de datos. Una vez que se corra el SQL de activación, cada
-          cambio de stock empezará a quedar registrado aquí — cuándo, cuánto y
-          de dónde vino.
+          El registro automático de cambios de stock todavía no está activo.
+          Cuando se active, cada cambio de stock quedará registrado aquí:
+          cuándo, cuánto y de dónde vino.
         </p>
       </div>
     );
@@ -185,10 +194,10 @@ export function AuditoriaClient() {
         Cada cambio de stock queda registrado automáticamente: el antes, el
         después, el momento exacto y de dónde vino. Los marcados como{" "}
         <span className="font-sans font-medium text-[#8A5A15]">
-          Directo (SQL)
+          Directo
         </span>{" "}
-        son cambios hechos fuera de la app (editor de Supabase o procesos), los
-        que conviene revisar con cuidado.
+        son cambios hechos fuera de la app (por ejemplo, desde la base de
+        datos), los que conviene revisar con cuidado.
         {nDirectos > 0 && (
           <span className="block mt-1">
             Hay <strong className="text-cacao">{nDirectos}</strong> cambio(s)
@@ -220,7 +229,7 @@ export function AuditoriaClient() {
             <option value="todos">Cualquier origen</option>
             <option value="app">App</option>
             <option value="alta">Alta</option>
-            <option value="directo">Directo (SQL)</option>
+            <option value="directo">Directo</option>
           </select>
           <label className="flex items-center gap-2 text-sm text-cacao rounded-lg ring-1 ring-marfil px-3 py-2 bg-white cursor-pointer">
             <input
@@ -246,8 +255,8 @@ export function AuditoriaClient() {
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
           No hay cambios de stock registrados con estos filtros.
           <p className="mt-2 text-xs text-cacao-mute">
-            El registro empieza a llenarse desde que se activa el disparador en
-            la base de datos.
+            Cada vez que cambie el stock de un insumo (compras, ventas, conteos
+            o ediciones) quedará registrado aquí.
           </p>
         </div>
       ) : (
@@ -265,9 +274,11 @@ export function AuditoriaClient() {
                   <th className="px-4 py-3 text-[11px] uppercase tracking-widest text-cacao-mute font-medium">
                     Stock físico
                   </th>
-                  <th className="px-4 py-3 text-[11px] uppercase tracking-widest text-cacao-mute font-medium">
-                    Reservado
-                  </th>
+                  {hayReservas && (
+                    <th className="px-4 py-3 text-[11px] uppercase tracking-widest text-cacao-mute font-medium">
+                      Reservado
+                    </th>
+                  )}
                   <th className="px-4 py-3 text-[11px] uppercase tracking-widest text-cacao-mute font-medium">
                     Origen
                   </th>
@@ -297,17 +308,19 @@ export function AuditoriaClient() {
                           unidad={e.unidadBase}
                         />
                       </td>
-                      <td className="px-4 py-3">
-                        {comprometidoCambio ? (
-                          <CambioCapa
-                            anterior={e.comprometidoAnterior}
-                            nuevo={e.comprometidoNuevo}
-                            unidad={e.unidadBase}
-                          />
-                        ) : (
-                          <span className="text-cacao-mute">—</span>
-                        )}
-                      </td>
+                      {hayReservas && (
+                        <td className="px-4 py-3">
+                          {comprometidoCambio ? (
+                            <CambioCapa
+                              anterior={e.comprometidoAnterior}
+                              nuevo={e.comprometidoNuevo}
+                              unidad={e.unidadBase}
+                            />
+                          ) : (
+                            <span className="text-cacao-mute">—</span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-3">
                         <span
                           className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] ring-1 ${meta.className}`}

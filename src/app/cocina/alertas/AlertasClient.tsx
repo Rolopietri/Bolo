@@ -243,7 +243,9 @@ function Section({
               <div className="text-right">
                 <div className={`text-sm font-medium ${danger ? "text-terracotta" : "text-cacao"}`}>
                   {displayCantidad(stockLibre(i), i.unidadBase)}
-                  <span className="text-[10px] text-cacao-mute ml-1">libre</span>
+                  {i.stockComprometido > 0 && (
+                    <span className="text-[10px] text-cacao-mute ml-1">libre</span>
+                  )}
                 </div>
                 {i.stockComprometido > 0 && (
                   <div className="text-[10px] text-cacao-mute">
