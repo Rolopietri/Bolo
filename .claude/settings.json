@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(npx *)",
+      "Bash(git *)",
+      "Bash(supabase *)",
+      "Bash(vercel *)",
+      "mcp__supabase"
+    ],
+    "ask": [
+      "Read(./.env*)",
+      "Edit(./.env*)",
+      "Read(./**/*.pem)",
+      "Edit(./**/*.pem)",
+      "Read(./**/*.key)",
+      "Edit(./**/*.key)",
+      "Bash(vercel env *)",
+      "Bash(npx vercel env *)",
+      "Bash(supabase db reset*)",
+      "Bash(npx supabase db reset*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Write|Edit|MultiEdit|mcp__supabase__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/proteger-produccion.js\""
+          }
+        ]
+      }
+    ]
+  }
+}
