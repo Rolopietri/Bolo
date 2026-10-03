@@ -72,9 +72,13 @@ function lineFromIng(i: RecetaIngrediente): LineForm {
 export function RecetaForm({
   existing,
   onSaved,
+  planesActivos = false,
 }: {
   existing?: Receta;
   onSaved?: (r: Receta) => void;
+  /** Planes de producción encendidos (BOLO_MODULOS incluye "planes"). Sin
+   *  ellos se ocultan las pistas de "cuánto baja su plan por venta". */
+  planesActivos?: boolean;
 }) {
   const router = useRouter();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
@@ -803,6 +807,7 @@ export function RecetaForm({
           </label>
         </div>
         {esSubreceta &&
+          planesActivos &&
           (() => {
             const rN = Number(rendimiento);
             const pN = Number(porciones);
@@ -1275,7 +1280,7 @@ export function RecetaForm({
                       El costo asume misma unidad — revisa para evitar errores.
                     </div>
                   )}
-                  {racionesPorVenta !== null && subPorPorcion !== null && (
+                  {planesActivos && racionesPorVenta !== null && subPorPorcion !== null && (
                     <div
                       className={`text-[11px] pl-1 ${
                         racionDesajustada

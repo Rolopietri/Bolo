@@ -29,7 +29,17 @@ import { extractError } from "@/lib/data/error";
 
 type Objetivo = { recetaId: string; raciones: string };
 
-export function PedidoSugeridoClient() {
+/**
+ * `planesActivos`: Planes de producción encendidos (BOLO_MODULOS incluye
+ * "planes"). En Bolo vienen apagados: entonces no se cargan planes, marcar un
+ * pedido como "Comprado" solo cambia su estado (no crea planes ni reservas) y
+ * no se muestra la opción de ignorar reservas.
+ */
+export function PedidoSugeridoClient({
+  planesActivos = false,
+}: {
+  planesActivos?: boolean;
+}) {
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -75,11 +85,13 @@ export function PedidoSugeridoClient() {
         setInsumos(i);
         setProveedores(p);
         // Planes de producción (para el modo "generar pedido desde un plan").
-        try {
-          const pl = await listPlanesProduccion();
-          if (!cancelled) setPlanes(pl);
-        } catch {
-          // silent — sin planes seguimos normal
+        if (planesActivos) {
+          try {
+            const pl = await listPlanesProduccion();
+            if (!cancelled) setPlanes(pl);
+          } catch {
+            // silent — sin planes seguimos normal
+          }
         }
         // El listado de pedidos guardados es opcional — si la tabla aún
         // no existe (SQL pendiente), no rompemos toda la pantalla.
@@ -98,7 +110,7 @@ export function PedidoSugeridoClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [planesActivos]);
 
   // Auto-cerrar banner de info
   useEffect(() => {
@@ -274,8 +286,12 @@ export function PedidoSugeridoClient() {
       // Al marcar "comprado" por primera vez, generar un plan de producción
       // PENDIENTE por cada receta del pedido (reserva sus insumos). El flag
       // planesGenerados evita duplicarlos si se cambia el estado ida y vuelta.
+      // Con Planes retirados, "Comprado" solo cambia el estado del pedido.
       const generarPlanes =
-        estado === "comprado" && !!pedido && !pedido.planesGenerados;
+        planesActivos &&
+        estado === "comprado" &&
+        !!pedido &&
+        !pedido.planesGenerados;
 
       let creados = 0;
       const sinReceta: string[] = [];
@@ -384,6 +400,13 @@ export function PedidoSugeridoClient() {
           <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute mb-3">
             Pedidos guardados
           </h2>
+          {!planesActivos && (
+            <p className="-mt-1 mb-3 text-xs text-cacao-soft italic font-serif">
+              Marcar un pedido como “Comprado” solo cambia su estado: no
+              registra una compra ni aumenta el stock, y no crea planes ni
+              reservas. Para que entre al inventario, regístralo en Compras.
+            </p>
+          )}
           <ul className="divide-y divide-marfil">
             {pedidosGuardados.map((pg) => {
               const est = ESTADOS_PEDIDO_COCINA.find(
@@ -438,7 +461,7 @@ export function PedidoSugeridoClient() {
                         )}
                         {pg.recetas.length} receta
                         {pg.recetas.length === 1 ? "" : "s"}
-                        {pg.planesGenerados && (
+                        {planesActivos && pg.planesGenerados && (
                           <span className="text-sky-700"> · planes creados</span>
                         )}
                       </span>
@@ -455,13 +478,15 @@ export function PedidoSugeridoClient() {
                         type="button"
                         onClick={() => setEstadoPedido(pg.id, "comprado")}
                         title={
-                          pg.planesGenerados
-                            ? "Marcar como comprado"
-                            : "Marcar como comprado y crear sus planes de producción (pendientes, reservan insumos)"
+                          !planesActivos
+                            ? "Solo cambia el estado del pedido: no registra la compra, no aumenta el stock ni crea planes o reservas"
+                            : pg.planesGenerados
+                              ? "Marcar como comprado"
+                              : "Marcar como comprado y crear sus planes de producción (pendientes, reservan insumos)"
                         }
                         className="text-[10px] uppercase tracking-widest px-3 py-1 rounded-full ring-1 ring-marfil text-cacao-soft hover:bg-marfil-soft"
                       >
-                        ✓ Comprado{!pg.planesGenerados ? " + plan" : ""}
+                        ✓ Comprado{planesActivos && !pg.planesGenerados ? " + plan" : ""}
                       </button>
                     )}
                     {pg.estado === "comprado" && (
@@ -577,7 +602,7 @@ export function PedidoSugeridoClient() {
             raciones). Calculado descontando solo la reserva de este plan: es
             exactamente lo que falta comprar para poder producirlo.
           </div>
-        ) : (
+        ) : planesActivos ? (
           <label className="flex items-start gap-2 text-xs text-cacao-soft cursor-pointer">
             <input
               type="checkbox"
@@ -591,7 +616,7 @@ export function PedidoSugeridoClient() {
               libre.
             </span>
           </label>
-        )}
+        ) : null}
 
         {objetivos.length === 0 ? (
           <p className="text-sm text-cacao-soft italic font-serif">

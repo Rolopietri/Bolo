@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
+import { funcionActiva } from "@/lib/modulos.mjs";
 import { PedidoSugeridoClient } from "./PedidoSugeridoClient";
 
 export default function PedidoSugeridoPage() {
@@ -28,7 +29,9 @@ export default function PedidoSugeridoPage() {
             ← Volver
           </Link>
         </section>
-        <PedidoSugeridoClient />
+        <PedidoSugeridoClient
+          planesActivos={funcionActiva("planes", process.env.BOLO_MODULOS)}
+        />
       </main>
     </>
   );

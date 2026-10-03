@@ -58,3 +58,34 @@ export function modulosActivos(valor) {
 export function moduloActivo(id, valor) {
   return modulosActivos(valor).includes(id);
 }
+
+// ── Funciones opcionales dentro de un módulo ────────────────────────
+// No son tarjetas del inicio: son partes de un módulo que Bolo retira por
+// defecto. Se reactivan agregando su id a la misma variable BOLO_MODULOS
+// (p. ej. "cocina,administracion,planes"). Sus tablas y funciones de la base
+// siguen intactas.
+
+/** @typedef {"planes"} FuncionId */
+
+/**
+ * @type {readonly { id: FuncionId, titulo: string }[]}
+ */
+export const FUNCIONES = [
+  // Planes de producción (Cocina · M5): reservan stock para producciones
+  // planificadas. Retirados de Bolo el 2026-10-03.
+  { id: "planes", titulo: "Planes de producción" },
+];
+
+/**
+ * ¿Está activa una función opcional? Apagada salvo que su id esté en BOLO_MODULOS.
+ * @param {FuncionId} id
+ * @param {string | undefined | null} valor  valor de BOLO_MODULOS
+ * @returns {boolean}
+ */
+export function funcionActiva(id, valor) {
+  if (!FUNCIONES.some((f) => f.id === id)) return false;
+  return (valor ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .includes(id);
+}

@@ -1,8 +1,12 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { funcionActiva } from "@/lib/modulos.mjs";
 import { PlanesClient } from "./PlanesClient";
 
 export default function PlanesProduccionPage() {
+  // Retirado en Bolo: solo existe si BOLO_MODULOS incluye "planes".
+  if (!funcionActiva("planes", process.env.BOLO_MODULOS)) notFound();
   return (
     <>
       <Header subtitle="Inventario · Planes" />

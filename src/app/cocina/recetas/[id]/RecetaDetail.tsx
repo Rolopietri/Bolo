@@ -18,7 +18,13 @@ import { ordenarPorCantidadDesc } from "@/lib/units";
 import { RecetaForm } from "../RecetaForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
-export function RecetaDetail({ id }: { id: string }) {
+export function RecetaDetail({
+  id,
+  planesActivos = false,
+}: {
+  id: string;
+  planesActivos?: boolean;
+}) {
   const router = useRouter();
   const [receta, setReceta] = useState<Receta | null>(null);
   const [allRecetas, setAllRecetas] = useState<Receta[]>([]);
@@ -136,6 +142,7 @@ export function RecetaDetail({ id }: { id: string }) {
         </h1>
         <RecetaForm
           existing={receta}
+          planesActivos={planesActivos}
           onSaved={(updated) => {
             setReceta(updated);
             setEditing(false);

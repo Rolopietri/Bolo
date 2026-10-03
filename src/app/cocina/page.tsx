@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
+import { funcionActiva } from "@/lib/modulos.mjs";
 import { BcvRateBanner } from "./BcvRateBanner";
 
 const modulos: {
@@ -35,8 +36,8 @@ const modulos: {
   },
   {
     href: "/cocina/inventario",
-    label: "Producción, Compras y Ventas",
-    desc: "Planes de producción, compras, ventas Xetux y pedido sugerido.",
+    label: "Compras, Ventas y Pedidos",
+    desc: "Registra compras y ventas y consulta el pedido sugerido.",
     index: "M5",
   },
   {
@@ -47,7 +48,17 @@ const modulos: {
   },
 ];
 
+// Con Planes de producción activos (BOLO_MODULOS incluye "planes"), M5 vuelve
+// a presentarse como centro de producción.
+const M5_CON_PLANES = {
+  label: "Producción, Compras y Ventas",
+  desc: "Planes de producción, compras, ventas y pedido sugerido.",
+};
+
 export default function CocinaHub() {
+  const modulosVisibles = funcionActiva("planes", process.env.BOLO_MODULOS)
+    ? modulos.map((m) => (m.index === "M5" ? { ...m, ...M5_CON_PLANES } : m))
+    : modulos;
   return (
     <>
       <Header subtitle="Cocina" />
@@ -119,7 +130,7 @@ export default function CocinaHub() {
         </Link>
 
         <section className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-px bg-marfil sm:border sm:border-marfil">
-          {modulos.map((m) =>
+          {modulosVisibles.map((m) =>
             m.disabled ? (
               <div
                 key={m.label}

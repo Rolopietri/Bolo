@@ -1,7 +1,7 @@
 // Prueba de la lista de módulos del menú inicial (entrega E1).
 // Se corre con `npm run test:modulos`. Falla (exit 1) si algún caso no cuadra.
 
-import { MODULOS, MODULOS_POR_DEFECTO, modulosActivos, moduloActivo } from "../src/lib/modulos.mjs";
+import { MODULOS, MODULOS_POR_DEFECTO, modulosActivos, moduloActivo, funcionActiva } from "../src/lib/modulos.mjs";
 
 let fallos = 0;
 function ok(nombre, real, esperado) {
@@ -54,6 +54,14 @@ ok(
 ok("WiFi apagado por defecto", moduloActivo("wifi", undefined), false);
 ok("WiFi se reactiva con BOLO_MODULOS", moduloActivo("wifi", "cocina,administracion,wifi"), true);
 ok("Cocina activa por defecto", moduloActivo("cocina", ""), true);
+
+console.log("Funciones opcionales");
+ok("Planes de producción apagados por defecto", funcionActiva("planes", undefined), false);
+ok("Planes apagados con el menú por defecto explícito", funcionActiva("planes", "cocina,administracion"), false);
+ok("Planes se reactivan con BOLO_MODULOS", funcionActiva("planes", "cocina, administracion, Planes"), true);
+ok("Planes no agrega tarjeta al inicio", modulosActivos("cocina,administracion,planes"), ["cocina", "administracion"]);
+ok("solo 'planes' no cambia el menú por defecto", modulosActivos("planes"), ["cocina", "administracion"]);
+ok("función desconocida → apagada", funcionActiva("agenda", "agenda"), false);
 
 if (fallos) {
   console.error(`\n${fallos} caso(s) fallaron.`);

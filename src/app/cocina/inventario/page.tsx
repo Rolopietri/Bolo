@@ -1,13 +1,15 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
+import { funcionActiva } from "@/lib/modulos.mjs";
 import { SubHubGrid, type SubModulo } from "../_SubHub";
 
+const PLANES: SubModulo = {
+  href: "/cocina/inventario/planes",
+  label: "Planes de producción",
+  desc: "Reservá stock por adelantado para producciones planificadas (eventos, batches).",
+};
+
 const SUBMODULOS: SubModulo[] = [
-  {
-    href: "/cocina/inventario/planes",
-    label: "Planes de producción",
-    desc: "Reservá stock por adelantado para producciones planificadas (eventos, batches).",
-  },
   {
     href: "/cocina/compras",
     label: "Compras",
@@ -16,7 +18,7 @@ const SUBMODULOS: SubModulo[] = [
   {
     href: "/cocina/ventas",
     label: "Ventas",
-    desc: "Importar Xetux o registrar manual — descuenta stock automáticamente.",
+    desc: "Regístralas a mano o impórtalas desde Xetux — descuenta stock automáticamente.",
   },
   {
     href: "/cocina/pedido",
@@ -26,6 +28,9 @@ const SUBMODULOS: SubModulo[] = [
 ];
 
 export default function InventarioHubPage() {
+  // Planes de producción: retirados en Bolo salvo que BOLO_MODULOS incluya "planes".
+  const planes = funcionActiva("planes", process.env.BOLO_MODULOS);
+  const modulos = planes ? [PLANES, ...SUBMODULOS] : SUBMODULOS;
   return (
     <>
       <Header subtitle="Cocina · M5" />
@@ -36,12 +41,12 @@ export default function InventarioHubPage() {
               Cocina · Módulo 5
             </p>
             <h1 className="mt-2 font-cinzel text-2xl sm:text-3xl tracking-[0.12em] uppercase text-cacao">
-              Producción, Compras y Ventas
+              {planes ? "Producción, Compras y Ventas" : "Compras, Ventas y Pedidos"}
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft max-w-2xl">
-              Centro de operaciones: planes de producción, registro de compras
-              y ventas del POS, y el pedido sugerido. Lo que mueve el
-              inventario que ves en M1.
+              {planes
+                ? "Centro de operaciones: planes de producción, registro de compras y ventas, y el pedido sugerido. Lo que mueve el inventario que ves en M1."
+                : "Registra compras y ventas y consulta el pedido sugerido. Lo que mueve el inventario que ves en M1."}
             </p>
           </div>
           <Link
@@ -51,7 +56,7 @@ export default function InventarioHubPage() {
             ← Cocina
           </Link>
         </section>
-        <SubHubGrid modulos={SUBMODULOS} />
+        <SubHubGrid modulos={modulos} />
       </main>
     </>
   );

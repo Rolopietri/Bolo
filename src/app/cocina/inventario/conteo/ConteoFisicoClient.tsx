@@ -278,7 +278,9 @@ export function ConteoFisicoClient() {
       <p className="text-[11px] text-cacao-mute px-1">
         Escribí lo que tenés físicamente (en la unidad indicada). Deja en blanco lo
         que no cuentes — solo se ajustan los que escribas y difieran del actual.
-        El comprometido (reservado por planes) no se toca.
+        {/* Solo hay stock reservado cuando se usan Planes de producción. */}
+        {items.some((i) => i.stockComprometido > 0) &&
+          " El comprometido (reservado por planes) no se toca."}
       </p>
 
       {grupos.length === 0 ? (

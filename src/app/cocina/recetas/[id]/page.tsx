@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import { funcionActiva } from "@/lib/modulos.mjs";
 import { RecetaDetail } from "./RecetaDetail";
 
 export default async function RecetaDetailPage({
@@ -11,7 +12,10 @@ export default async function RecetaDetailPage({
     <>
       <Header subtitle="Receta" />
       <main className="flex-1 mx-auto w-full max-w-4xl px-5 py-10">
-        <RecetaDetail id={id} />
+        <RecetaDetail
+          id={id}
+          planesActivos={funcionActiva("planes", process.env.BOLO_MODULOS)}
+        />
       </main>
     </>
   );

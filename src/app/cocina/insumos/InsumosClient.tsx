@@ -904,8 +904,10 @@ export function InsumosClient() {
                   </>
                 ) : (
                   <>
-                    Lo que hay físicamente. El stock libre (= total −
-                    comprometido) aparece en el listado.
+                    Lo que hay físicamente.
+                    {/* Solo hay stock reservado cuando se usan Planes de producción. */}
+                    {items.some((i) => i.stockComprometido > 0) &&
+                      " El stock libre (= total − comprometido) aparece en el listado."}
                   </>
                 )}
               </span>

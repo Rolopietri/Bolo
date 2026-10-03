@@ -1,4 +1,5 @@
 import { Header } from "@/components/Header";
+import { funcionActiva } from "@/lib/modulos.mjs";
 import { RecetaForm } from "../RecetaForm";
 
 export default function NuevaRecetaPage() {
@@ -18,7 +19,9 @@ export default function NuevaRecetaPage() {
             costo se calcula automáticamente.
           </p>
         </section>
-        <RecetaForm />
+        <RecetaForm
+          planesActivos={funcionActiva("planes", process.env.BOLO_MODULOS)}
+        />
       </main>
     </>
   );
