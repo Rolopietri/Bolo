@@ -16,8 +16,8 @@ import { ClaveWifi } from "./ClaveWifi";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "WiFi · La Quinta Mamá",
-  description: "Conéctate al WiFi de La Quinta Mamá.",
+  title: "WiFi · bolo",
+  description: "Conéctate al WiFi del local.",
 };
 
 export default async function WifiPage({

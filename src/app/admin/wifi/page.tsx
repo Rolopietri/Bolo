@@ -4,7 +4,7 @@ import { Header } from "@/components/Header";
 import { moduloActivo } from "@/lib/modulos.mjs";
 import { WifiAdminClient } from "./WifiAdminClient";
 
-export const metadata = { title: "WiFi de invitados · La Quinta Mamá" };
+export const metadata = { title: "WiFi de invitados · bolo" };
 
 /** La dirección pública de la app, para armar el enlace del QR. */
 async function baseUrl(): Promise<string> {
