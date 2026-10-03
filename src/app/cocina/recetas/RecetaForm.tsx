@@ -166,7 +166,7 @@ export function RecetaForm({
           setCategoriasUser(cats);
         }
       } catch (e) {
-        if (!cancelled) setErrorCarga(e instanceof Error ? e.message : "Error");
+        if (!cancelled) setErrorCarga(extractError(e, "Error"));
       } finally {
         if (!cancelled) setLoadingIns(false);
       }

@@ -6,6 +6,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { listAjustesConteo, type AjusteConteo } from "@/lib/data/stock-movimientos";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 function fNum(n: number): string {
@@ -36,7 +37,7 @@ export function MermaClient() {
         const d = await listAjustesConteo();
         if (!cancel) setItems(d);
       } catch (e) {
-        if (!cancel) setErrorCarga(e instanceof Error ? e.message : "Error cargando la merma");
+        if (!cancel) setErrorCarga(extractError(e, "Error cargando la merma"));
       } finally {
         if (!cancel) setLoading(false);
       }

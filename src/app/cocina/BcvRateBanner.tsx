@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getTasaBcvActual } from "@/lib/data/cocina";
+import { extractError } from "@/lib/data/error";
 import type { TasaBcv } from "@/lib/types";
 
 /** Estado de la consulta de la tasa: así "cargando", "no hay tasa" y "falló la
@@ -24,7 +25,7 @@ export function BcvRateBanner() {
       setEstado("listo");
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Error cargando tasa");
+      setError(extractError(e, "Error cargando tasa"));
       setEstado("error");
       return false;
     }

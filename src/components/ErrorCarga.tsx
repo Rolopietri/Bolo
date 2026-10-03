@@ -29,8 +29,8 @@ export function ErrorCarga({
         <div className="min-w-0">
           <p className="font-medium">
             {desactualizado
-              ? `No se pudo actualizar ${que}. Lo que ves es de la última carga y puede no estar al día.`
-              : `No se pudo cargar ${que}. Revisa tu conexión e inténtalo de nuevo.`}
+              ? `No se pudo completar la actualización de ${que}. Lo que ves es de la última carga y puede no estar al día.`
+              : `No se pudo completar la carga de ${que}. Revisa tu conexión e inténtalo de nuevo.`}
           </p>
           {detalle ? (
             <p className="mt-1 text-xs opacity-80 break-words">{detalle}</p>

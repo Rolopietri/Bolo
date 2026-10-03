@@ -111,10 +111,13 @@ export function AuditoriaClient() {
       } catch (e) {
         if (!vivo) return;
         const msg = extractError(e);
-        // La tabla aún no existe → falta correr el SQL de activación.
+        const code = (e as { code?: string })?.code ?? "";
+        // Solo "tabla inexistente" significa que la auditoría falta activarse;
+        // cualquier otro fallo (conexión, permisos…) se muestra como error.
         if (
-          /stock_auditoria/i.test(msg) ||
-          /does not exist|no existe|42p01|schema cache/i.test(msg)
+          code === "42P01" ||
+          code === "PGRST205" ||
+          /does not exist|schema cache/i.test(msg)
         ) {
           setSinActivar(true);
         } else {

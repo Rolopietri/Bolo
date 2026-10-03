@@ -12,6 +12,7 @@ import { listInsumos } from "@/lib/data/cocina";
 import { ajustarStockConteo } from "@/lib/data/stock-movimientos";
 import { ultimaVentaFecha } from "@/lib/data/ventas";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 // Formatea una fecha ISO (YYYY-MM-DD) a dd/mm/yyyy.
@@ -59,7 +60,7 @@ export function ConteoFisicoClient() {
         const [ins, uv] = await Promise.all([listInsumos(), ultimaVentaFecha()]);
         if (!cancel) { setItems(ins.filter((i) => i.activo)); setUltimaVenta(uv); }
       } catch (e) {
-        if (!cancel) setErrorCarga(e instanceof Error ? e.message : "Error cargando insumos");
+        if (!cancel) setErrorCarga(extractError(e, "Error cargando insumos"));
       } finally {
         if (!cancel) setLoading(false);
       }

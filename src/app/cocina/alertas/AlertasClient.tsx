@@ -6,6 +6,7 @@ import type { Insumo, Proveedor } from "@/lib/types";
 import { stockLibre } from "@/lib/types";
 import { displayCantidad } from "@/lib/units";
 import { listInsumos, listProveedores } from "@/lib/data/cocina";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 export function AlertasClient() {
@@ -30,7 +31,7 @@ export function AlertasClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }

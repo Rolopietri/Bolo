@@ -14,6 +14,7 @@ import { listInsumos } from "@/lib/data/cocina";
 import { listCategoriasProducto, type CategoriaProducto } from "@/lib/data/categorias";
 import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { normalizarBusqueda } from "@/lib/text";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 const SIN_CATEGORIA = "__sin_categoria__";
@@ -64,7 +65,7 @@ export function RecetasList() {
         }
       } catch (e) {
         if (!cancelled)
-          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }

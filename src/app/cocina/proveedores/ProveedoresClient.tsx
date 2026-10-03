@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/cocina";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 type FormState = {
@@ -68,7 +69,7 @@ export function ProveedoresClient() {
         if (!cancelled) setItems(data);
       } catch (e) {
         if (!cancelled)
-          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }

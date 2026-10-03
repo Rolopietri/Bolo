@@ -31,6 +31,7 @@ import { normalizarBusqueda } from "@/lib/text";
 import { CalendarIcon, ChevronIcon, WarningIcon } from "@/components/icons";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 /** Xetux nombra el archivo con la fecha en que se generó el reporte, ej.
@@ -173,7 +174,7 @@ export function VentasClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }

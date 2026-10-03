@@ -39,6 +39,7 @@ import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { listMovimientos, deleteMovimiento } from "@/lib/data/stock-movimientos";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 /**
@@ -172,7 +173,7 @@ export function InsumosClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }

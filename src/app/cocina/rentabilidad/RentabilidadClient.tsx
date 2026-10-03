@@ -17,6 +17,7 @@ import { listRecetas, calcularCostoReceta } from "@/lib/data/recetas";
 import { listInsumos } from "@/lib/data/cocina";
 import { getCocinaConfig, updateCocinaConfig } from "@/lib/data/cocinaConfig";
 import { normalizarBusqueda } from "@/lib/text";
+import { extractError } from "@/lib/data/error";
 import {
   listConfigHistorial,
   CAMPO_LABELS,
@@ -82,7 +83,7 @@ export function RentabilidadClient() {
         }
       } catch (e) {
         if (!cancelled)
-          setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+          setErrorCarga(extractError(e, "Error cargando"));
       } finally {
         if (!cancelled) setLoading(false);
       }

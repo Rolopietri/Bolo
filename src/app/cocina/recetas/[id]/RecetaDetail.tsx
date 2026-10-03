@@ -17,6 +17,7 @@ import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { ordenarPorCantidadDesc } from "@/lib/units";
 import { RecetaForm } from "../RecetaForm";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 export function RecetaDetail({
@@ -63,7 +64,7 @@ export function RecetaDetail({
         if (!cancelled) {
           // PGRST116 = la consulta no devolvió la receta (no existe o se borró).
           if ((e as { code?: string })?.code === "PGRST116") setNoEncontrada(true);
-          else setErrorCarga(e instanceof Error ? e.message : "Error cargando");
+          else setErrorCarga(extractError(e, "Error cargando"));
         }
       } finally {
         if (!cancelled) setLoading(false);
