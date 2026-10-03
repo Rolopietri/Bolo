@@ -45,7 +45,7 @@ Se copian de `.env.local.example`. En **local** van en `.env.local`; en
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | local + Vercel | Anon key de Supabase (pública, protegida por RLS). |
 | `ALLOWED_EMAILS` | local + Vercel | Lista separada por comas de correos con permiso de login. |
 | `SUPABASE_SERVICE_ROLE_KEY` | **solo Vercel** | Llave de servicio. La usan el cron de la tasa BCV y el portal de WiFi de invitados para escribir/leer con permisos de servidor. **Es secreta: nunca va en el repo ni en un `.env.local` compartido — solo en Vercel.** |
-| `BOLO_MODULOS` | opcional | Módulos del menú inicial, separados por coma. Por defecto `cocina,administracion`. Los que no estén salen del menú, pero sus rutas y datos siguen activos (ver `src/lib/modulos.mjs`). Excepción: sin `wifi`, el portal de WiFi (`/wifi`, `/admin/wifi`, `/api/wifi/registro`) responde "no encontrado". |
+| `BOLO_MODULOS` | opcional | Módulos del menú inicial, separados por coma. Por defecto `cocina,administracion`. Los que no estén salen del menú, pero sus rutas y datos siguen activos (ver `src/lib/modulos.mjs`). Excepción: sin `wifi`, el portal de WiFi (`/wifi`, `/admin/wifi`, `/api/wifi/registro`) responde "no encontrado". También acepta `planes` (Planes de producción, apagados por defecto): sin él, `/cocina/inventario/planes` responde "no encontrado" y Pedido sugerido no crea planes. |
 | `WIFI_SSID` / `WIFI_CLAVE` / `WIFI_MENSAJE` | opcional | Respaldo de la red de invitados si no se usa la tabla `wifi_config` (ver *WiFi de invitados*). |
 
 Los valores de Supabase están en: Supabase → Settings → API.
