@@ -3,11 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   frescuraPrecio,
-  SECCIONES,
   TIPOS_PERDIDA,
   type Insumo,
   type NivelFrescuraPrecio,
-  type Seccion,
   type Proveedor,
   type StockMovimiento,
 } from "@/lib/types";
@@ -78,7 +76,6 @@ function detectarInsumoConProblema(
 type FormState = {
   nombre: string;
   categoria: string;
-  seccion: Seccion;
   unidadCompra: string;
   cantidadPorCompra: string;
   unidadBase: string;
@@ -94,7 +91,6 @@ type FormState = {
 const emptyForm: FormState = {
   nombre: "",
   categoria: "",
-  seccion: "ambos",
   unidadCompra: "",
   cantidadPorCompra: "1",
   unidadBase: "",
@@ -116,7 +112,6 @@ export function InsumosClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterCat, setFilterCat] = useState<string>("todas");
-  const [filterSec, setFilterSec] = useState<Seccion | "todas">("todas");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -232,7 +227,6 @@ export function InsumosClient() {
       nombre: ins.nombre,
       // El form gestiona la categoría de INSUMO (tipo), no la de ventas.
       categoria: ins.categoriaCompra ?? "",
-      seccion: ins.seccion,
       unidadCompra: ins.unidadCompra,
       cantidadPorCompra: String(ins.cantidadPorCompra),
       unidadBase: ins.unidadBase,
@@ -291,7 +285,6 @@ export function InsumosClient() {
       // form ya no lo maneja, para no volver a mezclar las taxonomías.
       categoria: original?.categoria ?? "",
       categoriaCompra: form.categoria.trim() || undefined,
-      seccion: form.seccion,
       unidadCompra: form.unidadCompra.trim() || "unidad",
       cantidadPorCompra: cantPC,
       unidadBase: form.unidadBase.trim() || "unidad",
@@ -393,12 +386,9 @@ export function InsumosClient() {
           (filterCat === "__sin__"
             ? !i.categoriaCompra?.trim()
             : i.categoriaCompra === filterCat)) &&
-        (filterSec === "todas" ||
-          i.seccion === filterSec ||
-          i.seccion === "ambos") &&
         (q === "" || normalizarBusqueda(i.nombre).includes(q)),
     );
-  }, [items, filterCat, filterSec, search, showInactivos]);
+  }, [items, filterCat, search, showInactivos]);
 
   const inactivosCount = useMemo(
     () => items.filter((i) => !i.activo).length,
@@ -496,32 +486,6 @@ export function InsumosClient() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap gap-2 mb-3">
-        <button
-          onClick={() => setFilterSec("todas")}
-          className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-            filterSec === "todas"
-              ? "bg-cacao text-white ring-cacao"
-              : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
-          }`}
-        >
-          Todas las secciones
-        </button>
-        {SECCIONES.map((s) => (
-          <button
-            key={s.value}
-            onClick={() => setFilterSec(s.value)}
-            className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-              filterSec === s.value
-                ? "bg-cacao text-white ring-cacao"
-                : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
-            }`}
-          >
-            {s.label}
-          </button>
-        ))}
-      </div>
-
       <div className="flex flex-wrap gap-2 mb-5">
         <button
           onClick={() => setFilterCat("todas")}
@@ -604,7 +568,7 @@ export function InsumosClient() {
             required
             className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
           />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <label className="text-sm text-cacao">
               Categoría
               <select
@@ -643,22 +607,6 @@ export function InsumosClient() {
                   className="mt-2 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
                 />
               )}
-            </label>
-            <label className="text-sm text-cacao">
-              Sección
-              <select
-                value={form.seccion}
-                onChange={(e) =>
-                  setForm({ ...form, seccion: e.target.value as Seccion })
-                }
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
-              >
-                {SECCIONES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
             </label>
             <label className="text-sm text-cacao">
               Proveedor
@@ -1052,8 +1000,6 @@ export function InsumosClient() {
                         <div className="text-xs text-cacao-mute mt-0.5">
                           {i.unidadCompra} · {i.cantidadPorCompra}{" "}
                           {i.unidadBase}
-                          {" · "}
-                          <span className="capitalize">{i.seccion}</span>
                         </div>
                       </div>
                       <div className="col-span-4 sm:col-span-3">

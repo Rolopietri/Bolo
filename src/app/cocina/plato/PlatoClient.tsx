@@ -138,10 +138,14 @@ export function PlatoClient() {
     return m;
   }, [insumos]);
 
-  // Categorías presentes en el catálogo (para los chips del buscador).
+  // Categorías presentes en el catálogo (para los chips del buscador): la
+  // misma categoría que se edita en Insumos.
   const categorias = useMemo(() => {
     const s = new Set<string>();
-    for (const i of insumos) if (i.categoria) s.add(i.categoria);
+    for (const i of insumos) {
+      const c = i.categoriaCompra?.trim();
+      if (c) s.add(c);
+    }
     return Array.from(s).sort((a, b) => a.localeCompare(b, "es"));
   }, [insumos]);
 
@@ -150,7 +154,7 @@ export function PlatoClient() {
     () =>
       insumos.filter(
         (i) =>
-          (catFiltro === "" || i.categoria === catFiltro) &&
+          (catFiltro === "" || i.categoriaCompra?.trim() === catFiltro) &&
           (query.trim() === "" || norm(i.nombre).includes(norm(query))),
       ),
     [insumos, catFiltro, query],
@@ -161,7 +165,6 @@ export function PlatoClient() {
     () => ({
       id: "nuevo",
       nombre: nombre || "Plato sin nombre",
-      seccion: "ambos",
       porciones: Math.max(1, Number(porciones) || 1),
       esSubreceta: false,
       activo: true,
@@ -275,7 +278,6 @@ export function PlatoClient() {
     try {
       const created = await createReceta({
         nombre: nombre.trim(),
-        seccion: "ambos",
         porciones: Math.max(1, Number(porciones) || 1),
         precioSugeridoUsd: precioVenta === "" ? undefined : Number(precioVenta),
         esSubreceta: false,
@@ -661,10 +663,14 @@ export function PlatoClient() {
                   >
                     <span className="font-bold text-cacao">{i.nombre}</span>
                     <span className="text-xs text-cacao-mute whitespace-nowrap">
-                      {i.categoria}
-                      {i.precioBaseUsd != null
-                        ? ` · $${i.precioBaseUsd}/${i.unidadBase}`
-                        : ""}
+                      {[
+                        i.categoriaCompra?.trim(),
+                        i.precioBaseUsd != null
+                          ? `$${i.precioBaseUsd}/${i.unidadBase}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </span>
                   </button>
                 ))}

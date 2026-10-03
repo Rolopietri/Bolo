@@ -1109,7 +1109,7 @@ function ClasificarInsumos({
       {/* Gestionar la lista de categorías */}
       <div className="lg:col-span-1 rounded-xl ring-1 ring-marfil p-3">
         <div className="text-[11px] uppercase tracking-widest text-cacao-soft mb-2">Categorías ({categorias.length})</div>
-        {categorias.length === 0 && <p className="text-[12px] text-cacao-soft italic">Aún no hay categorías. Crea la primera abajo (o corre el SQL de semilla).</p>}
+        {categorias.length === 0 && <p className="text-[12px] text-cacao-soft italic">Aún no hay categorías. Crea la primera abajo.</p>}
         <ul className="space-y-1 max-h-72 overflow-y-auto">
           {categorias.map((c) => (
             <li key={c.id} className="flex items-center gap-2 text-sm">

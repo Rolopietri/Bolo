@@ -943,7 +943,7 @@ export function AnalisisVentas() {
               </button>
               {gestionCat && (
                 <div className="mt-2 space-y-2">
-                  {categorias.length === 0 && <p className="text-[12px] text-cacao-soft italic">Aún no hay categorías. Crea la primera abajo (o corre el SQL de semilla).</p>}
+                  {categorias.length === 0 && <p className="text-[12px] text-cacao-soft italic">Aún no hay categorías. Crea la primera abajo.</p>}
                   <ul className="divide-y divide-marfil rounded-lg ring-1 ring-marfil bg-white">
                     {categorias.map((c) => (
                       <li key={c.id} className="px-2.5 py-1.5 flex items-center gap-2">

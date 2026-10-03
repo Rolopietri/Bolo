@@ -177,8 +177,10 @@ export function RecetaDetail({
           <div className="min-w-0">
             <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">
               {receta.esSubreceta
-                ? `sub-receta · ${receta.seccion}`
-                : `${receta.categoria ? categoriaRecetaLabel(receta.categoria) : "receta"} · ${receta.seccion}`}
+                ? "Sub-receta"
+                : receta.categoria
+                  ? categoriaRecetaLabel(receta.categoria)
+                  : "Receta"}
             </p>
             <h1 className="mt-2 font-cinzel text-3xl sm:text-4xl text-cacao tracking-[0.06em]">
               {receta.nombre}

@@ -4,13 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
-  CATEGORIAS_RECETA,
-  SECCIONES,
   precioConIva,
   categoriaRecetaLabel,
   type Receta,
   type Insumo,
-  type Seccion,
 } from "@/lib/types";
 import { listRecetas, calcularCostoReceta } from "@/lib/data/recetas";
 import { listInsumos } from "@/lib/data/cocina";
@@ -18,6 +15,8 @@ import { listCategoriasProducto, type CategoriaProducto } from "@/lib/data/categ
 import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { normalizarBusqueda } from "@/lib/text";
 import { ErrorBanner } from "@/components/ErrorBanner";
+
+const SIN_CATEGORIA = "__sin_categoria__";
 
 export function RecetasList() {
   const searchParams = useSearchParams();
@@ -37,10 +36,9 @@ export function RecetasList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [filterSec, setFilterSec] = useState<Seccion | "todas">("todas");
   /** El filtro puede ser: "todas", "subreceta" (categoría virtual: recetas con
-   *  esSubreceta=true), un slug de CATEGORIAS_RECETA, o una categoría nueva
-   *  (texto libre). Por eso el tipo es string. */
+   *  esSubreceta=true), SIN_CATEGORIA (recetas sin categoría) o el nombre de
+   *  una categoría del negocio. Por eso el tipo es string. */
   const [filterCat, setFilterCat] = useState<string>("todas");
   const [showInactivas, setShowInactivas] = useState(false);
 
@@ -103,14 +101,10 @@ export function RecetasList() {
     const qq = normalizarBusqueda(q.trim());
     return items.filter((r) => {
       if (!showInactivas && !r.activo) return false;
-      if (
-        filterSec !== "todas" &&
-        r.seccion !== filterSec &&
-        r.seccion !== "ambos"
-      )
-        return false;
       if (filterCat === "subreceta") {
         if (!r.esSubreceta) return false;
+      } else if (filterCat === SIN_CATEGORIA) {
+        if (r.esSubreceta || r.categoria) return false;
       } else if (filterCat !== "todas") {
         // Para categorías normales, excluir subrecetas (tienen su propia "categoría")
         if (r.esSubreceta) return false;
@@ -124,7 +118,7 @@ export function RecetasList() {
       }
       return true;
     });
-  }, [items, q, filterSec, filterCat, showInactivas]);
+  }, [items, q, filterCat, showInactivas]);
 
   const inactivasCount = useMemo(
     () => items.filter((r) => !r.activo).length,
@@ -133,15 +127,11 @@ export function RecetasList() {
 
   // Categorías para los pills de filtro: las categorías de RECETA (aplica_receta)
   // + cualquier categoría que alguna receta use pero no esté marcada (para no
-  // esconder recetas). Ya NO se pinta toda la lista fija del código (adiós chips
-  // vacíos como "Café espresso"). Si la tabla está vacía/sin migrar, se cae a la
-  // lista fija para no dejar el filtro en blanco.
+  // esconder recetas). Sin lista fija de ejemplo: un negocio nuevo solo ve las
+  // categorías que crea.
   const categoriasFiltro = useMemo(() => {
     const recetaCats = categoriasUser.filter((c) => c.aplicaReceta !== false);
-    const conocidas =
-      categoriasUser.length > 0
-        ? recetaCats.map((c) => c.nombre)
-        : CATEGORIAS_RECETA.map((c) => c.value as string);
+    const conocidas = recetaCats.map((c) => c.nombre);
     const conocidasNorm = new Set(conocidas.map((c) => c.trim().toLowerCase()));
     const set = new Set<string>();
     items.forEach((r) => {
@@ -157,6 +147,11 @@ export function RecetasList() {
     );
     return [...conocidas, ...nuevas];
   }, [items, categoriasUser]);
+
+  const haySinCategoria = useMemo(
+    () => items.some((r) => !r.esSubreceta && !r.categoria),
+    [items],
+  );
 
   if (loading) {
     return (
@@ -183,31 +178,6 @@ export function RecetasList() {
         />
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => setFilterSec("todas")}
-            className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-              filterSec === "todas"
-                ? "bg-cacao text-white ring-cacao"
-                : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
-            }`}
-          >
-            Todas las secciones
-          </button>
-          {SECCIONES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setFilterSec(s.value)}
-              className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-                filterSec === s.value
-                  ? "bg-cacao text-white ring-cacao"
-                  : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
-              }`}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
             onClick={() => setFilterCat("todas")}
             className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
               filterCat === "todas"
@@ -230,6 +200,18 @@ export function RecetasList() {
               {categoriaRecetaLabel(c)}
             </button>
           ))}
+          {haySinCategoria && (
+            <button
+              onClick={() => setFilterCat(SIN_CATEGORIA)}
+              className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
+                filterCat === SIN_CATEGORIA
+                  ? "bg-cacao text-white ring-cacao"
+                  : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
+              }`}
+            >
+              Sin categoría
+            </button>
+          )}
           <button
             onClick={() => setFilterCat("subreceta")}
             className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
@@ -300,7 +282,9 @@ export function RecetasList() {
                   <div className="font-display text-[10px] tracking-[0.3em] uppercase text-cacao-mute">
                     {r.esSubreceta
                       ? "Sub-receta"
-                      : `${r.categoria ? categoriaRecetaLabel(r.categoria) : "receta"} · ${r.seccion}`}
+                      : r.categoria
+                        ? categoriaRecetaLabel(r.categoria)
+                        : "Receta"}
                   </div>
                   <div className="text-xs text-cacao-soft">
                     {r.esSubreceta && r.rendimiento

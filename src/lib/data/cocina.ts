@@ -8,7 +8,6 @@ import type {
   Insumo,
   Compra,
   TasaBcv,
-  Seccion,
   ModalidadPago,
 } from "@/lib/types";
 
@@ -132,7 +131,6 @@ type InsumoRow = {
   nombre: string;
   categoria: string;
   categoria_compra: string | null;
-  seccion: string;
   unidad_compra: string;
   cantidad_por_compra: number | string;
   unidad_base: string;
@@ -162,7 +160,6 @@ function rowToInsumo(r: InsumoRow): Insumo {
     nombre: r.nombre,
     categoria: r.categoria,
     categoriaCompra: r.categoria_compra ?? undefined,
-    seccion: r.seccion as Seccion,
     unidadCompra: r.unidad_compra,
     cantidadPorCompra: Number(r.cantidad_por_compra),
     unidadBase: r.unidad_base,
@@ -241,7 +238,6 @@ export async function createInsumo(input: InsumoInput): Promise<Insumo> {
       nombre: normalizarNombreCatalogo(input.nombre),
       categoria: input.categoria,
       categoria_compra: input.categoriaCompra ?? null,
-      seccion: input.seccion,
       unidad_compra: input.unidadCompra,
       cantidad_por_compra: input.cantidadPorCompra,
       unidad_base: input.unidadBase,
@@ -272,7 +268,6 @@ export async function updateInsumo(
   if (patch.categoria !== undefined) db.categoria = patch.categoria;
   if (patch.categoriaCompra !== undefined)
     db.categoria_compra = patch.categoriaCompra ?? null;
-  if (patch.seccion !== undefined) db.seccion = patch.seccion;
   if (patch.unidadCompra !== undefined) db.unidad_compra = patch.unidadCompra;
   if (patch.cantidadPorCompra !== undefined)
     db.cantidad_por_compra = patch.cantidadPorCompra;

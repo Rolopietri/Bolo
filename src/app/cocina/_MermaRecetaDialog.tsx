@@ -167,7 +167,7 @@ export function MermaRecetaDialog({
             {recetasOpciones.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.nombre}
-                {r.esSubreceta ? " · subreceta" : ` (${r.seccion})`}
+                {r.esSubreceta ? " · subreceta" : ""}
               </option>
             ))}
           </select>

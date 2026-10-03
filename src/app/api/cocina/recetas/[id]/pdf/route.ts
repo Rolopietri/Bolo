@@ -4,11 +4,7 @@ import path from "node:path";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { RecetaPDF } from "@/lib/pdf/RecetaPDF";
-import type {
-  Receta,
-  RecetaIngrediente,
-  Seccion,
-} from "@/lib/types";
+import type { Receta, RecetaIngrediente } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +12,6 @@ export const dynamic = "force-dynamic";
 type RecetaRow = {
   id: string;
   nombre: string;
-  seccion: string;
   categoria: string | null;
   perfil: string | null;
   porciones: number;
@@ -93,7 +88,6 @@ export async function GET(
     const receta: Receta = {
       id: rr.id,
       nombre: rr.nombre,
-      seccion: rr.seccion as Seccion,
       categoria: rr.categoria ?? undefined,
       perfil: rr.perfil ?? undefined,
       porciones: rr.porciones,
@@ -146,7 +140,21 @@ export async function GET(
       }
     }
 
-    const buffer = await renderToBuffer(RecetaPDF({ receta, logoSrc, fotoSrc }));
+    // Nombre del negocio (configuración de Bolo) para la cabecera del PDF.
+    let negocio = "bolo";
+    try {
+      const { data: cfg } = await sb
+        .from("negocio_config")
+        .select("nombre")
+        .maybeSingle();
+      if (cfg?.nombre?.trim()) negocio = cfg.nombre.trim();
+    } catch {
+      /* sin configuración: queda "bolo" */
+    }
+
+    const buffer = await renderToBuffer(
+      RecetaPDF({ receta, logoSrc, fotoSrc, negocio }),
+    );
     const filename = `receta-${receta.nombre.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`;
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,

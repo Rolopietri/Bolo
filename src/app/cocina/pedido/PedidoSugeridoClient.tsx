@@ -639,7 +639,7 @@ export function PedidoSugeridoClient({
                   <option value="">— Selecciona receta —</option>
                   {recetas.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.nombre} ({r.seccion})
+                      {r.nombre}
                     </option>
                   ))}
                 </select>

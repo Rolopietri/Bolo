@@ -393,8 +393,6 @@ export function unidadLabel(u: UnidadServicio): string {
 // COCINA — M1 Materias Primas
 // ────────────────────────────────────────────────────────────────
 
-export type Seccion = "cafetin" | "comedor" | "ambos";
-
 export type CategoriaInsumo =
   | "cafe"
   | "lacteos"
@@ -433,7 +431,6 @@ export type Insumo = {
    *  Análisis de Compras. Se asigna desde "Clasificar insumos". */
   categoriaCompra?: string;
   nombre: string;
-  seccion: Seccion;
   unidadCompra: string;
   cantidadPorCompra: number;
   unidadBase: string;
@@ -545,11 +542,6 @@ export type TasaBcv = {
   fuente: string;
 };
 
-export const SECCIONES: { value: Seccion; label: string }[] = [
-  { value: "cafetin", label: "Cafetín" },
-  { value: "comedor", label: "Comedor" },
-  { value: "ambos", label: "Ambos" },
-];
 
 export const CATEGORIAS_INSUMO: { value: CategoriaInsumo; label: string }[] = [
   { value: "cafe", label: "Café & Té" },
@@ -719,7 +711,6 @@ export type RecetaIngrediente = {
 export type Receta = {
   id: string;
   nombre: string;
-  seccion: Seccion;
   /** Categoría: una de las sugeridas en `CATEGORIAS_RECETA` o texto libre
    *  (categoría nueva creada desde el formulario). Se guarda como texto. */
   categoria?: string;

@@ -9,11 +9,10 @@ import {
   precioConIva,
   precioSinIva,
   PRECIO_VIEJO_DIAS,
-  SECCIONES,
+  categoriaRecetaLabel,
   type Receta,
   type Insumo,
   type CocinaConfig,
-  type Seccion,
 } from "@/lib/types";
 import { hoyISO, pillClass } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -37,7 +36,6 @@ export function CosteoClient() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
 
-  const [filterSec, setFilterSec] = useState<Seccion | "todas">("todas");
   const [orden, setOrden] = useState<OrdenarPor>("nombre");
   const [q, setQ] = useState("");
 
@@ -91,12 +89,6 @@ export function CosteoClient() {
         return { receta: r, rent };
       })
       .filter(({ receta }) => {
-        if (
-          filterSec !== "todas" &&
-          receta.seccion !== filterSec &&
-          receta.seccion !== "ambos"
-        )
-          return false;
         if (q && !normalizarBusqueda(receta.nombre).includes(normalizarBusqueda(q)))
           return false;
         return true;
@@ -114,7 +106,7 @@ export function CosteoClient() {
         if (pb === null) return -1;
         return pb - pa;
       });
-  }, [recetas, insumos, config, filterSec, orden, q]);
+  }, [recetas, insumos, config, orden, q]);
 
   // Separar las recetas que tienen precio definido de las que no, para
   // mostrarlas en dos secciones distintas y resaltar las que faltan cargar.
@@ -269,23 +261,6 @@ export function CosteoClient() {
           onChange={(e) => setQ(e.target.value)}
           className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
         />
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setFilterSec("todas")}
-            className={pillClass(filterSec === "todas")}
-          >
-            Todas las secciones
-          </button>
-          {SECCIONES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setFilterSec(s.value)}
-              className={pillClass(filterSec === s.value)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
         <div className="flex flex-wrap gap-2 items-center">
           <span className="text-xs uppercase tracking-widest text-cacao-mute">
             Ordenar:
@@ -397,7 +372,6 @@ function CosteoTable({
       <thead className="border-b border-marfil">
         <tr className="text-left text-[10px] uppercase tracking-widest text-cacao-mute">
           <th className="px-4 py-3">Receta</th>
-          <th className="px-3 py-3">Sec.</th>
           <th className="px-3 py-3 text-right">Costo / porc.</th>
           <th className="px-3 py-3 text-right">Sugerido (al objetivo)</th>
           <th className="px-3 py-3 text-right w-44">
@@ -423,12 +397,9 @@ function CosteoTable({
               </Link>
               {receta.categoria && (
                 <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
-                  {receta.categoria}
+                  {categoriaRecetaLabel(receta.categoria)}
                 </div>
               )}
-            </td>
-            <td className="px-3 py-3 text-xs text-cacao-soft capitalize">
-              {receta.seccion}
             </td>
             <td className="px-3 py-3 text-right text-cacao font-medium">
               ${rent.costoPorPorcion.toFixed(2)}

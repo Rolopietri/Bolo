@@ -1,5 +1,5 @@
 /**
- * PDF de ficha técnica de receta — La Quinta Mamá
+ * PDF de ficha técnica de receta (cabecera con el nombre del negocio).
  * Formato apto para impresión y carpeta de cocina.
  * NO incluye costos (este PDF lo lee el equipo de cocina).
  */
@@ -15,6 +15,7 @@ import {
   Image,
 } from "@react-pdf/renderer";
 import type { Receta } from "@/lib/types";
+import { categoriaRecetaLabel } from "@/lib/types";
 import { ordenarPorCantidadDesc } from "@/lib/units";
 
 // ─── Fuentes (cargadas desde /public/fonts) ──────────────────────
@@ -239,9 +240,16 @@ export type RecetaPDFProps = {
   logoSrc: string;
   /** Foto del plato ya resuelta (data URI o URL). Opcional. */
   fotoSrc?: string;
+  /** Nombre del negocio para la cabecera y el pie. */
+  negocio?: string;
 };
 
-export function RecetaPDF({ receta: r, logoSrc, fotoSrc }: RecetaPDFProps) {
+export function RecetaPDF({
+  receta: r,
+  logoSrc,
+  fotoSrc,
+  negocio = "bolo",
+}: RecetaPDFProps) {
   const fechaActualizada = new Date(r.createdAt).toLocaleDateString("es-VE", {
     day: "numeric",
     month: "long",
@@ -251,8 +259,8 @@ export function RecetaPDF({ receta: r, logoSrc, fotoSrc }: RecetaPDFProps) {
   return (
     <Document
       title={`Receta — ${r.nombre}`}
-      author="La Quinta Mamá"
-      creator="Proyectos Quinta Mamá, C.A."
+      author={negocio}
+      creator="bolo"
     >
       <Page size="LETTER" style={styles.page}>
         {/* Header */}
@@ -260,7 +268,7 @@ export function RecetaPDF({ receta: r, logoSrc, fotoSrc }: RecetaPDFProps) {
           {/* eslint-disable-next-line jsx-a11y/alt-text -- <Image> de @react-pdf/renderer, no es <img> de HTML y no admite alt */}
           <Image style={styles.logo} src={logoSrc} />
           <View style={styles.brandWrap}>
-            <Text style={styles.brandWordmark}>LA QUINTA MAMÁ</Text>
+            <Text style={styles.brandWordmark}>{negocio.toUpperCase()}</Text>
             <Text style={styles.brandLine}>Cocina · Ficha técnica</Text>
             <Text style={styles.brandLine}>{fechaActualizada}</Text>
           </View>
@@ -269,7 +277,12 @@ export function RecetaPDF({ receta: r, logoSrc, fotoSrc }: RecetaPDFProps) {
         {/* Title */}
         <View>
           <Text style={styles.titleEyebrow}>
-            {(r.categoria ?? "receta").toUpperCase()} · {r.seccion.toUpperCase()}
+            {(r.esSubreceta
+              ? "Sub-receta"
+              : r.categoria
+                ? categoriaRecetaLabel(r.categoria)
+                : "Receta"
+            ).toUpperCase()}
           </Text>
           <Text style={styles.title}>{r.nombre}</Text>
           {r.perfil ? <Text style={styles.perfil}>{r.perfil}</Text> : null}
@@ -377,7 +390,9 @@ export function RecetaPDF({ receta: r, logoSrc, fotoSrc }: RecetaPDFProps) {
 
         {/* Footer */}
         <View style={styles.footer} fixed>
-          <Text style={styles.footerWordmark}>LA QUINTA MAMÁ · COCINA</Text>
+          <Text style={styles.footerWordmark}>
+            {negocio.toUpperCase()} · COCINA
+          </Text>
           <Text style={styles.footerText}>{r.nombre}</Text>
           <Text
             style={styles.footerText}

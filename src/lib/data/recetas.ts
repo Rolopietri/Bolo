@@ -4,7 +4,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type {
   Receta,
   RecetaIngrediente,
-  Seccion,
   Insumo,
 } from "@/lib/types";
 import { convertirParaCosto } from "@/lib/units";
@@ -13,7 +12,6 @@ import { normalizarNombreCatalogo } from "@/lib/text";
 type RecetaRow = {
   id: string;
   nombre: string;
-  seccion: string;
   categoria: string | null;
   perfil: string | null;
   porciones: number;
@@ -69,7 +67,6 @@ function rowToReceta(r: RecetaRow, ings: RecetaIngrediente[]): Receta {
   return {
     id: r.id,
     nombre: r.nombre,
-    seccion: r.seccion as Seccion,
     categoria: r.categoria ?? undefined,
     perfil: r.perfil ?? undefined,
     porciones: r.porciones,
@@ -98,7 +95,6 @@ function rowToReceta(r: RecetaRow, ings: RecetaIngrediente[]): Receta {
 
 export type RecetaInput = {
   nombre: string;
-  seccion: Seccion;
   categoria?: string;
   perfil?: string;
   porciones: number;
@@ -123,7 +119,6 @@ export async function listRecetas(): Promise<Receta[]> {
   const { data, error } = await sb
     .from("recetas")
     .select("*")
-    .order("seccion")
     .order("categoria")
     .order("nombre");
   if (error) throw error;
@@ -199,7 +194,6 @@ export async function createReceta(input: RecetaInput): Promise<Receta> {
     .from("recetas")
     .insert({
       nombre: normalizarNombreCatalogo(input.nombre),
-      seccion: input.seccion,
       categoria: input.categoria ?? null,
       perfil: input.perfil ?? null,
       // Clamp defensivo: porciones = 0/negativo descuadra el motor (el plan
@@ -254,7 +248,6 @@ export async function updateReceta(
     .from("recetas")
     .update({
       nombre: normalizarNombreCatalogo(input.nombre),
-      seccion: input.seccion,
       categoria: input.categoria ?? null,
       perfil: input.perfil ?? null,
       // Clamp defensivo: porciones = 0/negativo descuadra el motor (el plan

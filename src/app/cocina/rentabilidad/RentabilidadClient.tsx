@@ -4,11 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   calcRentabilidad,
-  SECCIONES,
+  categoriaRecetaLabel,
   type Receta,
   type Insumo,
   type CocinaConfig,
-  type Seccion,
   type RentabilidadReceta,
 } from "@/lib/types";
 import { pillClass } from "@/lib/ui";
@@ -52,7 +51,6 @@ export function RentabilidadClient() {
   const [savingConfig, setSavingConfig] = useState(false);
   const [showingHistorial, setShowingHistorial] = useState(false);
 
-  const [filterSec, setFilterSec] = useState<Seccion | "todas">("todas");
   const [filterSem, setFilterSem] = useState<FilterSemaforo>("todos");
   const [orden, setOrden] = useState<OrdenarPor>("margen_asc");
   const [q, setQ] = useState("");
@@ -105,12 +103,6 @@ export function RentabilidadClient() {
         return { receta: r, rent };
       })
       .filter(({ receta, rent }) => {
-        if (
-          filterSec !== "todas" &&
-          receta.seccion !== filterSec &&
-          receta.seccion !== "ambos"
-        )
-          return false;
         if (filterSem !== "todos" && rent.semaforo !== filterSem) return false;
         if (q && !normalizarBusqueda(receta.nombre).includes(normalizarBusqueda(q)))
           return false;
@@ -128,7 +120,7 @@ export function RentabilidadClient() {
         if (mb === null) return -1;
         return orden === "margen_asc" ? ma - mb : mb - ma;
       });
-  }, [recetas, insumos, config, filterSec, filterSem, orden, q]);
+  }, [recetas, insumos, config, filterSem, orden, q]);
 
   // Stats por semáforo (excluyendo subrecetas — no se venden directo)
   const stats = useMemo(() => {
@@ -291,23 +283,6 @@ export function RentabilidadClient() {
           className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
         />
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setFilterSec("todas")}
-            className={pillClass(filterSec === "todas")}
-          >
-            Todas las secciones
-          </button>
-          {SECCIONES.map((s) => (
-            <button
-              key={s.value}
-              onClick={() => setFilterSec(s.value)}
-              className={pillClass(filterSec === s.value)}
-            >
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
           {(
             ["todos", "verde", "amarillo", "rojo", "sin_precio"] as FilterSemaforo[]
           ).map((s) => (
@@ -363,7 +338,6 @@ export function RentabilidadClient() {
             <thead className="border-b border-marfil">
               <tr className="text-left text-[10px] uppercase tracking-widest text-cacao-mute">
                 <th className="px-4 py-3">Receta</th>
-                <th className="px-3 py-3">Sec.</th>
                 <th className="px-3 py-3 text-right">Costo/porc</th>
                 <th className="px-3 py-3 text-right">Precio actual</th>
                 <th className="px-3 py-3 text-right">Food cost</th>
@@ -384,12 +358,9 @@ export function RentabilidadClient() {
                     </Link>
                     {receta.categoria && (
                       <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
-                        {receta.categoria}
+                        {categoriaRecetaLabel(receta.categoria)}
                       </div>
                     )}
-                  </td>
-                  <td className="px-3 py-3 text-xs text-cacao-soft capitalize">
-                    {receta.seccion}
                   </td>
                   <td className="px-3 py-3 text-right text-cacao">
                     ${rent.costoPorPorcion.toFixed(2)}

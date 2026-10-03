@@ -4,16 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { WarningIcon } from "@/components/icons";
 import {
-  CATEGORIAS_RECETA,
-  SECCIONES,
   precioConIva,
   precioSinIva,
-  categoriaInsumoLabel,
   categoriaRecetaLabel,
   type Insumo,
   type Receta,
   type RecetaIngrediente,
-  type Seccion,
 } from "@/lib/types";
 import {
   createReceta,
@@ -69,6 +65,14 @@ function lineFromIng(i: RecetaIngrediente): LineForm {
   };
 }
 
+const SIN_CATEGORIA = "Sin categoría";
+
+/** Categoría con la que se agrupa un insumo en el buscador de ingredientes:
+ *  la de Insumos (categoría de compra), o "Sin categoría". */
+function catDeInsumo(ins: Insumo): string {
+  return ins.categoriaCompra?.trim() || SIN_CATEGORIA;
+}
+
 export function RecetaForm({
   existing,
   onSaved,
@@ -94,7 +98,6 @@ export function RecetaForm({
   const [insumoSearch, setInsumoSearch] = useState("");
 
   const [nombre, setNombre] = useState(existing?.nombre ?? "");
-  const [seccion, setSeccion] = useState<Seccion>(existing?.seccion ?? "cafetin");
   const [categoria, setCategoria] = useState<string>(
     existing?.categoria ?? "",
   );
@@ -194,18 +197,14 @@ export function RecetaForm({
     [insumos, recetasContexto],
   );
 
-  // Categorías para el desplegable: las sugeridas (por su slug) + cualquier
-  // categoría nueva que ya exista en otras recetas. Cada opción se muestra con
-  // su etiqueta legible vía categoriaRecetaLabel().
+  // Categorías para el desplegable: las que creó el negocio + cualquier
+  // categoría que ya exista en otras recetas. Sin lista fija de ejemplo: si el
+  // negocio aún no tiene categorías, solo queda "Sin categoría" y "+ Nueva".
   const categoriasDisponibles = useMemo(() => {
     // Base: solo las categorías marcadas como de RECETA (aplica_receta). Las de
     // solo-venta (alquileres, pádel, reventa, consignación) no salen aquí.
-    // Si la tabla está vacía o sin migrar, caemos a la lista fija de código.
     const recetaCats = categoriasUser.filter((c) => c.aplicaReceta !== false);
-    const conocidas =
-      categoriasUser.length > 0
-        ? recetaCats.map((c) => c.nombre)
-        : CATEGORIAS_RECETA.map((c) => c.value as string);
+    const conocidas = recetaCats.map((c) => c.nombre);
     const conocidasNorm = new Set(
       conocidas.map((c) => c.trim().toLowerCase()),
     );
@@ -221,7 +220,8 @@ export function RecetaForm({
     return [...conocidas, ...nuevas];
   }, [recetasContexto, categoriasUser]);
 
-  // Agrupar insumos por categoría, ordenados según CATEGORIAS_INSUMO
+  // Agrupar insumos por su categoría (la misma que se edita en Insumos);
+  // los que no tienen van al final, en "Sin categoría".
   const insumosPorCategoria = useMemo(() => {
     // Quick search: match por nombre del insumo o por label de su categoría.
     // Normalizamos (lowercase + sin acentos) para que "cafe" matchee "Café".
@@ -232,12 +232,12 @@ export function RecetaForm({
     for (const ins of insumos) {
       if (!ins.activo) continue;
       if (q) {
-        const catLabel = categoriaInsumoLabel(ins.categoria);
-        const haystack = `${normalize(ins.nombre)} ${normalize(catLabel)}`;
+        const haystack = `${normalize(ins.nombre)} ${normalize(catDeInsumo(ins))}`;
         if (!haystack.includes(q)) continue;
       }
-      if (!map.has(ins.categoria)) map.set(ins.categoria, []);
-      map.get(ins.categoria)!.push(ins);
+      const cat = catDeInsumo(ins);
+      if (!map.has(cat)) map.set(cat, []);
+      map.get(cat)!.push(ins);
     }
     // Ordenar cada grupo alfabéticamente
     for (const arr of map.values()) {
@@ -249,9 +249,11 @@ export function RecetaForm({
       .map(([categoria, items]) => ({ categoria, items }))
       .filter((g) => g.items.length > 0)
       .sort((a, b) =>
-        categoriaInsumoLabel(a.categoria).localeCompare(
-          categoriaInsumoLabel(b.categoria),
-        ),
+        a.categoria === SIN_CATEGORIA
+          ? 1
+          : b.categoria === SIN_CATEGORIA
+            ? -1
+            : a.categoria.localeCompare(b.categoria),
       );
   }, [insumos, insumoSearch]);
 
@@ -510,7 +512,6 @@ export function RecetaForm({
       const rendNum = Number(rendimiento);
       const input = {
         nombre: nombre.trim(),
-        seccion,
         categoria: categoria.trim() || undefined,
         perfil: perfil.trim() || undefined,
         porciones: Number(porciones) || 1,
@@ -743,21 +744,7 @@ export function RecetaForm({
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <label className="text-sm text-cacao">
-            Sección
-            <select
-              value={seccion}
-              onChange={(e) => setSeccion(e.target.value as Seccion)}
-              className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
-            >
-              {SECCIONES.map((s) => (
-                <option key={s.value} value={s.value}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-sm text-cacao">
             Categoría
             <select
@@ -997,7 +984,7 @@ export function RecetaForm({
               <div key={categoria}>
                 <div className="sticky top-0 z-10 px-3 py-2 bg-marfil-light border-b border-marfil">
                   <span className="font-display text-[10px] tracking-[0.3em] uppercase text-cacao-mute">
-                    {categoriaInsumoLabel(categoria)}
+                    {categoria}
                   </span>
                   <span className="ml-2 text-[10px] text-cacao-mute">
                     ({items.length})
