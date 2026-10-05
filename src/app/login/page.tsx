@@ -15,7 +15,9 @@ export default function LoginPage() {
             className="mx-auto h-16 w-auto"
             priority
           />
-          <p className="mt-4 text-cacao-soft">Entra a tu panel de trabajo.</p>
+          <p className="mt-4 text-cacao-soft">
+            Entra o crea tu acceso para empezar.
+          </p>
         </div>
 
         <Suspense
