@@ -12,7 +12,7 @@
 // Archivo .mjs (sin TypeScript) para poder probarlo con `node` directamente:
 // ver scripts/check-modulos.mjs.
 
-/** @typedef {"cocina" | "administracion" | "tareas" | "eventos" | "presupuestos" | "wifi"} ModuloId */
+/** @typedef {"cocina" | "administracion" | "marketplace" | "tareas" | "eventos" | "presupuestos" | "wifi"} ModuloId */
 
 /**
  * Catálogo en el orden en que se muestran.
@@ -21,6 +21,7 @@
 export const MODULOS = [
   { id: "cocina", href: "/cocina", title: "Cocina", desc: "Insumos, recetas y compras." },
   { id: "administracion", href: "/administracion", title: "Administración", desc: "Cuentas y dinero." },
+  { id: "marketplace", href: "/marketplace", title: "Mercado", desc: "Proveedores, equipos y reventa." },
   { id: "tareas", href: "/tareas", title: "Tareas", desc: "Lo que hay que hacer." },
   { id: "eventos", href: "/eventos", title: "Eventos", desc: "Próximos eventos." },
   { id: "presupuestos", href: "/presupuestos", title: "Presupuestos", desc: "Cotizaciones y precios." },
@@ -28,7 +29,7 @@ export const MODULOS = [
 ];
 
 /** @type {readonly ModuloId[]} */
-export const MODULOS_POR_DEFECTO = ["cocina", "administracion"];
+export const MODULOS_POR_DEFECTO = ["cocina", "administracion", "marketplace"];
 
 /**
  * Ids activos, en el orden del catálogo, a partir del valor de BOLO_MODULOS.

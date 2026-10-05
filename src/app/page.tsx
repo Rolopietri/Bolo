@@ -11,6 +11,7 @@ import {
   ChartIcon,
   WifiIcon,
   ChevronIcon,
+  StoreIcon,
 } from "@/components/icons";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -18,6 +19,7 @@ type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 const ICONOS: Record<(typeof MODULOS)[number]["id"], IconType> = {
   cocina: CartIcon,
   administracion: ChartIcon,
+  marketplace: StoreIcon,
   tareas: CheckIcon,
   eventos: CalendarIcon,
   presupuestos: DocIcon,

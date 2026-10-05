@@ -114,6 +114,18 @@ export function CartIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Tienda / mercado (storefront) para el marketplace. */
+export function StoreIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M3.5 9 5 4.6A1 1 0 0 1 5.95 4h12.1a1 1 0 0 1 .95.6L20.5 9" />
+      <path d="M4 9v9.5a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9" />
+      <path d="M3.5 9h17" />
+      <path d="M9.5 19.5V14h5v5.5" />
+    </Svg>
+  );
+}
+
 /** Chevron para desplegar/colapsar. Apunta a la derecha; rótalo con CSS
  *  (ej. `rotate-90`) para el estado abierto. */
 export function ChevronIcon(props: SVGProps<SVGSVGElement>) {
