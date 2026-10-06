@@ -19,7 +19,7 @@ export async function Header({ subtitle }: { subtitle?: string }) {
   }
 
   return (
-    <header className="border-b border-marfil bg-marfil-soft/85 backdrop-blur sticky top-0 z-10">
+    <header className="border-b border-marfil bg-white/85 backdrop-blur sticky top-0 z-10">
       <div className="mx-auto max-w-3xl px-5 py-2.5 flex items-center justify-between gap-3">
         <Link href="/" className="flex items-center" aria-label="Inicio">
           <Image

@@ -1,13 +1,13 @@
 {
   "name": "bolo",
   "short_name": "bolo",
-  "description": "Tu panel de trabajo — simple y fácil de usar.",
+  "description": "Todo para tu cocina — simple, accesible y confiable.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#fbf8f0",
-  "theme_color": "#fbf8f0",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "lang": "es",
   "icons": [
     {

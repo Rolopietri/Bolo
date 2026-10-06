@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "bolo",
-  description: "Tu panel de trabajo — simple y fácil de usar.",
+  description: "Todo para tu cocina — simple, accesible y confiable.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fbf8f0",
+  themeColor: "#ffffff",
 };
 
 export default function RootLayout({
