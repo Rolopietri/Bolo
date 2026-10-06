@@ -37,17 +37,9 @@ export function crearToken(): string {
   return `${exp}.${firmar(exp)}`;
 }
 
-export function tokenValido(token: string | undefined): boolean {
-  if (!token || !secret()) return false;
-  const i = token.indexOf(".");
-  if (i < 0) return false;
-  const exp = token.slice(0, i);
-  const sig = token.slice(i + 1);
-  const expNum = Number(exp);
-  if (!Number.isFinite(expNum) || expNum < Date.now()) return false;
-  const esperado = firmar(exp);
-  const a = Buffer.from(sig);
-  const b = Buffer.from(esperado);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+export function tokenValido(_token?: string): boolean {
+  // Administración ABIERTA: ya no exige su propia contraseña. Basta con haber
+  // iniciado sesión en bolo — el middleware (proxy.ts) ya protege /api/admin/*,
+  // así que cualquier usuario con sesión puede entrar.
+  return true;
 }

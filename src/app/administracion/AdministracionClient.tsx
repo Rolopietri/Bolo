@@ -25,117 +25,18 @@ const SECCIONES: { id: Seccion; label: string; grupo?: string }[] = [
 ];
 
 export function AdministracionClient() {
-  const [estado, setEstado] = useState<"cargando" | "sin-config" | "bloqueado" | "abierto">("cargando");
-
-  useEffect(() => {
-    fetch("/api/admin/session", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((d: { configurado: boolean; authed: boolean }) => {
-        setEstado(!d.configurado ? "sin-config" : d.authed ? "abierto" : "bloqueado");
-      })
-      .catch(() => setEstado("bloqueado"));
-  }, []);
-
-  // Si la sesión expira mientras la página está abierta, cualquier llamada a
-  // /api/admin/* devuelve 401. En vez de un error críptico ("no autorizado"),
-  // volvemos a mostrar la puerta de contraseña para re-entrar sin perder nada.
-  useEffect(() => {
-    if (estado !== "abierto") return;
-    const orig = window.fetch;
-    window.fetch = async (...args: Parameters<typeof window.fetch>) => {
-      const res = await orig(...args);
-      try {
-        const input = args[0];
-        const url = typeof input === "string" ? input : input instanceof URL ? input.href : (input as Request).url;
-        if (res.status === 401 && url.includes("/api/admin/") && !url.includes("/api/admin/login")) {
-          setEstado("bloqueado");
-        }
-      } catch { /* noop */ }
-      return res;
-    };
-    return () => { window.fetch = orig; };
-  }, [estado]);
-
-  if (estado === "cargando") return <p className="text-cacao-soft italic font-serif">Cargando…</p>;
-  if (estado === "sin-config") return <SinConfig />;
-  if (estado === "bloqueado") return <Puerta onEntrar={() => setEstado("abierto")} />;
-  return <Panel onSalir={() => setEstado("bloqueado")} />;
+  // Sin contraseña propia: Administración se abre directo. Ya estás dentro de
+  // bolo con tu sesión, y el login normal (middleware) protege /api/admin/*.
+  return <Panel />;
 }
 
-function SinConfig() {
-  return (
-    <div className="rounded-2xl bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-6 text-[#7A2419]">
-      <h2 className="font-display text-xs tracking-[0.3em] uppercase mb-2">Falta configurar</h2>
-      <p className="text-sm">
-        La sección de Administración necesita una contraseña definida en Vercel
-        (variable <span className="font-mono">ADMIN_PASSWORD</span>) y la llave de servicio
-        (<span className="font-mono">SUPABASE_SERVICE_ROLE_KEY</span>). Cuando estén configuradas, aquí
-        aparece la puerta con contraseña.
-      </p>
-    </div>
-  );
-}
-
-function Puerta({ onEntrar }: { onEntrar: () => void }) {
-  const [pw, setPw] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function entrar() {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await fetch("/api/admin/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pw }),
-      });
-      if (r.ok) onEntrar();
-      else {
-        const d = await r.json().catch(() => ({}));
-        setError(d.error || "Contraseña incorrecta.");
-      }
-    } catch {
-      setError("Error de conexión.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="max-w-sm mx-auto mt-10 rounded-2xl bg-white ring-1 ring-marfil p-6">
-      <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute mb-1">Administración</h2>
-      <p className="text-sm text-cacao-soft mb-4">Sección privada. Ingresa la contraseña.</p>
-      {error && <div className="rounded-lg bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-2.5 text-sm text-[#7A2419] mb-3">{error}</div>}
-      <input
-        type="password"
-        value={pw}
-        onChange={(e) => setPw(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && pw && entrar()}
-        placeholder="Contraseña"
-        className="w-full border border-marfil rounded-lg px-3 py-2 text-cacao"
-        autoFocus
-      />
-      <button
-        type="button"
-        onClick={entrar}
-        disabled={busy || !pw}
-        className="mt-3 w-full rounded-lg bg-cacao text-white py-2.5 text-xs uppercase tracking-widest hover:bg-terracotta disabled:bg-marfil disabled:text-cacao-mute"
-      >
-        {busy ? "Entrando…" : "Entrar"}
-      </button>
-    </div>
-  );
-}
-
-function Panel({ onSalir }: { onSalir: () => void }) {
+function Panel() {
   const [seccion, setSeccion] = useState<Seccion>("estado");
   const [menuAbierto, setMenuAbierto] = useState(false);
   const actual = SECCIONES.find((s) => s.id === seccion)!;
 
-  async function salir() {
-    await fetch("/api/admin/logout", { method: "POST" }).catch(() => {});
-    onSalir();
+  function salir() {
+    window.location.href = "/";
   }
 
   return (
