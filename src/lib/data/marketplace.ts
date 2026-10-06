@@ -123,6 +123,95 @@ export async function getUsuarioId(): Promise<string | null> {
   return data.user?.id ?? null;
 }
 
+// ── Reseñas (ratings tipo Amazon) ───────────────────────────────────
+
+export type Resena = {
+  id: string;
+  anuncioId: string;
+  calificacion: number; // 1..5
+  comentario?: string | null;
+  autor?: string | null;
+  autorNombre?: string | null;
+  createdAt: string;
+};
+
+/** Versión liviana para calcular promedios en toda la lista. */
+export type ResenaMini = { anuncioId: string; calificacion: number };
+
+type ResenaRow = {
+  id: string;
+  anuncio_id: string;
+  calificacion: number;
+  comentario: string | null;
+  autor: string | null;
+  autor_nombre: string | null;
+  created_at: string;
+};
+
+function rowToResena(r: ResenaRow): Resena {
+  return {
+    id: r.id,
+    anuncioId: r.anuncio_id,
+    calificacion: r.calificacion,
+    comentario: r.comentario,
+    autor: r.autor,
+    autorNombre: r.autor_nombre,
+    createdAt: r.created_at,
+  };
+}
+
+/** Todas las reseñas (solo anuncio + estrella) para promedios por anuncio y por vendedor. */
+export async function listResenasMini(): Promise<ResenaMini[]> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb
+    .from("marketplace_resenas")
+    .select("anuncio_id, calificacion");
+  if (error) throw error;
+  return (data as { anuncio_id: string; calificacion: number }[]).map((r) => ({
+    anuncioId: r.anuncio_id,
+    calificacion: r.calificacion,
+  }));
+}
+
+/** Reseñas completas de un anuncio (para el detalle). */
+export async function listResenasDeAnuncio(anuncioId: string): Promise<Resena[]> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb
+    .from("marketplace_resenas")
+    .select("*")
+    .eq("anuncio_id", anuncioId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data as ResenaRow[]).map(rowToResena);
+}
+
+export async function crearResena(input: {
+  anuncioId: string;
+  calificacion: number;
+  comentario?: string;
+  autorNombre?: string;
+}): Promise<Resena> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb
+    .from("marketplace_resenas")
+    .insert({
+      anuncio_id: input.anuncioId,
+      calificacion: input.calificacion,
+      comentario: input.comentario || null,
+      autor_nombre: input.autorNombre || null,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return rowToResena(data as ResenaRow);
+}
+
+export async function borrarResena(id: string): Promise<void> {
+  const sb = createSupabaseBrowserClient();
+  const { error } = await sb.from("marketplace_resenas").delete().eq("id", id);
+  if (error) throw error;
+}
+
 const BUCKET_FOTOS = "menaje-fotos";
 const FOTO_MAX_BYTES = 5 * 1024 * 1024;
 
