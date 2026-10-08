@@ -9,7 +9,11 @@ import {
   type Receta,
   type Insumo,
 } from "@/lib/types";
-import { listRecetas, calcularCostoReceta } from "@/lib/data/recetas";
+import {
+  listRecetas,
+  calcularCostoReceta,
+  setPrecioSugeridoUsd,
+} from "@/lib/data/recetas";
 import { listInsumos } from "@/lib/data/cocina";
 import { listCategoriasProducto, type CategoriaProducto } from "@/lib/data/categorias";
 import { getCocinaConfig } from "@/lib/data/cocinaConfig";
@@ -44,6 +48,11 @@ export function RecetasList() {
    *  una categoría del negocio. Por eso el tipo es string. */
   const [filterCat, setFilterCat] = useState<string>("todas");
   const [showInactivas, setShowInactivas] = useState(false);
+  // Vista: "fichas" (tarjetas) o "costeo" (lista compacta con precio + semáforo).
+  const [vista, setVista] = useState<"fichas" | "costeo">("fichas");
+  // Borrador del precio que se edita inline en la vista Costeo (string mientras
+  // se escribe; se persiste al salir del campo).
+  const [precioDraft, setPrecioDraft] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -180,6 +189,34 @@ export function RecetasList() {
   }
 
 
+  function onPrecioInput(id: string, value: string) {
+    setPrecioDraft((d) => ({ ...d, [id]: value }));
+    const n = value.trim() === "" ? null : Number(value.replace(",", "."));
+    setItems((prev) =>
+      prev.map((x) =>
+        x.id === id
+          ? { ...x, precioSugeridoUsd: n != null && Number.isFinite(n) ? n : undefined }
+          : x,
+      ),
+    );
+  }
+  async function onPrecioBlur(id: string) {
+    const raw = precioDraft[id];
+    if (raw === undefined) return;
+    const n = raw.trim() === "" ? null : Number(raw.replace(",", "."));
+    const val = n != null && Number.isFinite(n) ? n : null;
+    try {
+      await setPrecioSugeridoUsd(id, val);
+    } catch {
+      /* si falla, el valor local queda; el usuario puede reintentar */
+    }
+    setPrecioDraft((d) => {
+      const c = { ...d };
+      delete c[id];
+      return c;
+    });
+  }
+
   return (
     <div>
       <div className="space-y-3 mb-5">
@@ -239,6 +276,21 @@ export function RecetasList() {
         </div>
       </div>
 
+      <div className="flex gap-1 rounded-xl bg-marfil-light ring-1 ring-marfil p-1 mb-4 max-w-[240px]">
+        <button
+          onClick={() => setVista("fichas")}
+          className={`flex-1 rounded-lg py-1.5 text-xs font-bold uppercase tracking-widest ${vista === "fichas" ? "bg-white text-cacao shadow-sm" : "text-cacao-soft"}`}
+        >
+          Fichas
+        </button>
+        <button
+          onClick={() => setVista("costeo")}
+          className={`flex-1 rounded-lg py-1.5 text-xs font-bold uppercase tracking-widest ${vista === "costeo" ? "bg-white text-cacao shadow-sm" : "text-cacao-soft"}`}
+        >
+          Costeo
+        </button>
+      </div>
+
       {inactivasCount > 0 && (
         <div className="mb-4">
           <button
@@ -271,6 +323,84 @@ export function RecetasList() {
               + Nueva receta
             </Link>
           )}
+        </div>
+      ) : vista === "costeo" ? (
+        <div className="space-y-2">
+          {filtered.map((r) => {
+            const { porPorcion } = calcularCostoReceta(r, insumos, items);
+            if (r.esSubreceta) {
+              return (
+                <div
+                  key={r.id}
+                  className="flex items-center gap-3 rounded-xl bg-marfil-light ring-1 ring-marfil px-4 py-3"
+                >
+                  <Link href={`/cocina/recetas/${r.id}`} className="flex-1 min-w-0">
+                    <div className="font-medium text-cacao">
+                      {r.nombre}
+                      <span className="ml-2 text-[9px] uppercase tracking-widest px-1.5 py-0.5 rounded bg-white text-cacao-mute ring-1 ring-marfil">
+                        sub-receta
+                      </span>
+                    </div>
+                    <div className="text-xs text-cacao-mute">no se vende directo</div>
+                  </Link>
+                  <div className="text-right">
+                    <div className="font-cinzel text-cacao">${porPorcion.toFixed(2)}</div>
+                    <div className="text-[10px] text-cacao-mute">costo /porc.</div>
+                  </div>
+                </div>
+              );
+            }
+            const precio = r.precioSugeridoUsd;
+            const margen =
+              precio && precio > 0 && porPorcion > 0
+                ? ((precio - porPorcion) / precio) * 100
+                : null;
+            const sem =
+              margen == null
+                ? { cls: "bg-marfil-light text-cacao-soft", dot: "bg-cacao-mute", txt: "Sin precio" }
+                : margen >= margenVerdeMin
+                  ? { cls: "bg-[#E4F3EA] text-[#2E9E5B]", dot: "bg-[#2E9E5B]", txt: "Buena ganancia" }
+                  : margen >= margenAmarilloMin
+                    ? { cls: "bg-[#FBEEDD] text-[#A16207]", dot: "bg-[#E0892A]", txt: "Cuidado" }
+                    : { cls: "bg-[#FBE5E1] text-[#D64534]", dot: "bg-[#D64534]", txt: "Casi no ganas" };
+            return (
+              <div
+                key={r.id}
+                className="flex items-center gap-3 rounded-xl bg-white ring-1 ring-marfil px-4 py-3"
+              >
+                <Link href={`/cocina/recetas/${r.id}`} className="flex-1 min-w-0">
+                  <div className="font-medium text-cacao truncate">{r.nombre}</div>
+                  <div className="text-xs text-cacao-mute">
+                    Costo ${porPorcion.toFixed(2)} /porc.
+                    {margen != null && ` · margen ${margen.toFixed(0)}%`}
+                  </div>
+                </Link>
+                <div className="flex flex-col items-end gap-1.5">
+                  <div className="flex items-center rounded-lg ring-1 ring-marfil bg-marfil-soft px-2 h-9">
+                    <span className="text-cacao-mute font-bold text-sm">$</span>
+                    <input
+                      inputMode="decimal"
+                      aria-label={`Precio de ${r.nombre}`}
+                      value={
+                        precioDraft[r.id] ??
+                        (r.precioSugeridoUsd != null ? String(r.precioSugeridoUsd) : "")
+                      }
+                      onChange={(e) => onPrecioInput(r.id, e.target.value)}
+                      onBlur={() => onPrecioBlur(r.id)}
+                      placeholder="0.00"
+                      className="w-16 bg-transparent text-right font-bold text-cacao focus:outline-none tabular-nums"
+                    />
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${sem.cls}`}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${sem.dot}`} />
+                    {sem.txt}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -19,21 +19,9 @@ const modulos: {
   },
   {
     href: "/cocina/recetas",
-    label: "Recetario y Subrecetas",
-    desc: "Fichas técnicas con expansión de subrecetas hasta materia prima.",
+    label: "Recetario, Costeo y Precios",
+    desc: "Recetas y subrecetas con su costo, precio de venta y semáforo de ganancia — todo junto.",
     clave: "recetas",
-  },
-  {
-    href: "/cocina/costeo",
-    label: "Costeo",
-    desc: "Costo por receta + decisión del precio de venta (editable inline sin / con IVA).",
-    clave: "costeo",
-  },
-  {
-    href: "/cocina/rentabilidad",
-    label: "Rentabilidad y Precio de Venta",
-    desc: "Margen bruto, margen neto, food cost y semáforo por receta.",
-    clave: "rentabilidad",
   },
   {
     href: "/cocina/inventario",
