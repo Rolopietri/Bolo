@@ -41,6 +41,17 @@ import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { Importador, type CampoImport } from "@/components/Importador";
+
+/** Columnas que el importador intenta reconocer en el Excel/CSV de insumos. */
+const CAMPOS_INSUMO: CampoImport[] = [
+  { key: "nombre", label: "Nombre", required: true, alias: ["producto", "insumo", "ingrediente", "descripcion", "articulo", "item"] },
+  { key: "categoria", label: "Categoría", alias: ["rubro", "tipo", "grupo", "familia"] },
+  { key: "unidadCompra", label: "Unidad de compra", alias: ["unidad", "medida", "um", "presentacion", "empaque"] },
+  { key: "cantidadPorCompra", label: "Cantidad por compra", tipo: "numero", alias: ["cantidad", "cant", "contenido", "qty", "unidades"] },
+  { key: "precioCompraUsd", label: "Precio (USD)", tipo: "numero", alias: ["precio", "costo", "monto", "valor", "total"] },
+  { key: "stockTotal", label: "Stock inicial", tipo: "numero", alias: ["stock", "existencia", "inventario"] },
+];
 
 /**
  * Cuántas unidadBase hay en 1 unidadCompra cuando son convertibles.
@@ -119,6 +130,7 @@ export function InsumosClient() {
   const [filterCat, setFilterCat] = useState<string>("todas");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   // true cuando el usuario eligió "+ Nueva categoría…" en el desplegable.
@@ -187,6 +199,56 @@ export function InsumosClient() {
     setLoading(true);
     setErrorCarga(null);
     setIntento((n) => n + 1);
+  }
+
+  async function importarInsumos(filas: Record<string, unknown>[]) {
+    let ok = 0;
+    let errores = 0;
+    for (const f of filas) {
+      try {
+        const nombre = String(f.nombre ?? "").trim();
+        if (!nombre) {
+          errores++;
+          continue;
+        }
+        const cantRaw =
+          typeof f.cantidadPorCompra === "number"
+            ? f.cantidadPorCompra
+            : Number(f.cantidadPorCompra);
+        const cant = Number.isFinite(cantRaw) && cantRaw > 0 ? cantRaw : 1;
+        const precio =
+          f.precioCompraUsd == null || f.precioCompraUsd === ""
+            ? null
+            : typeof f.precioCompraUsd === "number"
+              ? f.precioCompraUsd
+              : Number(f.precioCompraUsd);
+        const precioOk = precio != null && Number.isFinite(precio) ? precio : null;
+        const unidadCompra = String(f.unidadCompra ?? "").trim() || "unidad";
+        const unidadBase = String(f.unidadBase ?? "").trim() || unidadCompra;
+        const stockRaw =
+          typeof f.stockTotal === "number" ? f.stockTotal : Number(f.stockTotal);
+        const stock = Number.isFinite(stockRaw) ? stockRaw : 0;
+        const nuevo = await createInsumo({
+          nombre,
+          categoria: "",
+          categoriaCompra: String(f.categoria ?? "").trim() || undefined,
+          unidadCompra,
+          cantidadPorCompra: cant,
+          unidadBase,
+          precioCompraUsd: precioOk,
+          precioBaseUsd: precioOk != null ? precioOk / cant : null,
+          stockTotal: stock,
+          stockComprometido: 0,
+          stockMinimo: null,
+          activo: true,
+        });
+        setItems((prev) => [...prev, nuevo]);
+        ok++;
+      } catch {
+        errores++;
+      }
+    }
+    return { ok, errores };
   }
 
   function resetForm() {
@@ -553,12 +615,30 @@ export function InsumosClient() {
       )}
 
       {!adding && (
-        <button
-          onClick={() => setAdding(true)}
-          className="w-full mb-5 rounded-xl bg-cacao text-white py-3 font-medium hover:bg-terracotta transition-colors"
-        >
-          + Nuevo insumo
-        </button>
+        <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={() => setImportando(true)}
+            className="w-full rounded-xl bg-terracotta text-white py-3 font-bold hover:bg-terracotta-deep transition-colors"
+          >
+            Importar insumos
+          </button>
+          <button
+            onClick={() => setAdding(true)}
+            className="w-full rounded-xl ring-1 ring-marfil bg-white text-cacao py-3 font-bold hover:bg-marfil-soft transition-colors"
+          >
+            + Agregar a mano
+          </button>
+        </div>
+      )}
+
+      {importando && (
+        <Importador
+          titulo="Importar insumos"
+          descripcion="Sube un Excel o CSV (una lista de insumos o una factura). bolo detecta las columnas; tú confirmas y se crean todos."
+          campos={CAMPOS_INSUMO}
+          onImportar={importarInsumos}
+          onCerrar={() => setImportando(false)}
+        />
       )}
 
       {adding && (
