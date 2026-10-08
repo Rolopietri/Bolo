@@ -12,6 +12,16 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { Importador, type CampoImport } from "@/components/Importador";
+
+/** Columnas que el importador intenta reconocer en el Excel/CSV de proveedores. */
+const CAMPOS_PROVEEDOR: CampoImport[] = [
+  { key: "nombre", label: "Nombre", required: true, alias: ["proveedor", "empresa", "razon social"] },
+  { key: "contactoNombre", label: "Contacto", alias: ["contacto", "encargado", "vendedor", "persona"] },
+  { key: "contactoTelefono", label: "Teléfono", alias: ["telefono", "tel", "celular", "whatsapp", "movil"] },
+  { key: "contactoEmail", label: "Correo", alias: ["email", "correo", "e-mail", "mail"] },
+  { key: "notas", label: "Notas", alias: ["nota", "observacion", "comentario", "direccion", "ciudad"] },
+];
 
 type FormState = {
   nombre: string;
@@ -57,6 +67,7 @@ export function ProveedoresClient() {
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
   const [adding, setAdding] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
@@ -83,6 +94,42 @@ export function ProveedoresClient() {
     setLoading(true);
     setErrorCarga(null);
     setIntento((n) => n + 1);
+  }
+
+  async function importarProveedores(filas: Record<string, unknown>[]) {
+    let ok = 0;
+    let errores = 0;
+    for (const f of filas) {
+      try {
+        const nombre = String(f.nombre ?? "").trim();
+        if (!nombre) {
+          errores++;
+          continue;
+        }
+        const txt = (k: string) => {
+          const v = String(f[k] ?? "").trim();
+          return v || undefined;
+        };
+        const nuevo = await createProveedor({
+          nombre,
+          contactoNombre: txt("contactoNombre"),
+          contactoTelefono: txt("contactoTelefono"),
+          contactoEmail: txt("contactoEmail"),
+          notas: txt("notas"),
+          aceptaBsBcvDolar: false,
+          aceptaBsBcvEuro: false,
+          aceptaBsParalela: false,
+          aceptaUsdEfectivo: false,
+          aceptaUsdDivisa: false,
+          activo: true,
+        });
+        setItems((prev) => [...prev, nuevo]);
+        ok++;
+      } catch {
+        errores++;
+      }
+    }
+    return { ok, errores };
   }
 
   function resetForm() {
@@ -153,12 +200,30 @@ export function ProveedoresClient() {
       {error && <ErrorBanner className="mb-4">{error}</ErrorBanner>}
 
       {!adding && (
-        <button
-          onClick={() => setAdding(true)}
-          className="w-full mb-5 rounded-xl bg-cacao text-white py-3 font-medium hover:bg-terracotta transition-colors"
-        >
-          + Nuevo proveedor
-        </button>
+        <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <button
+            onClick={() => setImportando(true)}
+            className="w-full rounded-xl bg-terracotta text-white py-3 font-bold hover:bg-terracotta-deep transition-colors"
+          >
+            Importar proveedores
+          </button>
+          <button
+            onClick={() => setAdding(true)}
+            className="w-full rounded-xl ring-1 ring-marfil bg-white text-cacao py-3 font-bold hover:bg-marfil-soft transition-colors"
+          >
+            + Agregar a mano
+          </button>
+        </div>
+      )}
+
+      {importando && (
+        <Importador
+          titulo="Importar proveedores"
+          descripcion="Sube un Excel o CSV con tu lista de proveedores. bolo detecta las columnas; tú confirmas y se crean todos."
+          campos={CAMPOS_PROVEEDOR}
+          onImportar={importarProveedores}
+          onCerrar={() => setImportando(false)}
+        />
       )}
 
       {adding && (
