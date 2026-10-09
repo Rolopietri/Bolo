@@ -696,18 +696,31 @@ function DetalleAnuncio({
   const info = tipoInfo(a.tipo);
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
       <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-marfil-soft">
         {/* Encabezado */}
         <div className="sticky top-0 z-10 flex items-center justify-between bg-marfil-soft/95 backdrop-blur px-4 py-3 border-b border-marfil">
           <span className="font-cinzel text-lg text-cacao">Anuncio</span>
-          <button
-            onClick={onCerrar}
-            aria-label="Cerrar"
-            className="rounded-full ring-1 ring-marfil bg-white size-9 grid place-items-center text-cacao-soft hover:text-cacao"
-          >
-            ✕
-          </button>
+          <div className="flex items-center gap-2">
+            {!esMiAnuncio && !denunciado && (
+              <button
+                onClick={() => setDenunciando(true)}
+                aria-label="Denunciar anuncio"
+                title="Denunciar anuncio"
+                className="rounded-full ring-1 ring-marfil bg-white size-9 grid place-items-center text-lg leading-none text-cacao-soft hover:text-[#D64534]"
+              >
+                ⋯
+              </button>
+            )}
+            <button
+              onClick={onCerrar}
+              aria-label="Cerrar"
+              className="rounded-full ring-1 ring-marfil bg-white size-9 grid place-items-center text-cacao-soft hover:text-cacao"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
@@ -856,78 +869,96 @@ function DetalleAnuncio({
             )}
           </div>
 
-          {/* Denunciar anuncio (estilo Instagram) */}
+          {/* Denunciar anuncio — también se abre con el ⋯ de arriba */}
           {!esMiAnuncio &&
             (denunciado ? (
               <div className="rounded-xl bg-[#E4F3EA] ring-1 ring-[#BFE0CB] p-3 text-sm text-[#2F7A49] font-semibold text-center">
                 Gracias. Recibimos tu denuncia y la revisaremos.
               </div>
-            ) : !denunciando ? (
+            ) : (
               <button
                 onClick={() => setDenunciando(true)}
                 className="w-full text-center text-sm font-bold text-cacao-mute hover:text-[#D64534] py-2"
               >
                 Denunciar anuncio
               </button>
-            ) : (
-              <div className="rounded-2xl bg-marfil-soft ring-1 ring-marfil p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-cacao">¿Por qué lo denuncias?</span>
-                  <button
-                    onClick={() => {
-                      setDenunciando(false);
-                      setMotivoDen("");
-                      setErrorDen("");
-                    }}
-                    className="text-sm font-bold text-cacao-soft hover:text-cacao"
-                  >
-                    Cancelar
-                  </button>
-                </div>
-                <div className="space-y-1.5">
-                  {MOTIVOS_DENUNCIA.map((m) => (
-                    <label
-                      key={m}
-                      className="flex items-center gap-2.5 rounded-lg bg-white ring-1 ring-marfil px-3 py-2.5 cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="motivo-denuncia"
-                        value={m}
-                        checked={motivoDen === m}
-                        onChange={() => setMotivoDen(m)}
-                        className="accent-[#D64534]"
-                      />
-                      <span className="text-sm text-cacao">{m}</span>
-                    </label>
-                  ))}
-                </div>
-                {motivoDen === "Otro" && (
-                  <textarea
-                    value={detalleDen}
-                    onChange={(e) => setDetalleDen(e.target.value)}
-                    rows={2}
-                    placeholder="Cuéntanos qué pasa (opcional)"
-                    className="w-full rounded-xl ring-1 ring-marfil px-3 py-2.5 text-sm text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
-                  />
-                )}
-                {errorDen && (
-                  <div className="rounded-lg bg-[#FBE5E1] ring-1 ring-[#F3CFC8] p-2.5 text-sm text-[#A5341F]">
-                    {errorDen}
-                  </div>
-                )}
-                <button
-                  onClick={enviarDenuncia}
-                  disabled={!motivoDen || enviandoDen}
-                  className="w-full rounded-xl bg-[#D64534] text-white py-3 font-bold hover:brightness-95 disabled:opacity-50 transition-colors"
-                >
-                  {enviandoDen ? "Enviando…" : "Enviar denuncia"}
-                </button>
-              </div>
             ))}
         </div>
       </div>
     </div>
+
+    {denunciando && (
+      <div
+        className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center bg-black/50 p-0 sm:p-4"
+        onClick={() => {
+          setDenunciando(false);
+          setMotivoDen("");
+          setErrorDen("");
+        }}
+      >
+        <div
+          className="w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl bg-white p-5 space-y-3"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-cinzel text-lg text-cacao">Denunciar anuncio</span>
+            <button
+              onClick={() => {
+                setDenunciando(false);
+                setMotivoDen("");
+                setErrorDen("");
+              }}
+              className="text-sm font-bold text-cacao-soft hover:text-cacao"
+            >
+              Cancelar
+            </button>
+          </div>
+          <p className="text-sm text-cacao-soft">
+            ¿Por qué lo denuncias? Es privado; el vendedor no sabe quién reportó.
+          </p>
+          <div className="space-y-1.5">
+            {MOTIVOS_DENUNCIA.map((m) => (
+              <label
+                key={m}
+                className="flex items-center gap-2.5 rounded-lg bg-marfil-soft ring-1 ring-marfil px-3 py-2.5 cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  name="motivo-denuncia"
+                  value={m}
+                  checked={motivoDen === m}
+                  onChange={() => setMotivoDen(m)}
+                  className="accent-[#D64534]"
+                />
+                <span className="text-sm text-cacao">{m}</span>
+              </label>
+            ))}
+          </div>
+          {motivoDen === "Otro" && (
+            <textarea
+              value={detalleDen}
+              onChange={(e) => setDetalleDen(e.target.value)}
+              rows={2}
+              placeholder="Cuéntanos qué pasa (opcional)"
+              className="w-full rounded-xl ring-1 ring-marfil px-3 py-2.5 text-sm text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+            />
+          )}
+          {errorDen && (
+            <div className="rounded-lg bg-[#FBE5E1] ring-1 ring-[#F3CFC8] p-2.5 text-sm text-[#A5341F]">
+              {errorDen}
+            </div>
+          )}
+          <button
+            onClick={enviarDenuncia}
+            disabled={!motivoDen || enviandoDen}
+            className="w-full rounded-xl bg-[#D64534] text-white py-3 font-bold hover:brightness-95 disabled:opacity-50 transition-colors"
+          >
+            {enviandoDen ? "Enviando…" : "Enviar denuncia"}
+          </button>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
