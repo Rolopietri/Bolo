@@ -3,11 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   frescuraPrecio,
-  TIPOS_PERDIDA,
   type Insumo,
   type NivelFrescuraPrecio,
   type Proveedor,
-  type StockMovimiento,
 } from "@/lib/types";
 import {
   listInsumos,
@@ -36,7 +34,6 @@ import { normalizarBusqueda } from "@/lib/text";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WarningIcon } from "@/components/icons";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
-import { listMovimientos, deleteMovimiento } from "@/lib/data/stock-movimientos";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
@@ -116,7 +113,19 @@ const emptyForm: FormState = {
   notas: "",
 };
 
-export function InsumosClient() {
+export function InsumosClient({
+  onVerAlertas,
+  onVerMermas,
+  onVerHistorial,
+  onConteoAlertas,
+}: {
+  onVerAlertas?: () => void;
+  onVerMermas?: () => void;
+  /** Abre la auditoría de stock filtrada a este insumo. */
+  onVerHistorial?: (insumoId: string) => void;
+  /** Reporta agotados + bajos (para el contador de la pestaña Alertas). */
+  onConteoAlertas?: (n: number) => void;
+} = {}) {
   const [items, setItems] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   // Unidades que ya existen en el sistema, SEPARADAS: base va al desplegable de
@@ -146,12 +155,8 @@ export function InsumosClient() {
   const [showInactivos, setShowInactivos] = useState(false);
   // Insumo al que se le va a registrar una pérdida (abre el modal).
   const [perdidaInsumo, setPerdidaInsumo] = useState<Insumo | null>(null);
-  // Movimientos de stock recientes (para la lista de pérdidas con "deshacer").
-  const [movs, setMovs] = useState<StockMovimiento[]>([]);
-  const [pendienteBorrarMov, setPendienteBorrarMov] = useState<string | null>(
-    null,
-  );
-  const [devolverStock, setDevolverStock] = useState(true);
+  // Aviso tras registrar una pérdida, con acceso a la pestaña de Mermas.
+  const [avisoPerdida, setAvisoPerdida] = useState(false);
   // Lista de categorías de insumo (tipo de materia prima). Se gestiona desde
   // Análisis de Compras → Clasificar insumos. Es la lista LIMPIA, separada de
   // las categorías de venta de Administración.
@@ -174,12 +179,6 @@ export function InsumosClient() {
         try {
           const cats = await listCategoriasInsumo();
           if (!cancelled) setCategoriasInsumo(cats);
-        } catch {
-          // tabla pendiente
-        }
-        try {
-          const mv = await listMovimientos({ limit: 60 });
-          if (!cancelled) setMovs(mv);
         } catch {
           // tabla pendiente
         }
@@ -499,44 +498,67 @@ export function InsumosClient() {
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [categoriasInsumo, categoriasReales]);
 
-  const itemsById = useMemo(
-    () => new Map(items.map((i) => [i.id, i] as const)),
-    [items],
-  );
+  // Alertas de stock (sobre stock libre, igual que la pestaña Alertas).
+  const alertas = useMemo(() => {
+    let agotados = 0;
+    let bajos = 0;
+    items.forEach((i) => {
+      if (!i.activo || !i.stockMinimo) return;
+      const libre = stockLibre(i);
+      if (libre <= 0) agotados++;
+      else if (libre < i.stockMinimo) bajos++;
+    });
+    return { agotados, bajos };
+  }, [items]);
 
-  // Pérdidas/mermas manuales recientes (excluye los movimientos de planes).
-  const perdidasRecientes = useMemo(() => {
-    const PLAN_TIPOS = [
-      "comprometido_in",
-      "comprometido_out",
-      "plan_completado",
-    ];
-    return movs.filter((m) => !PLAN_TIPOS.includes(m.tipo)).slice(0, 15);
-  }, [movs]);
-
-  const tipoPerdidaLabel = (t: string) =>
-    TIPOS_PERDIDA.find((x) => x.value === t)?.label ?? t;
-
-  async function borrarMovimiento(id: string, devolver: boolean) {
-    const mov = movs.find((m) => m.id === id);
-    try {
-      const res = await deleteMovimiento(id, { devolverStock: devolver });
-      setMovs((prev) => prev.filter((m) => m.id !== id));
-      if (devolver && res.stockTotal !== undefined && mov) {
-        setItems((prev) =>
-          prev.map((i) =>
-            i.id === mov.insumoId ? { ...i, stockTotal: res.stockTotal! } : i,
-          ),
-        );
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error eliminando");
-    }
-  }
+  useEffect(() => {
+    if (!loading && !errorCarga)
+      onConteoAlertas?.(alertas.agotados + alertas.bajos);
+  }, [loading, errorCarga, alertas, onConteoAlertas]);
 
   return (
     <div>
       {error && <ErrorBanner className="mb-4">{error}</ErrorBanner>}
+
+      {!loading && alertas.agotados + alertas.bajos > 0 && (
+        <button
+          type="button"
+          onClick={onVerAlertas}
+          className="mb-4 w-full flex flex-wrap items-center justify-between gap-2 rounded-xl bg-red-50/60 ring-1 ring-red-200 px-4 py-2.5 text-left text-sm hover:bg-red-50"
+        >
+          <span className="flex flex-wrap items-center gap-3 text-cacao">
+            {alertas.agotados > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+                {alertas.agotados} agotado{alertas.agotados === 1 ? "" : "s"}
+              </span>
+            )}
+            {alertas.bajos > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
+                {alertas.bajos} con stock bajo
+              </span>
+            )}
+          </span>
+          <span className="text-xs uppercase tracking-widest text-terracotta">
+            Ver alertas →
+          </span>
+        </button>
+      )}
+
+      {avisoPerdida && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-marfil-soft ring-1 ring-marfil px-4 py-2.5 text-sm text-cacao">
+          <span>Pérdida registrada y descontada del stock.</span>
+          <span className="flex items-center gap-4 text-xs uppercase tracking-widest">
+            <button type="button" onClick={onVerMermas} className="text-terracotta hover:underline">
+              Ver en Mermas →
+            </button>
+            <button type="button" onClick={() => setAvisoPerdida(false)} className="text-cacao-mute hover:text-cacao" aria-label="Cerrar aviso">
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
 
       <UnitCalculator className="mb-5" />
 
@@ -552,7 +574,7 @@ export function InsumosClient() {
         <a
           href="/cocina/inventario/conteo"
           title="Cuadrar el inventario con un conteo físico"
-          className="shrink-0 rounded-lg ring-1 ring-marfil px-3 py-2 text-xs uppercase tracking-widest text-cacao-soft hover:bg-marfil-soft whitespace-nowrap"
+          className="shrink-0 px-2 py-2 text-[11px] uppercase tracking-widest text-cacao-mute hover:text-cacao whitespace-nowrap"
         >
           Conteo físico
         </a>
@@ -1137,7 +1159,7 @@ export function InsumosClient() {
                           </div>
                         )}
                       </div>
-                      <div className="col-span-4 sm:col-span-2 flex sm:justify-end gap-3 text-xs uppercase tracking-widest">
+                      <div className="col-span-4 sm:col-span-2 flex flex-wrap sm:justify-end gap-x-3 gap-y-1 text-xs uppercase tracking-widest">
                         {i.activo ? (
                           <>
                             <button
@@ -1153,6 +1175,15 @@ export function InsumosClient() {
                             >
                               Editar
                             </button>
+                            {onVerHistorial && (
+                              <button
+                                onClick={() => onVerHistorial(i.id)}
+                                className="text-cacao-soft hover:text-cacao"
+                                title="Ver cada cambio de stock de este insumo (auditoría)"
+                              >
+                                Historial
+                              </button>
+                            )}
                             <button
                               onClick={() => setPendienteDesactivar(i.id)}
                               className="text-cacao-soft hover:text-terracotta"
@@ -1195,50 +1226,6 @@ export function InsumosClient() {
         </div>
       )}
 
-      {perdidasRecientes.length > 0 && (
-        <details className="mt-6 rounded-2xl bg-white ring-1 ring-marfil">
-          <summary className="cursor-pointer px-5 py-3 text-sm font-medium text-cacao select-none">
-            Pérdidas recientes ({perdidasRecientes.length})
-            <span className="ml-2 text-xs text-cacao-mute font-normal">
-              deshaz una si la registraste por error
-            </span>
-          </summary>
-          <ul className="divide-y divide-marfil border-t border-marfil">
-            {perdidasRecientes.map((m) => {
-              const ins = itemsById.get(m.insumoId);
-              return (
-                <li
-                  key={m.id}
-                  className="px-5 py-2.5 flex items-center justify-between gap-3 text-sm"
-                >
-                  <div className="min-w-0">
-                    <div className="text-cacao truncate">
-                      {ins?.nombre ?? "Insumo"}
-                    </div>
-                    <div className="text-xs text-cacao-soft">
-                      {tipoPerdidaLabel(m.tipo)} ·{" "}
-                      {displayCantidad(Math.abs(m.cantidad), ins?.unidadBase ?? "")}{" "}
-                      · {m.fecha}
-                      {m.motivo ? ` · ${m.motivo}` : ""}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDevolverStock(true);
-                      setPendienteBorrarMov(m.id);
-                    }}
-                    className="shrink-0 text-xs uppercase tracking-widest text-cacao-soft hover:text-terracotta"
-                  >
-                    Deshacer
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </details>
-      )}
-
       <ConfirmDialog
         open={pendienteDesactivar !== null}
         title="¿Desactivar insumo?"
@@ -1273,34 +1260,6 @@ export function InsumosClient() {
         onCancel={() => setPendienteBorrar(null)}
       />
 
-      <ConfirmDialog
-        open={pendienteBorrarMov !== null}
-        title="¿Deshacer este movimiento?"
-        message={
-          <label className="flex items-start gap-2 rounded-lg bg-marfil-soft ring-1 ring-marfil p-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={devolverStock}
-              onChange={(e) => setDevolverStock(e.target.checked)}
-              className="mt-0.5 h-4 w-4 accent-cacao"
-            />
-            <span className="text-sm text-cacao">
-              Devolver la cantidad al stock
-              <span className="block text-xs text-cacao-soft">
-                Márcalo si registraste la pérdida por error. Déjalo sin marcar
-                para solo borrar el registro sin tocar el stock.
-              </span>
-            </span>
-          </label>
-        }
-        onConfirm={() => {
-          if (pendienteBorrarMov)
-            borrarMovimiento(pendienteBorrarMov, devolverStock);
-          setPendienteBorrarMov(null);
-        }}
-        onCancel={() => setPendienteBorrarMov(null)}
-      />
-
       {perdidaInsumo && (
         <PerdidaInsumoDialog
           key={perdidaInsumo.id}
@@ -1312,10 +1271,7 @@ export function InsumosClient() {
                 x.id === insumoId ? { ...x, stockTotal: nuevoStockTotal } : x,
               ),
             );
-            // Refrescar la lista de pérdidas recientes con la nueva.
-            listMovimientos({ limit: 60 })
-              .then(setMovs)
-              .catch(() => {});
+            if (onVerMermas) setAvisoPerdida(true);
           }}
         />
       )}

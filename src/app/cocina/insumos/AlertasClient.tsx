@@ -9,7 +9,12 @@ import { listInsumos, listProveedores } from "@/lib/data/cocina";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
-export function AlertasClient() {
+export function AlertasClient({
+  onConteoAlertas,
+}: {
+  /** Reporta agotados + bajos (para el contador de la pestaña). */
+  onConteoAlertas?: (n: number) => void;
+} = {}) {
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +71,11 @@ export function AlertasClient() {
     });
     return { agotados: ag, bajos: bj, sinMinimo: sm };
   }, [insumos]);
+
+  useEffect(() => {
+    if (!loading && !errorCarga)
+      onConteoAlertas?.(agotados.length + bajos.length);
+  }, [loading, errorCarga, agotados.length, bajos.length, onConteoAlertas]);
 
   const provMap = new Map(proveedores.map((p) => [p.id, p]));
 

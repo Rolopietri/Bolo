@@ -14,7 +14,7 @@ const modulos: {
   {
     href: "/cocina/catalogo",
     label: "Insumos e Inventario",
-    desc: "Insumos, proveedores, stock, pérdidas, auditoría y alertas.",
+    desc: "Insumos y proveedores, con stock, alertas, mermas y auditoría dentro de Insumos.",
     clave: "insumos",
   },
   {

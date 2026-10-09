@@ -1,8 +1,16 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
-import { InsumosClient } from "./InsumosClient";
+import { InsumosTabs, type Vista } from "./InsumosTabs";
 
-export default function InsumosPage() {
+const VISTAS: Vista[] = ["catalogo", "alertas", "mermas", "auditoria"];
+
+export default async function InsumosPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { vista } = await searchParams;
+  const vistaInicial = VISTAS.find((v) => v === vista) ?? "catalogo";
   return (
     <>
       <Header subtitle="Insumos" />
@@ -16,7 +24,8 @@ export default function InsumosPage() {
               Insumos
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft">
-              Catálogo de ingredientes con precios, stock y proveedor.
+              Catálogo de ingredientes con precios, stock y proveedor, con sus
+              alertas, mermas y el historial de cada cambio de stock.
             </p>
           </div>
           <Link
@@ -26,7 +35,7 @@ export default function InsumosPage() {
             ← Insumos e Inventario
           </Link>
         </section>
-        <InsumosClient />
+        <InsumosTabs vistaInicial={vistaInicial} />
       </main>
     </>
   );

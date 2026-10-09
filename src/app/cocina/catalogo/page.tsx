@@ -6,27 +6,12 @@ const SUBMODULOS: SubModulo[] = [
   {
     href: "/cocina/insumos",
     label: "Insumos",
-    desc: "Ficha de cada materia prima: precio, stock y registro de pérdidas y mermas.",
+    desc: "Ficha de cada materia prima: precio y stock, con sus alertas, mermas y pérdidas y la auditoría de cada cambio en el mismo lugar.",
   },
   {
     href: "/cocina/proveedores",
     label: "Proveedores",
     desc: "Contactos y modalidades de pago (Bs BCV, paralela, USD efectivo o divisa).",
-  },
-  {
-    href: "/cocina/alertas",
-    label: "Alertas de stock",
-    desc: "Insumos agotados o por debajo del mínimo de compra.",
-  },
-  {
-    href: "/cocina/auditoria",
-    label: "Auditoría de stock",
-    desc: "Historial automático de cada cambio de stock: cuándo, cuánto y de dónde vino.",
-  },
-  {
-    href: "/cocina/inventario/conteo",
-    label: "Conteo físico y mermas",
-    desc: "Cuadra el inventario (a mano o importando el Excel) y revisa la merma de cada conteo, valorada en $.",
   },
 ];
 
@@ -44,8 +29,8 @@ export default function CatalogoMateriasPrimasPage() {
               Insumos e Inventario
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft max-w-2xl">
-              Tus ingredientes y proveedores + el estado del inventario: stock,
-              pérdidas, auditoría y alertas. Costeo usa estos datos para calcular
+              Tus ingredientes y proveedores. Dentro de Insumos está el estado
+              del inventario: stock, alertas, mermas y auditoría. Costeo usa estos datos para calcular
               el costo de tus recetas, y Compras, Ventas y Pedidos mueve el
               inventario.
             </p>

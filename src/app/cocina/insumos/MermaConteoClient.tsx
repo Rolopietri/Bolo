@@ -1,12 +1,13 @@
 "use client";
 
-// Reporte de merma por conteo (Fase 1). Lee los ajustes de conteo físico
+// Reporte de merma por conteo (Fase 1), dentro de Insumos → Mermas y pérdidas. Lee los ajustes de conteo físico
 // (stock_movimientos tipo 'ajuste', motivo 'Conteo físico') y muestra, por cada
 // conteo, cuánto faltó (merma) o sobró, valorado al precio base del insumo.
 
 import { useEffect, useMemo, useState } from "react";
 import { listAjustesConteo, type AjusteConteo } from "@/lib/data/stock-movimientos";
 import { extractError } from "@/lib/data/error";
+import Link from "next/link";
 import { ErrorCarga } from "@/components/ErrorCarga";
 
 function fNum(n: number): string {
@@ -22,7 +23,7 @@ function fFecha(iso: string): string {
 }
 const valorDe = (a: AjusteConteo) => (a.precioBase != null ? Math.abs(a.cantidad) * a.precioBase : null);
 
-export function MermaClient() {
+export function MermaConteoClient() {
   const [items, setItems] = useState<AjusteConteo[]>([]);
   const [loading, setLoading] = useState(true);
   /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
@@ -96,7 +97,9 @@ export function MermaClient() {
 
       {conteos.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-10 text-center font-serif italic text-cacao-soft">
-          Aún no hay conteos registrados. Haz un conteo físico (Insumos e Inventario → Conteo físico y mermas) y aquí verás la merma de cada uno.
+          Aún no hay conteos registrados. Haz un{" "}
+          <Link href="/cocina/inventario/conteo" className="not-italic font-semibold underline hover:text-terracotta">conteo físico</Link>{" "}
+          y aquí verás la merma de cada uno.
         </div>
       ) : (
         conteos.map((c) => {

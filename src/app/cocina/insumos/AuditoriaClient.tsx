@@ -81,7 +81,12 @@ function CambioCapa({
   );
 }
 
-export function AuditoriaClient() {
+export function AuditoriaClient({
+  insumoInicial = null,
+}: {
+  /** Abre la auditoría ya filtrada a un insumo (desde "Historial"). */
+  insumoInicial?: string | null;
+} = {}) {
   const [entries, setEntries] = useState<StockAuditoria[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,7 +97,9 @@ export function AuditoriaClient() {
    *  (falta correr el SQL). Mostramos un aviso amable, no un error. */
   const [sinActivar, setSinActivar] = useState(false);
 
-  const [filterInsumo, setFilterInsumo] = useState<string>("todos");
+  const [filterInsumo, setFilterInsumo] = useState<string>(
+    insumoInicial ?? "todos",
+  );
   const [filterOrigen, setFilterOrigen] = useState<FiltroOrigen>("todos");
   const [soloFisico, setSoloFisico] = useState(false);
   const [search, setSearch] = useState("");
