@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import { TIPOS_PERDIDA, type Insumo } from "@/lib/types";
 import { registrarPerdida } from "@/lib/data/stock-movimientos";
-import { displayCantidad } from "@/lib/units";
+import { displayCantidad, opcionesCantidad } from "@/lib/units";
+import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { extractError } from "@/lib/data/error";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -26,6 +27,18 @@ export function PerdidaInsumoDialog({
   onRegistered: (insumoId: string, nuevoStockTotal: number) => void;
 }) {
   const [cant, setCant] = useState("");
+  // Unidad en que se escribe la cantidad (kg, g, la presentación…). Arranca en
+  // la unidad grande (kg / L) cuando existe, que es como se pesa en cocina.
+  const opciones = useMemo(() => opcionesCantidad(insumo), [insumo]);
+  const [unidad, setUnidad] = useState(
+    () =>
+      opciones.find((o) => o.key === "kg" || o.key === "L")?.key ??
+      opciones.find((o) => o.factor === 1)?.key ??
+      opciones[0]?.key ??
+      "",
+  );
+  const factor = factorDe(opciones, unidad);
+  const unidadLabel = opciones.find((o) => o.key === unidad)?.label ?? insumo.unidadBase;
   const [tipo, setTipo] = useState<TipoPerdida>("perdida");
   const [fecha, setFecha] = useState(hoyISO());
   const [motivo, setMotivo] = useState("");
@@ -39,17 +52,19 @@ export function PerdidaInsumoDialog({
 
   const conversionCocido = useMemo(() => {
     if (!cocido) return null;
-    const c = Number(cant);
+    const c = Number(cant) * factor;
     const pct = Number(mermaPct);
     if (!Number.isFinite(c) || c <= 0) return { error: true as const };
     if (!Number.isFinite(pct) || pct < 0 || pct >= 100)
       return { error: true as const };
     return { error: false as const, crudo: c / (1 - pct / 100) };
-  }, [cocido, cant, mermaPct]);
+  }, [cocido, cant, mermaPct, factor]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const c = Number(cant);
+    const escrito = Number(cant);
+    // Siempre se descuenta en unidad base: se convierte desde la unidad elegida.
+    const c = escrito * factor;
     if (!Number.isFinite(c) || c <= 0) {
       setError("La cantidad debe ser mayor a 0.");
       return;
@@ -63,7 +78,7 @@ export function PerdidaInsumoDialog({
         return;
       }
       cantidadCruda = c / (1 - pct / 100);
-      const n = `Pesado cocido: ${c} ${insumo.unidadBase} · merma ${pct}% → ${cantidadCruda.toFixed(4)} ${insumo.unidadBase} crudo`;
+      const n = `Pesado cocido: ${escrito} ${unidadLabel} · merma ${pct}% → ${displayCantidad(cantidadCruda, insumo.unidadBase)} crudo`;
       notaFinal = nota ? `${nota} — ${n}` : n;
     }
     setRegistrando(true);
@@ -109,22 +124,26 @@ export function PerdidaInsumoDialog({
             <strong>{displayCantidad(insumo.stockTotal, insumo.unidadBase)}</strong>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label className="text-sm text-cacao">
             {cocido ? "Peso cocido" : "Cantidad afectada"}
-            <input
-              type="number"
-              step="any"
-              min="0"
-              value={cant}
-              onChange={(e) => setCant(e.target.value)}
+            <CantidadUnidad
+              valor={cant}
+              unidad={unidad}
+              opciones={opciones}
+              onChange={(v, u) => {
+                setCant(v);
+                setUnidad(u);
+              }}
               required
               autoFocus
-              placeholder={`En ${insumo.unidadBase}`}
-              className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
             />
             <span className="text-[10px] text-cacao-mute block mt-1">
-              {cocido ? "Lo que pesaste ya cocido." : "Se descuenta del stock."}
+              {cocido
+                ? "Lo que pesaste ya cocido."
+                : factor !== 1 && Number(cant) > 0
+                  ? `Se descuentan ${displayCantidad(Number(cant) * factor, insumo.unidadBase)}.`
+                  : "Se descuenta del stock."}
             </span>
           </label>
           <label className="text-sm text-cacao">

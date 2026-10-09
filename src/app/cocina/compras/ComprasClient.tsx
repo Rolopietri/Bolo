@@ -20,12 +20,14 @@ import {
   createProveedor,
   listInsumos,
   listProveedores,
+  updateInsumo,
   getTasaBcvActual,
   getTasaBcvPorFecha,
 } from "@/lib/data/cocina";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CalendarIcon, ChevronIcon } from "@/components/icons";
-import { displayCantidad } from "@/lib/units";
+import { displayCantidad, opcionesCantidad } from "@/lib/units";
+import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
@@ -35,8 +37,11 @@ type FormState = {
   insumoId: string;
   proveedorId: string;
   fecha: string;
+  /** Lo que se escribió, en la unidad `unidadEntrada`. Al guardar se pasa a
+   *  unidades de compra (que es lo que guarda la compra). */
   cantidad: string;
-  cantidadBase: string;
+  /** "compra" (la presentación) o una unidad estándar (kg, g…). */
+  unidadEntrada: string;
   modalidadPago: ModalidadPago;
   precioTotalUsd: string;
   precioTotalBs: string;
@@ -80,12 +85,24 @@ function fmtFecha(fecha: string): string {
   });
 }
 
+/** Formas de pago que acepta un proveedor, en el orden de MODALIDADES_PAGO. */
+function modalidadesQueAcepta(p: Proveedor): ModalidadPago[] {
+  const acepta: Record<ModalidadPago, boolean> = {
+    bcv_dolar: p.aceptaBsBcvDolar,
+    bcv_euro: p.aceptaBsBcvEuro,
+    paralela: p.aceptaBsParalela,
+    efectivo: p.aceptaUsdEfectivo,
+    divisa: p.aceptaUsdDivisa,
+  };
+  return MODALIDADES_PAGO.map((m) => m.value).filter((m) => acepta[m]);
+}
+
 const emptyForm: FormState = {
   insumoId: "",
   proveedorId: "",
   fecha: todayISO(),
   cantidad: "1",
-  cantidadBase: "",
+  unidadEntrada: "compra",
   modalidadPago: "divisa",
   precioTotalUsd: "",
   precioTotalBs: "",
@@ -118,6 +135,9 @@ export function ComprasClient() {
   const [creandoProveedor, setCreandoProveedor] = useState(false);
   const [nuevoProveedor, setNuevoProveedor] = useState("");
   const [guardandoProveedor, setGuardandoProveedor] = useState(false);
+  // true si el proveedor lo sugirió el sistema al elegir el insumo (se puede
+  // reemplazar al cambiar de insumo); false si lo eligió la persona.
+  const [proveedorAuto, setProveedorAuto] = useState(false);
   // Estado de los colapsables del historial (por fecha). Guardamos solo las
   // fechas que el usuario abrió/cerró a mano; por defecto se abre la más
   // reciente (índice 0) y el resto queda colapsado.
@@ -194,6 +214,7 @@ export function ComprasClient() {
     setEditingId(null);
     setCreandoProveedor(false);
     setNuevoProveedor("");
+    setProveedorAuto(false);
   }
 
   // Alta rápida de proveedor (solo nombre) desde el desplegable; queda guardado
@@ -217,6 +238,7 @@ export function ComprasClient() {
         [...prev, nuevo].sort((a, b) => a.nombre.localeCompare(b.nombre)),
       );
       setForm((f) => ({ ...f, proveedorId: nuevo.id }));
+      setProveedorAuto(false);
       setCreandoProveedor(false);
       setNuevoProveedor("");
     } catch (e) {
@@ -239,7 +261,7 @@ export function ComprasClient() {
       proveedorId: c.proveedorId ?? "",
       fecha: c.fecha,
       cantidad: String(c.cantidad),
-      cantidadBase: "",
+      unidadEntrada: "compra",
       modalidadPago: c.modalidadPago ?? "divisa",
       precioTotalUsd: fmtMoney(c.precioTotalUsd),
       precioTotalBs: c.precioTotalBs ? fmtMoney(c.precioTotalBs) : "",
@@ -351,39 +373,62 @@ export function ComprasClient() {
   // Contenido del empaque del insumo elegido (unidades base por unidad de compra).
   const cantPorCompra = insumoSeleccionado?.cantidadPorCompra ?? 0;
 
-  // Mostrar el 2do campo (unidad base) solo si aporta algo: hay conversión y no
-  // es idéntico a la unidad de compra (ej. "unidad" con contenido 1).
-  const mostrarBase =
-    !!insumoSeleccionado &&
-    cantPorCompra > 0 &&
-    !!insumoSeleccionado.unidadBase &&
-    !(
-      insumoSeleccionado.unidadBase === insumoSeleccionado.unidadCompra &&
-      cantPorCompra === 1
-    );
+  // La cantidad se escribe en la unidad que se tenga a mano (sacos, kg, g…) y
+  // al guardar se pasa a unidades de compra.
+  const opcionesEntrada = useMemo(
+    () => (insumoSeleccionado ? opcionesCantidad(insumoSeleccionado) : []),
+    [insumoSeleccionado],
+  );
+  // "compra" equivale a la opción que vale una unidad de compra (la
+  // presentación, o kg si se compra suelto por kg).
+  const unidadEntrada = opcionesEntrada.some((o) => o.key === form.unidadEntrada)
+    ? form.unidadEntrada
+    : (opcionesEntrada.find((o) => Math.abs(o.factor - cantPorCompra) < 1e-9)?.key ??
+      opcionesEntrada[0]?.key ??
+      "");
+  const factorEntrada = factorDe(opcionesEntrada, unidadEntrada);
+  const cantidadEnBase = (Number(form.cantidad) || 0) * factorEntrada;
+  const cantidadEnCompra =
+    cantPorCompra > 0 ? cantidadEnBase / cantPorCompra : Number(form.cantidad) || 0;
 
-  // Al escribir en un campo, se convierte y llena el otro (ida y vuelta).
-  function onCantidadCompra(v: string) {
-    const n = Number(v);
-    setForm((f) => ({
-      ...f,
-      cantidad: v,
-      cantidadBase:
-        cantPorCompra > 0 && v.trim() !== "" && Number.isFinite(n)
-          ? fmtQty(n * cantPorCompra)
-          : "",
-    }));
-  }
-  function onCantidadBase(v: string) {
-    const n = Number(v);
-    setForm((f) => ({
-      ...f,
-      cantidadBase: v,
-      cantidad:
-        cantPorCompra > 0 && v.trim() !== "" && Number.isFinite(n)
-          ? fmtQty(n / cantPorCompra)
-          : "",
-    }));
+  // Proveedores que despachan cada insumo: el habitual (ficha del insumo)
+  // primero y luego los que ya le vendieron, del más reciente al más viejo.
+  const proveedoresPorInsumo = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const c of compras) {
+      if (!c.proveedorId) continue;
+      const arr = map.get(c.insumoId) ?? [];
+      if (!arr.includes(c.proveedorId)) arr.push(c.proveedorId);
+      map.set(c.insumoId, arr);
+    }
+    for (const i of insumos) {
+      if (!i.proveedorId) continue;
+      const arr = (map.get(i.id) ?? []).filter((id) => id !== i.proveedorId);
+      map.set(i.id, [i.proveedorId, ...arr]);
+    }
+    return map;
+  }, [compras, insumos]);
+
+  const proveedoresDelInsumo = useMemo(() => {
+    const ids = form.insumoId ? (proveedoresPorInsumo.get(form.insumoId) ?? []) : [];
+    return ids
+      .map((id) => proveedores.find((p) => p.id === id))
+      .filter((p): p is Proveedor => !!p);
+  }, [form.insumoId, proveedoresPorInsumo, proveedores]);
+  const otrosProveedores = proveedores.filter(
+    (p) => !proveedoresDelInsumo.some((x) => x.id === p.id),
+  );
+
+  // Elige un proveedor y, si la forma de pago actual no es una que acepta,
+  // cambia a la primera que sí acepta.
+  function elegirProveedor(id: string) {
+    setForm((f) => ({ ...f, proveedorId: id }));
+    const p = proveedores.find((x) => x.id === id);
+    if (!p) return;
+    const acepta = modalidadesQueAcepta(p);
+    if (acepta.length > 0 && !acepta.includes(form.modalidadPago)) {
+      setModalidad(acepta[0]);
+    }
   }
 
   // ── Convertidor de montos (Bs ↔ $) ──────────────────────────────────────
@@ -473,7 +518,7 @@ export function ComprasClient() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.insumoId || !form.fecha || !form.cantidad) return;
+    if (!form.insumoId || !form.fecha || !(cantidadEnCompra > 0)) return;
     setError(null);
 
     // El costo canónico siempre se guarda en USD. Si el usuario ancló en Bs, se
@@ -521,7 +566,8 @@ export function ComprasClient() {
       insumoId: form.insumoId,
       proveedorId: form.proveedorId || undefined,
       fecha: form.fecha,
-      cantidad: Number(form.cantidad),
+      // La compra guarda unidades de compra; se convierte desde lo escrito.
+      cantidad: Math.round(cantidadEnCompra * 1e6) / 1e6,
       precioTotalUsd: precioUsd,
       precioTotalBs: precioBs,
       tasaBcvUsada: tasaUsada,
@@ -544,6 +590,13 @@ export function ComprasClient() {
       } else {
         const nueva = await createCompra(input);
         setCompras((prev) => [nueva, ...prev]);
+      }
+      // Si el insumo aún no tenía proveedor habitual, queda este (así aparece
+      // primero la próxima vez).
+      if (form.proveedorId && insumoSeleccionado && !insumoSeleccionado.proveedorId) {
+        await updateInsumo(insumoSeleccionado.id, { proveedorId: form.proveedorId }).catch(
+          () => {},
+        );
       }
       // Recargar insumos para reflejar el stock y precio actualizados.
       const fresh = await listInsumos();
@@ -633,17 +686,18 @@ export function ComprasClient() {
                 value={form.insumoId}
                 onChange={(e) => {
                   const nuevoId = e.target.value;
-                  const ins = insumos.find((i) => i.id === nuevoId);
-                  const cpc = ins?.cantidadPorCompra ?? 0;
-                  const n = Number(form.cantidad);
-                  setForm({
-                    ...form,
+                  setForm((f) => ({
+                    ...f,
                     insumoId: nuevoId,
-                    cantidadBase:
-                      cpc > 0 && form.cantidad.trim() !== "" && Number.isFinite(n)
-                        ? fmtQty(n * cpc)
-                        : "",
-                  });
+                    unidadEntrada: "compra",
+                  }));
+                  // Sugerir su proveedor (habitual o el último que le vendió) si
+                  // aún no se eligió uno a mano.
+                  const sugerido = proveedoresPorInsumo.get(nuevoId)?.[0];
+                  if (sugerido && (!form.proveedorId || proveedorAuto)) {
+                    elegirProveedor(sugerido);
+                    setProveedorAuto(true);
+                  }
                 }}
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
               >
@@ -666,17 +720,40 @@ export function ComprasClient() {
                     setNuevoProveedor("");
                   } else {
                     setCreandoProveedor(false);
-                    setForm({ ...form, proveedorId: v });
+                    setProveedorAuto(false);
+                    elegirProveedor(v);
                   }
                 }}
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
               >
                 <option value="">— Ninguno —</option>
-                {proveedores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
+                {proveedoresDelInsumo.length > 0 ? (
+                  <>
+                    <optgroup label="Despachan este insumo">
+                      {proveedoresDelInsumo.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.nombre}
+                          {p.id === insumoSeleccionado?.proveedorId ? " · habitual" : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {otrosProveedores.length > 0 && (
+                      <optgroup label="Otros proveedores">
+                        {otrosProveedores.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.nombre}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </>
+                ) : (
+                  proveedores.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre}
+                    </option>
+                  ))
+                )}
                 <option value="__nuevo__">+ Nuevo proveedor…</option>
               </select>
               {creandoProveedor && (
@@ -721,52 +798,52 @@ export function ComprasClient() {
             />
           </label>
 
-          <div className="text-sm text-cacao">
+          <label className="text-sm text-cacao block">
             Cantidad comprada
-            <div className="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <input
-                  type="number"
-                  step="0.0001"
-                  min="0"
-                  required
-                  placeholder="0"
-                  value={form.cantidad}
-                  onChange={(e) => onCantidadCompra(e.target.value)}
-                  className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-                />
-                <span className="text-xs text-cacao-mute block mt-0.5">
-                  en{" "}
-                  {insumoSeleccionado
-                    ? insumoSeleccionado.unidadCompra
-                    : "unidad de compra"}
-                </span>
-              </div>
-              {mostrarBase && (
-                <div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="0"
-                    value={form.cantidadBase}
-                    onChange={(e) => onCantidadBase(e.target.value)}
-                    className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-                  />
-                  <span className="text-xs text-cacao-mute block mt-0.5">
-                    o en {insumoSeleccionado?.unidadBase} (más preciso)
-                  </span>
-                </div>
-              )}
-            </div>
-            {mostrarBase && (
-              <p className="text-[11px] text-cacao-mute mt-1.5">
-                Llena el que prefieras — se convierten solos (1{" "}
-                {insumoSeleccionado?.unidadCompra} = {fmtQty(cantPorCompra)}{" "}
-                {insumoSeleccionado?.unidadBase}).
-              </p>
+            {insumoSeleccionado ? (
+              <CantidadUnidad
+                valor={form.cantidad}
+                unidad={unidadEntrada}
+                opciones={opcionesEntrada}
+                required
+                onChange={(v, u) => {
+                  // Al cambiar de unidad se convierte el número para que la
+                  // cantidad comprada no cambie (2 sacos → 90 kg).
+                  if (u !== unidadEntrada) {
+                    const f = factorDe(opcionesEntrada, u);
+                    setForm({
+                      ...form,
+                      unidadEntrada: u,
+                      cantidad:
+                        form.cantidad.trim() === ""
+                          ? ""
+                          : fmtQty((Number(form.cantidad) * factorEntrada) / f),
+                    });
+                  } else {
+                    setForm({ ...form, cantidad: v });
+                  }
+                }}
+              />
+            ) : (
+              <input
+                type="number"
+                disabled
+                placeholder="Elige primero el insumo"
+                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-marfil-soft"
+              />
             )}
-          </div>
+            {insumoSeleccionado && cantidadEnBase > 0 && (
+              <span className="text-[11px] text-cacao-mute block mt-1">
+                Entran{" "}
+                <b>{displayCantidad(cantidadEnBase, insumoSeleccionado.unidadBase)}</b>
+                {unidadEntrada !== "compra" &&
+                  opcionesEntrada.some((o) => o.key === "compra") && (
+                    <> ({fmtQty(cantidadEnCompra)} × {insumoSeleccionado.unidadCompra})</>
+                  )}{" "}
+                al stock.
+              </span>
+            )}
+          </label>
 
           <label className="text-sm text-cacao block">
             Modalidad de pago

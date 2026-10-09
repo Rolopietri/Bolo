@@ -21,13 +21,17 @@ import {
   type CategoriaInsumo,
 } from "@/lib/data/categoriasInsumo";
 import { UnitCalculator } from "@/components/UnitCalculator";
-import { UnidadSelect } from "@/components/UnidadSelect";
+import { PresentacionPicker } from "@/components/PresentacionPicker";
+import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
+import { leerPresentacion, SUELTO, TIPOS_PRESENTACION } from "@/lib/presentacion";
 import {
   convert,
   areCompatible,
   canonica,
   displayCantidad,
-  unidadesEnUso,
+  getUnit,
+  opcionesCantidad,
+  precioLegible,
 } from "@/lib/units";
 import { stockLibre } from "@/lib/types";
 import { normalizarBusqueda } from "@/lib/text";
@@ -91,7 +95,9 @@ type FormState = {
   unidadBase: string;
   precioCompraUsd: string;
   stockTotal: string;
-  stockUnidad: "base" | "compra";
+  /** Unidad en que se escriben stock y mínimo: "compra" (la presentación) o
+   *  una unidad estándar (kg, g…). Se convierte a unidad base al guardar. */
+  stockUnidad: string;
   stockMinimo: string;
   mermaCoccionPorc: string;
   proveedorId: string;
@@ -105,8 +111,8 @@ const emptyForm: FormState = {
   cantidadPorCompra: "1",
   unidadBase: "",
   precioCompraUsd: "",
-  stockTotal: "0",
-  stockUnidad: "base",
+  stockTotal: "",
+  stockUnidad: "compra",
   stockMinimo: "",
   mermaCoccionPorc: "",
   proveedorId: "",
@@ -128,9 +134,16 @@ export function InsumosClient({
 } = {}) {
   const [items, setItems] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
-  // Unidades que ya existen en el sistema, SEPARADAS: base va al desplegable de
-  // unidad base; compra va al de unidad de compra. No se mezclan.
-  const unidadesSistema = useMemo(() => unidadesEnUso(items), [items]);
+  // Presentaciones escritas a mano en otros insumos (ej. "Cesta"), para
+  // ofrecerlas en el desplegable junto a las predeterminadas.
+  const tiposEnUso = useMemo(() => {
+    const set = new Set<string>();
+    for (const i of items) {
+      const t = leerPresentacion(i).tipo;
+      if (t && t !== SUELTO && !/\d/.test(t) && !TIPOS_PRESENTACION.includes(t)) set.add(t);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [items]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /** Error al CARGAR la pantalla (distinto de los errores de guardar/borrar). */
@@ -303,9 +316,7 @@ export function InsumosClient({
       cantidadPorCompra: String(ins.cantidadPorCompra),
       unidadBase: ins.unidadBase,
       precioCompraUsd: ins.precioCompraUsd?.toString() ?? "",
-      stockTotal: String(ins.stockTotal),
-      stockUnidad: "base",
-      stockMinimo: ins.stockMinimo?.toString() ?? "",
+      ...stockEnUnidadLegible(ins),
       mermaCoccionPorc: ins.mermaCoccionPorc?.toString() ?? "",
       proveedorId: ins.proveedorId ?? "",
       notas: ins.notas ?? "",
@@ -320,22 +331,34 @@ export function InsumosClient({
     });
   }
 
-  // Cambia la unidad en que se carga el stock (base ↔ unidad de compra),
-  // convirtiendo el valor actual para que la cantidad física no cambie.
-  function cambiarUnidadStock(modo: "base" | "compra") {
-    if (modo === form.stockUnidad) return;
-    const cantPC = Number(form.cantidadPorCompra) || 1;
-    // Convierte un valor entre unidad base y unidad de compra. Mantiene el
-    // vacío como vacío (el mínimo es opcional). Aplica a stock total y mínimo.
-    const conv = (s: string) => {
-      if (s.trim() === "") return s;
-      const v = Number(s) || 0;
-      const c = modo === "compra" ? v / cantPC : v * cantPC;
-      return String(Math.round(c * 10000) / 10000);
+  // Opciones para escribir stock y mínimo (presentación, kg, g…) y la elegida.
+  const opcionesStock = useMemo(
+    () =>
+      opcionesCantidad({
+        unidadBase: form.unidadBase,
+        unidadCompra: form.unidadCompra,
+        cantidadPorCompra: Number(form.cantidadPorCompra) || 0,
+      }),
+    [form.unidadBase, form.unidadCompra, form.cantidadPorCompra],
+  );
+  const unidadStock = opcionesStock.some((o) => o.key === form.stockUnidad)
+    ? form.stockUnidad
+    : (opcionesStock.find((o) => o.factor === 1)?.key ?? opcionesStock[0]?.key ?? "");
+  const factorStock = factorDe(opcionesStock, unidadStock);
+
+  // Cambia la unidad en que se escriben stock y mínimo, convirtiendo los
+  // valores para que la cantidad física no cambie (2 sacos → 90 kg).
+  function cambiarUnidadStock(key: string) {
+    if (key === unidadStock) return;
+    const nuevo = factorDe(opcionesStock, key);
+    const conv = (v: string) => {
+      if (v.trim() === "") return v;
+      const n = Number(v) || 0;
+      return String(Math.round(((n * factorStock) / nuevo) * 10000) / 10000);
     };
     setForm({
       ...form,
-      stockUnidad: modo,
+      stockUnidad: key,
       stockTotal: conv(form.stockTotal),
       stockMinimo: conv(form.stockMinimo),
     });
@@ -344,6 +367,10 @@ export function InsumosClient({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.nombre.trim()) return;
+    if (!form.unidadCompra.trim() || !form.unidadBase.trim()) {
+      setError("Elige la presentación del insumo y cuánto trae.");
+      return;
+    }
     setError(null);
     const cantPC = Number(form.cantidadPorCompra) || 1;
     const precioC = form.precioCompraUsd === "" ? null : Number(form.precioCompraUsd);
@@ -362,19 +389,16 @@ export function InsumosClient({
       unidadBase: form.unidadBase.trim() || "unidad",
       precioCompraUsd: precioC,
       precioBaseUsd: precioB,
-      // Si cargó el stock en unidad de compra (ej. botellas), convertir a
-      // unidad base multiplicando por cuántas unidades base trae el empaque.
-      stockTotal:
-        (Number(form.stockTotal) || 0) *
-        (form.stockUnidad === "compra" ? cantPC : 1),
+      // Stock y mínimo se escriben en la unidad elegida (saco, kg…): se pasan
+      // a unidad base con su factor.
+      stockTotal: (Number(form.stockTotal) || 0) * factorStock,
       // OJO: NO incluir stockComprometido acá. Es manejado por el sistema
       // (planes de producción) y al editar pisaría las reservas a cero. En
       // creación se setea 0 explícitamente abajo.
       stockMinimo:
         form.stockMinimo === ""
           ? null
-          : Number(form.stockMinimo) *
-            (form.stockUnidad === "compra" ? cantPC : 1),
+          : Number(form.stockMinimo) * factorStock,
       mermaCoccionPorc:
         form.mermaCoccionPorc === "" ? null : Number(form.mermaCoccionPorc),
       proveedorId: form.proveedorId || undefined,
@@ -768,114 +792,28 @@ export function InsumosClient({
               )}
             </label>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <label className="text-sm text-cacao">
-              Unidad de compra (ej: kg, paq 12 unid)
-              <UnidadSelect
-                permitirOtra
-                incluirEstandar={false}
-                unidadesExtra={unidadesSistema.compra}
-                value={form.unidadCompra}
-                onChange={(v) => {
-                  // Si las unidades nuevas son convertibles y la cantidad actual
-                  // sigue siendo el default (1) o vacía, autocompletamos el ratio.
-                  const nuevoRatio = ratioEsperado(v, form.unidadBase);
-                  const cantActual = Number(form.cantidadPorCompra);
-                  const debeAutocompletar =
-                    nuevoRatio !== null &&
-                    (form.cantidadPorCompra === "" ||
-                      form.cantidadPorCompra === "1" ||
-                      !Number.isFinite(cantActual));
-                  setForm({
-                    ...form,
-                    unidadCompra: v,
-                    cantidadPorCompra: debeAutocompletar
-                      ? String(nuevoRatio)
-                      : form.cantidadPorCompra,
-                  });
-                }}
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
-              />
-            </label>
-            <label className="text-sm text-cacao">
-              Cantidad por compra (en unidad base)
-              <input
-                type="number"
-                step="0.0001"
-                min="0"
-                value={form.cantidadPorCompra}
-                onChange={(e) =>
-                  setForm({ ...form, cantidadPorCompra: e.target.value })
-                }
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-              />
-            </label>
-            <label className="text-sm text-cacao">
-              Unidad base (ej: g, ml, unidad)
-              <UnidadSelect
-                unidadesExtra={unidadesSistema.base}
-                value={form.unidadBase}
-                onChange={(v) => {
-                  const oldBase = form.unidadBase;
-                  const factor =
-                    oldBase && v && oldBase !== v && areCompatible(oldBase, v)
-                      ? convert(1, oldBase, v)
-                      : null;
-                  const cantActual = Number(form.cantidadPorCompra);
-                  const esDefault =
-                    form.cantidadPorCompra === "" ||
-                    form.cantidadPorCompra === "1" ||
-                    !Number.isFinite(cantActual);
-
-                  // Cambio a unidad compatible (g↔kg, ml↔L) con valores reales:
-                  // convertir stock, mínimo y contenido para que la cantidad
-                  // física NO cambie (ej. 500 g → 0.5 kg).
-                  if (factor !== null && !esDefault) {
-                    const conv = (s: string) => {
-                      if (s.trim() === "") return s;
-                      const n = Number(s);
-                      if (!Number.isFinite(n)) return s;
-                      return String(Math.round(n * factor * 10000) / 10000);
-                    };
-                    setForm({
-                      ...form,
-                      unidadBase: v,
-                      cantidadPorCompra: conv(form.cantidadPorCompra),
-                      stockTotal:
-                        form.stockUnidad === "base"
-                          ? conv(form.stockTotal)
-                          : form.stockTotal,
-                      stockMinimo:
-                        form.stockUnidad === "base"
-                          ? conv(form.stockMinimo)
-                          : form.stockMinimo,
-                    });
-                    return;
+          <PresentacionPicker
+            key={editingId ?? "nuevo"}
+            inicial={
+              editingId
+                ? {
+                    unidadCompra: form.unidadCompra,
+                    cantidadPorCompra: Number(form.cantidadPorCompra) || 0,
+                    unidadBase: form.unidadBase,
                   }
-
-                  // Si el contenido estaba en default, autocompletar el ratio.
-                  const nuevoRatio = ratioEsperado(form.unidadCompra, v);
-                  setForm({
-                    ...form,
-                    unidadBase: v,
-                    cantidadPorCompra:
-                      nuevoRatio !== null && esDefault
-                        ? String(nuevoRatio)
-                        : form.cantidadPorCompra,
-                  });
-                }}
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
-              />
-            </label>
-          </div>
-
-          {/* Hint visual: relación entre unidad de compra y unidad base */}
-          <UnidadesHint
-            unidadCompra={form.unidadCompra}
-            unidadBase={form.unidadBase}
-            cantidadPorCompra={form.cantidadPorCompra}
-            onAplicarRatio={(r) =>
-              setForm({ ...form, cantidadPorCompra: String(r) })
+                : undefined
+            }
+            baseActual={
+              editingId ? items.find((x) => x.id === editingId)?.unidadBase : undefined
+            }
+            tiposEnUso={tiposEnUso}
+            onChange={(c) =>
+              setForm((f) => ({
+                ...f,
+                unidadCompra: c?.unidadCompra ?? "",
+                cantidadPorCompra: c?.cantidadPorCompra ?? "",
+                unidadBase: c?.unidadBase ?? "",
+              }))
             }
           />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -894,65 +832,25 @@ export function InsumosClient({
             </label>
             <label className="text-sm text-cacao">
               Stock total (físico)
-              <input
-                type="number"
-                step="0.0001"
-                min="0"
-                value={form.stockTotal}
-                onChange={(e) =>
-                  setForm({ ...form, stockTotal: e.target.value })
+              <CantidadUnidad
+                valor={form.stockTotal}
+                unidad={unidadStock}
+                opciones={opcionesStock}
+                onChange={(v, u) =>
+                  u !== unidadStock
+                    ? cambiarUnidadStock(u)
+                    : setForm({ ...form, stockTotal: v })
                 }
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
               />
-              {/* Selector de unidad para cargar el stock: base o unidad de
-                  compra (ej. botellas). Va DEBAJO del input para no desalinear
-                  el campo respecto a los demás de la fila. Aparece siempre que
-                  haya una conversión real: unidades distintas o empaque > 1. Se
-                  oculta solo cuando compra y base son la misma unidad 1:1 (ej.
-                  kg→kg), donde alternar no cambiaría nada. */}
-              {Number(form.cantidadPorCompra) > 0 &&
-                !(
-                  form.unidadBase === form.unidadCompra &&
-                  Number(form.cantidadPorCompra) === 1
-                ) && (
-                  <div className="mt-1 flex flex-wrap items-center gap-1 text-[11px]">
-                    <span className="text-cacao-mute">Contar en:</span>
-                    <button
-                      type="button"
-                      onClick={() => cambiarUnidadStock("base")}
-                      className={`px-2 py-0.5 rounded-full ring-1 ${
-                        form.stockUnidad === "base"
-                          ? "bg-cacao text-white ring-cacao"
-                          : "ring-marfil text-cacao-soft"
-                      }`}
-                    >
-                      {form.unidadBase || "u. base"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => cambiarUnidadStock("compra")}
-                      className={`px-2 py-0.5 rounded-full ring-1 ${
-                        form.stockUnidad === "compra"
-                          ? "bg-cacao text-white ring-cacao"
-                          : "ring-marfil text-cacao-soft"
-                      }`}
-                    >
-                      {form.unidadCompra || "empaque"}
-                    </button>
-                  </div>
-                )}
               <span className="text-[10px] text-cacao-mute block mt-1">
-                {form.stockUnidad === "compra" &&
-                Number(form.cantidadPorCompra) !== 1 ? (
+                {factorStock !== 1 && Number(form.stockTotal) > 0 ? (
                   <>
-                    Contando en <b>{form.unidadCompra || "empaque"}</b> → se
-                    guardan{" "}
+                    Son{" "}
                     <b>
-                      {formatN(
-                        (Number(form.stockTotal) || 0) *
-                          (Number(form.cantidadPorCompra) || 1),
-                      )}{" "}
-                      {form.unidadBase}
+                      {displayCantidad(
+                        Number(form.stockTotal) * factorStock,
+                        form.unidadBase,
+                      )}
                     </b>
                     .
                   </>
@@ -968,31 +866,29 @@ export function InsumosClient({
             </label>
             <label className="text-sm text-cacao">
               Stock mínimo (alerta si baja)
-              <input
-                type="number"
-                step="0.0001"
-                min="0"
-                value={form.stockMinimo}
-                onChange={(e) =>
-                  setForm({ ...form, stockMinimo: e.target.value })
+              <CantidadUnidad
+                valor={form.stockMinimo}
+                unidad={unidadStock}
+                opciones={opcionesStock}
+                placeholder="Opcional"
+                onChange={(v, u) =>
+                  u !== unidadStock
+                    ? cambiarUnidadStock(u)
+                    : setForm({ ...form, stockMinimo: v })
                 }
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
               />
-              {form.stockUnidad === "compra" &&
-                Number(form.cantidadPorCompra) !== 1 &&
-                form.stockMinimo.trim() !== "" && (
-                  <span className="text-[10px] text-cacao-mute block mt-1">
-                    En <b>{form.unidadCompra || "empaque"}</b> → alerta en{" "}
-                    <b>
-                      {formatN(
-                        (Number(form.stockMinimo) || 0) *
-                          (Number(form.cantidadPorCompra) || 1),
-                      )}{" "}
-                      {form.unidadBase}
-                    </b>
-                    .
-                  </span>
-                )}
+              {factorStock !== 1 && Number(form.stockMinimo) > 0 && (
+                <span className="text-[10px] text-cacao-mute block mt-1">
+                  Alerta cuando queden menos de{" "}
+                  <b>
+                    {displayCantidad(
+                      Number(form.stockMinimo) * factorStock,
+                      form.unidadBase,
+                    )}
+                  </b>
+                  .
+                </span>
+              )}
             </label>
             <label className="text-sm text-cacao">
               Merma por procesamiento (%)
@@ -1112,8 +1008,7 @@ export function InsumosClient({
                           )}
                         </div>
                         <div className="text-xs text-cacao-mute mt-0.5">
-                          {i.unidadCompra} · {i.cantidadPorCompra}{" "}
-                          {i.unidadBase}
+                          {etiquetaPresentacion(i)}
                         </div>
                       </div>
                       <div className="col-span-4 sm:col-span-3">
@@ -1148,7 +1043,7 @@ export function InsumosClient({
                         )}
                         {i.stockMinimo !== null && i.stockMinimo > 0 && (
                           <div className="text-xs text-cacao-mute">
-                            min: {i.stockMinimo}
+                            mín. {displayCantidad(i.stockMinimo, i.unidadBase)}
                           </div>
                         )}
                       </div>
@@ -1367,7 +1262,10 @@ function PrecioCelda({
       </div>
       {insumo.precioBaseUsd !== null && (
         <div className="text-xs text-cacao-soft">
-          ${insumo.precioBaseUsd.toFixed(5)} / {insumo.unidadBase}
+          {(() => {
+            const p = precioLegible(insumo.precioBaseUsd, insumo.unidadBase);
+            return `$${p.precio < 0.01 ? p.precio.toFixed(5) : p.precio.toFixed(2)} / ${p.unidad}`;
+          })()}
         </div>
       )}
       {insumo.precioCompraUsd !== null &&
@@ -1429,74 +1327,31 @@ function PrecioCelda({
   );
 }
 
-/**
- * Hint contextual debajo de la fila de unidades. Tres estados:
- *  • Verde:   la cantidad por compra coincide con la conversión esperada.
- *  • Amarillo: las unidades son convertibles pero la cantidad NO coincide
- *              — muestra el valor sugerido con botón "Aplicar".
- *  • Gris:    unidades no convertibles (ej "saco" o "g"+"g") — solo info.
- *  • Oculto:  ambas unidades vacías.
- */
-function UnidadesHint({
-  unidadCompra,
-  unidadBase,
-  cantidadPorCompra,
-  onAplicarRatio,
-}: {
-  unidadCompra: string;
-  unidadBase: string;
-  cantidadPorCompra: string;
-  onAplicarRatio: (ratio: number) => void;
-}) {
-  if (!unidadCompra && !unidadBase) return null;
-  const esperado = ratioEsperado(unidadCompra, unidadBase);
-  const cant = Number(cantidadPorCompra);
-  const uc = canonica(unidadCompra);
-  const ub = canonica(unidadBase);
+function stockEnUnidadLegible(ins: Insumo): {
+  stockTotal: string;
+  stockMinimo: string;
+  stockUnidad: string;
+} {
+  const ops = opcionesCantidad(ins);
+  const grande = ops.find((o) => o.key === "kg" || o.key === "L");
+  const op =
+    grande && (ins.stockTotal >= grande.factor || ins.stockTotal === 0)
+      ? grande
+      : (ops.find((o) => o.factor === 1) ?? ops[0]);
+  const f = op?.factor ?? 1;
+  const r = (n: number) => String(Math.round((n / f) * 10000) / 10000);
+  return {
+    stockTotal: r(ins.stockTotal),
+    stockMinimo: ins.stockMinimo != null ? r(ins.stockMinimo) : "",
+    stockUnidad: op?.key ?? "",
+  };
+}
 
-  if (esperado === null) {
-    // Unidades no convertibles automáticamente — explicación neutra
-    return (
-      <div className="mt-2 text-xs text-cacao-soft font-serif italic">
-        Tip: &ldquo;Cantidad por compra&rdquo; es cuántas {ub || "unidades base"}{" "}
-        hay en 1 {uc || "unidad de compra"}.
-      </div>
-    );
-  }
-
-  const problema = Number.isFinite(cant)
-    ? detectarInsumoConProblema(unidadCompra, unidadBase, cant)
-    : null;
-
-  if (problema) {
-    return (
-      <div className="mt-2 rounded-lg ring-1 ring-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 flex items-start justify-between gap-3">
-        <span>
-          <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />
-          <strong>Revisar:</strong> 1 {uc} = {formatN(esperado)} {ub}, así
-          que la cantidad por compra debería ser{" "}
-          <strong>{formatN(esperado)}</strong> (tienes{" "}
-          <strong>{formatN(cant)}</strong>). Si no lo corriges, el precio por{" "}
-          {ub} sale{" "}
-          {(esperado / Math.max(cant, 0.0001)).toFixed(0)}× más alto/bajo de lo
-          real.
-        </span>
-        <button
-          type="button"
-          onClick={() => onAplicarRatio(esperado)}
-          className="shrink-0 rounded-lg bg-amber-900 text-white px-3 py-1 text-[10px] uppercase tracking-widest hover:bg-amber-950"
-        >
-          Aplicar {formatN(esperado)}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="mt-2 rounded-lg ring-1 ring-emerald-200 bg-emerald-50 p-2.5 text-xs text-emerald-900">
-      ✓ 1 {uc} = {formatN(esperado)} {ub} — cantidad por compra correcta.
-    </div>
-  );
+/** Presentación para el listado: "Saco 45 kg", o "kg" si es suelto. Si el
+ *  texto no dice cuánto trae, se agrega (ej. "cesta · 6 kg"). */
+function etiquetaPresentacion(i: Insumo): string {
+  if (getUnit(i.unidadCompra) || /\d/.test(i.unidadCompra)) return i.unidadCompra;
+  return `${i.unidadCompra} · ${displayCantidad(i.cantidadPorCompra, i.unidadBase)}`;
 }
 
 function formatN(n: number): string {

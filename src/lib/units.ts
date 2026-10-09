@@ -124,10 +124,10 @@ function fmtNum(n: number, maxDec: number): string {
 
 /**
  * Formato de cantidad para MOSTRAR en pantalla (solo visual — no cambia datos).
- * Si el monto es chico y la unidad base es Kg o L, lo muestra en g o ml para
- * que no se pierda precisión al redondear (ej. 0.065 Kg → "65 g"). En montos
- * grandes deja la unidad original (ej. 2.5 Kg). El cálculo interno siempre
- * sigue en la unidad base.
+ * Elige la unidad más legible de la misma dimensión: montos grandes suben
+ * (80000 g → "80 kg", 1500 ml → "1.5 L") y montos chicos bajan (0.065 kg →
+ * "65 g") para no perder precisión. El cálculo interno siempre sigue en la
+ * unidad base.
  */
 export function displayCantidad(
   value: number,
@@ -139,7 +139,74 @@ export function displayCantidad(
     if (info.canonica === "kg") return `${fmtNum(value * 1000, 1)} g`;
     if (info.canonica === "L") return `${fmtNum(value * 1000, 1)} ml`;
   }
+  if (info && abs >= 1000) {
+    if (info.canonica === "g") return `${fmtNum(value / 1000, 3)} kg`;
+    if (info.canonica === "ml") return `${fmtNum(value / 1000, 3)} L`;
+    if (info.canonica === "mg") return `${fmtNum(value / 1000, 3)} g`;
+  }
   return `${fmtNum(value, 3)} ${unidadBase ?? ""}`.trim();
+}
+
+/**
+ * Precio por unidad base expresado en una unidad legible: en vez de
+ * "$0.00084 / g" devuelve "$0.84 / kg". Para unidades sin escala (unidad,
+ * botella…) deja la unidad tal cual.
+ */
+export function precioLegible(
+  precioPorBase: number,
+  unidadBase: string | undefined | null,
+): { precio: number; unidad: string } {
+  const c = getUnit(unidadBase)?.canonica;
+  if (c === "g") return { precio: precioPorBase * 1000, unidad: "kg" };
+  if (c === "ml") return { precio: precioPorBase * 1000, unidad: "L" };
+  if (c === "mg") return { precio: precioPorBase * 1000, unidad: "g" };
+  return { precio: precioPorBase, unidad: unidadBase ?? "" };
+}
+
+/** Unidades estándar con las que se puede expresar una cantidad guardada en
+ *  `unidadBase` (ej. g → kg y g). Si la unidad no es convertible, solo ella. */
+export function unidadesCompatibles(unidadBase: string | undefined | null): string[] {
+  const info = getUnit(unidadBase);
+  if (!info) return unidadBase ? [unidadBase] : [];
+  if (info.dimension === "peso")
+    return info.canonica === "mg" ? ["g", "mg"] : ["kg", "g"];
+  if (info.dimension === "volumen") return ["L", "ml"];
+  return [info.canonica];
+}
+
+export type OpcionCantidad = {
+  /** "compra" para la presentación; si no, la unidad canónica. */
+  key: string;
+  label: string;
+  /** Cuántas unidades base hay en 1 de esta opción. */
+  factor: number;
+};
+
+/**
+ * Opciones para escribir una cantidad de un insumo en la unidad que la persona
+ * tenga a mano: su presentación (ej. "Saco 45 kg") y las unidades estándar
+ * compatibles (kg, g…). El resultado se pasa a unidad base con `factor`.
+ */
+export function opcionesCantidad(ins: {
+  unidadBase: string;
+  unidadCompra?: string | null;
+  cantidadPorCompra?: number | null;
+}): OpcionCantidad[] {
+  const out: OpcionCantidad[] = [];
+  const cpc = ins.cantidadPorCompra ?? 0;
+  const compra = (ins.unidadCompra ?? "").trim();
+  const estandar = unidadesCompatibles(ins.unidadBase);
+  const compraEsEstandar = estandar.some(
+    (u) => normalize(u) === normalize(canonica(compra)),
+  );
+  if (compra && cpc > 0 && !compraEsEstandar) {
+    out.push({ key: "compra", label: compra, factor: cpc });
+  }
+  for (const u of estandar) {
+    const f = convert(1, u, ins.unidadBase) ?? (normalize(u) === normalize(ins.unidadBase) ? 1 : null);
+    if (f != null) out.push({ key: canonica(u), label: canonica(u), factor: f });
+  }
+  return out;
 }
 
 /** True si dos unidades pertenecen a la misma dimensión Y son conocidas. */
