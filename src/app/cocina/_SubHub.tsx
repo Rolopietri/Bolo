@@ -18,7 +18,7 @@ export function SubHubGrid({ modulos }: { modulos: SubModulo[] }) {
         <Link
           key={m.href}
           href={m.href}
-          className="group bg-white p-7 sm:p-8 transition-colors duration-300 hover:bg-marfil-soft"
+          className="group bg-white p-7 sm:p-8 sm:odd:last:col-span-2 transition-colors duration-300 hover:bg-marfil-soft"
         >
           <h2 className="text-xl font-medium tracking-tight text-cacao">
             {m.label}

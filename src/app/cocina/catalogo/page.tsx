@@ -13,6 +13,11 @@ const SUBMODULOS: SubModulo[] = [
     label: "Proveedores",
     desc: "Contactos y modalidades de pago (Bs BCV, paralela, USD efectivo o divisa).",
   },
+  {
+    href: "/cocina/menaje",
+    label: "Menaje",
+    desc: "Vajilla, cristalería, cubiertos y utensilios: bajas por rotura o pérdida y compras con factura.",
+  },
 ];
 
 export default function CatalogoMateriasPrimasPage() {
@@ -29,8 +34,8 @@ export default function CatalogoMateriasPrimasPage() {
               Insumos e Inventario
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft max-w-2xl">
-              Tus ingredientes y proveedores. Dentro de Insumos está el estado
-              del inventario: stock, alertas, mermas y auditoría. Costeo usa estos datos para calcular
+              Tus ingredientes, proveedores y menaje. Dentro de Insumos está el
+              estado del inventario: stock, alertas, mermas y auditoría. Costeo usa estos datos para calcular
               el costo de tus recetas, y Compras, Ventas y Pedidos mueve el
               inventario.
             </p>

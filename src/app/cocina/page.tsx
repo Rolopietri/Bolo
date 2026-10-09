@@ -14,7 +14,7 @@ const modulos: {
   {
     href: "/cocina/catalogo",
     label: "Insumos e Inventario",
-    desc: "Insumos y proveedores, con stock, alertas, mermas y auditoría dentro de Insumos.",
+    desc: "Insumos, proveedores y menaje, con stock, alertas, mermas y auditoría dentro de Insumos.",
     clave: "insumos",
   },
   {
@@ -28,12 +28,6 @@ const modulos: {
     label: "Compras, Ventas y Pedidos",
     desc: "Registra compras y ventas y consulta el pedido sugerido.",
     clave: "operaciones",
-  },
-  {
-    href: "/cocina/menaje",
-    label: "Menaje",
-    desc: "Vajilla, cristalería, cubiertos y utensilios — bajas y compras con factura.",
-    clave: "menaje",
   },
 ];
 
@@ -141,7 +135,7 @@ export default function CocinaHub() {
               <Link
                 key={m.href}
                 href={m.href}
-                className="group bg-white p-7 sm:p-8 transition-colors duration-300 hover:bg-marfil-soft"
+                className="group bg-white p-7 sm:p-8 sm:odd:last:col-span-2 transition-colors duration-300 hover:bg-marfil-soft"
               >
                 <div className="flex items-baseline justify-end">
                   <span className="font-display text-[10px] tracking-[0.35em] text-cacao-soft">
