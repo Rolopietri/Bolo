@@ -6,9 +6,15 @@ import { moduloActivo } from "@/lib/modulos.mjs";
 // mesas cae en /wifi y el formulario postea a /api/wifi/registro).
 // /wifi y /api/wifi/registro solo son públicas si el módulo WiFi está activo
 // (BOLO_MODULOS incluye "wifi"); en Bolo está retirado por defecto.
+//
+// /operador y /api/operador son INDEPENDIENTES del login de bolo: tienen su
+// propia contraseña (OPERADOR_PASSWORD) y candado de servidor. Por eso van aquí
+// (no exigen sesión de bolo); su seguridad la pone el token de operador.
 const PUBLIC_PATHS = [
   "/login",
   "/auth",
+  "/operador",
+  "/api/operador",
   ...(moduloActivo("wifi", process.env.BOLO_MODULOS) ? ["/wifi", "/api/wifi/registro"] : []),
 ];
 
