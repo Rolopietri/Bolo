@@ -1,21 +1,25 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
-import { SubHubGrid, type SubModulo } from "../_SubHub";
+import { MenuLista, type MenuItem } from "@/components/MenuLista";
+import { BoxIcon, TruckIcon, UtensilsIcon } from "@/components/icons";
 
-const SUBMODULOS: SubModulo[] = [
+const SUBMODULOS: MenuItem[] = [
   {
     href: "/cocina/insumos",
     label: "Insumos",
+    Icon: BoxIcon,
     desc: "Ficha de cada materia prima: precio y stock, con sus alertas, mermas y pérdidas y la auditoría de cada cambio en el mismo lugar.",
   },
   {
     href: "/cocina/proveedores",
     label: "Proveedores",
+    Icon: TruckIcon,
     desc: "Contactos y modalidades de pago (Bs BCV, paralela, USD efectivo o divisa).",
   },
   {
     href: "/cocina/menaje",
     label: "Menaje",
+    Icon: UtensilsIcon,
     desc: "Vajilla, cristalería, cubiertos y utensilios: bajas por rotura o pérdida y compras con factura.",
   },
 ];
@@ -47,7 +51,7 @@ export default function CatalogoMateriasPrimasPage() {
             ← Cocina
           </Link>
         </section>
-        <SubHubGrid modulos={SUBMODULOS} />
+        <MenuLista items={SUBMODULOS} />
       </main>
     </>
   );

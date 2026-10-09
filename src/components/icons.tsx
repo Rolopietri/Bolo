@@ -251,3 +251,73 @@ export function SearchIcon(props: SVGProps<SVGSVGElement>) {
     </Svg>
   );
 }
+
+/** Caja / paquete (insumos, inventario). */
+export function BoxIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M21 8 12 3 3 8v8l9 5 9-5V8Z" />
+      <path d="m3 8 9 5 9-5M12 13v8" />
+    </Svg>
+  );
+}
+
+/** Camión de reparto (proveedores). */
+export function TruckIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M2 6h12v10H2zM14 10h4l3 3v3h-7" />
+      <circle cx="6" cy="18" r="1.8" />
+      <circle cx="17" cy="18" r="1.8" />
+    </Svg>
+  );
+}
+
+/** Tenedor y cuchillo (menaje, cocina). */
+export function UtensilsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M6 3v7a2 2 0 0 0 2 2v9M10 3v7a2 2 0 0 1-2 2M8 3v6" />
+      <path d="M17 21V3c-2 1.5-3 4-3 7v3h3" />
+    </Svg>
+  );
+}
+
+/** Libro abierto (recetario). */
+export function BookIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M12 6.5C10 5 7 4.5 3 4.5v14c4 0 7 .5 9 2 2-1.5 5-2 9-2v-14c-4 0-7 .5-9 2Z" />
+      <path d="M12 6.5v14" />
+    </Svg>
+  );
+}
+
+/** Recibo / ticket (ventas). */
+export function ReceiptIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M5 3h14v18l-2.5-1.5L14 21l-2-1.5L10 21l-2.5-1.5L5 21V3Z" />
+      <path d="M9 8h6M9 12h6" />
+    </Svg>
+  );
+}
+
+/** Portapapeles con lista (pedidos, listas). */
+export function ClipboardIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <rect x="5" y="4" width="14" height="17" rx="2" />
+      <path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3" />
+    </Svg>
+  );
+}
+
+/** Rayo (acción rápida). */
+export function BoltIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" />
+    </Svg>
+  );
+}

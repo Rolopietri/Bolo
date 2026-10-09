@@ -1,28 +1,33 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
 import { funcionActiva } from "@/lib/modulos.mjs";
-import { SubHubGrid, type SubModulo } from "../_SubHub";
+import { MenuLista, type MenuItem } from "@/components/MenuLista";
+import { CalendarIcon, CartIcon, ReceiptIcon, ClipboardIcon } from "@/components/icons";
 
-const PLANES: SubModulo = {
+const PLANES: MenuItem = {
   href: "/cocina/inventario/planes",
   label: "Planes de producción",
+  Icon: CalendarIcon,
   desc: "Reserva stock por adelantado para producciones planificadas (eventos, batches).",
 };
 
-const SUBMODULOS: SubModulo[] = [
+const SUBMODULOS: MenuItem[] = [
   {
     href: "/cocina/compras",
     label: "Compras",
+    Icon: CartIcon,
     desc: "Registrar pedidos recibidos — actualiza stock y precio del insumo automáticamente.",
   },
   {
     href: "/cocina/ventas",
     label: "Ventas",
+    Icon: ReceiptIcon,
     desc: "Regístralas a mano o impórtalas desde Xetux — descuenta stock automáticamente.",
   },
   {
     href: "/cocina/pedido",
     label: "Pedido sugerido",
+    Icon: ClipboardIcon,
     desc: "Lista de compras a partir de tus raciones objetivo. Guarda pedidos.",
   },
 ];
@@ -56,7 +61,7 @@ export default function InventarioHubPage() {
             ← Cocina
           </Link>
         </section>
-        <SubHubGrid modulos={modulos} />
+        <MenuLista items={modulos} />
       </main>
     </>
   );

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { MenuLista } from "@/components/MenuLista";
 import type { ComponentType, SVGProps } from "react";
 import { Header } from "@/components/Header";
 import { MODULOS, modulosActivos } from "@/lib/modulos.mjs";
@@ -10,7 +10,6 @@ import {
   CartIcon,
   ChartIcon,
   WifiIcon,
-  ChevronIcon,
   StoreIcon,
 } from "@/components/icons";
 
@@ -30,8 +29,10 @@ export default function Home() {
   // Tareas, Eventos, Presupuestos y WiFi salen del menú, pero sus rutas siguen
   // vivas. Ver src/lib/modulos.mjs.
   const activos = new Set(modulosActivos(process.env.BOLO_MODULOS));
-  const cards = MODULOS.filter((m) => activos.has(m.id)).map((m) => ({
-    ...m,
+  const items = MODULOS.filter((m) => activos.has(m.id)).map((m) => ({
+    href: m.href,
+    label: m.title,
+    desc: m.desc,
     Icon: ICONOS[m.id],
   }));
 
@@ -57,31 +58,10 @@ export default function Home() {
 
         {/* Accesos */}
         <section className="mb-12 sm:mb-14">
-          <h2 className="font-cinzel text-xl text-cacao mb-4">
+          <h2 className="font-cinzel text-xl text-cacao mb-2">
             ¿Qué quieres hacer?
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {cards.map((c) => (
-              <Link
-                key={c.href}
-                href={c.href}
-                className="group flex items-center gap-4 rounded-2xl bg-white ring-1 ring-marfil p-4 hover:ring-navy/30 hover:shadow-sm transition"
-              >
-                <span className="grid place-items-center size-12 shrink-0 rounded-xl bg-naranja-soft/60 text-navy group-hover:bg-terracotta group-hover:text-white transition-colors">
-                  <c.Icon className="size-6" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <h3 className="font-cinzel text-lg text-cacao leading-tight">
-                    {c.title}
-                  </h3>
-                  <p className="text-sm text-cacao-soft leading-snug">
-                    {c.desc}
-                  </p>
-                </div>
-                <ChevronIcon className="size-5 text-cacao-mute group-hover:text-terracotta group-hover:translate-x-0.5 transition" />
-              </Link>
-            ))}
-          </div>
+          <MenuLista items={items} />
         </section>
 
         {/* Footer */}
