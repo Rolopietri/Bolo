@@ -1059,7 +1059,7 @@ export function InsumosClient({
       ) : grouped.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
           {items.length === 0
-            ? "Aún no tienes insumos. Impórtalos o agrega el primero a mano."
+            ? "Aún no tienes insumos. Crea el primero con “+ Nuevo insumo”."
             : "Ningún insumo coincide con estos filtros."}
         </div>
       ) : (
