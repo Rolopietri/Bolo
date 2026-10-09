@@ -212,6 +212,31 @@ export async function borrarResena(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ── Denuncias (reportar anuncios, estilo Instagram) ─────────────────
+
+export const MOTIVOS_DENUNCIA = [
+  "Spam o publicidad engañosa",
+  "Estafa o fraude",
+  "Producto prohibido o ilegal",
+  "Información falsa",
+  "Contenido inapropiado",
+  "Otro",
+];
+
+export async function crearDenuncia(input: {
+  anuncioId: string;
+  motivo: string;
+  detalle?: string;
+}): Promise<void> {
+  const sb = createSupabaseBrowserClient();
+  const { error } = await sb.from("marketplace_denuncias").insert({
+    anuncio_id: input.anuncioId,
+    motivo: input.motivo,
+    detalle: input.detalle || null,
+  });
+  if (error) throw error;
+}
+
 const BUCKET_FOTOS = "menaje-fotos";
 const FOTO_MAX_BYTES = 5 * 1024 * 1024;
 

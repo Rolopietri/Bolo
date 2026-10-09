@@ -11,6 +11,8 @@ import {
   listResenasDeAnuncio,
   crearResena,
   borrarResena,
+  crearDenuncia,
+  MOTIVOS_DENUNCIA,
   type Anuncio,
   type TipoAnuncio,
   type Resena,
@@ -587,6 +589,13 @@ function DetalleAnuncio({
   const [nombre, setNombre] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [errorR, setErrorR] = useState("");
+  // Denuncia (reportar el anuncio)
+  const [denunciando, setDenunciando] = useState(false);
+  const [motivoDen, setMotivoDen] = useState("");
+  const [detalleDen, setDetalleDen] = useState("");
+  const [enviandoDen, setEnviandoDen] = useState(false);
+  const [denunciado, setDenunciado] = useState(false);
+  const [errorDen, setErrorDen] = useState("");
 
   // Agregados locales (incluyen lo que se acaba de publicar en este detalle)
   const agg = useMemo<Agg>(() => {
@@ -654,6 +663,32 @@ function DetalleAnuncio({
       onCambioResenas();
     } catch {
       /* ignora */
+    }
+  }
+
+  async function enviarDenuncia() {
+    if (!motivoDen) return;
+    setErrorDen("");
+    setEnviandoDen(true);
+    try {
+      await crearDenuncia({
+        anuncioId: a.id,
+        motivo: motivoDen,
+        detalle: detalleDen.trim() || undefined,
+      });
+      setDenunciado(true);
+      setDenunciando(false);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message.toLowerCase() : "";
+      if (msg.includes("duplicate") || msg.includes("una_por_persona")) {
+        // Ya la había denunciado: lo tratamos como enviado.
+        setDenunciado(true);
+        setDenunciando(false);
+      } else {
+        setErrorDen("No se pudo enviar. Intenta de nuevo.");
+      }
+    } finally {
+      setEnviandoDen(false);
     }
   }
 
@@ -820,6 +855,76 @@ function DetalleAnuncio({
               ))
             )}
           </div>
+
+          {/* Denunciar anuncio (estilo Instagram) */}
+          {!esMiAnuncio &&
+            (denunciado ? (
+              <div className="rounded-xl bg-[#E4F3EA] ring-1 ring-[#BFE0CB] p-3 text-sm text-[#2F7A49] font-semibold text-center">
+                Gracias. Recibimos tu denuncia y la revisaremos.
+              </div>
+            ) : !denunciando ? (
+              <button
+                onClick={() => setDenunciando(true)}
+                className="w-full text-center text-sm font-bold text-cacao-mute hover:text-[#D64534] py-2"
+              >
+                Denunciar anuncio
+              </button>
+            ) : (
+              <div className="rounded-2xl bg-marfil-soft ring-1 ring-marfil p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-cacao">¿Por qué lo denuncias?</span>
+                  <button
+                    onClick={() => {
+                      setDenunciando(false);
+                      setMotivoDen("");
+                      setErrorDen("");
+                    }}
+                    className="text-sm font-bold text-cacao-soft hover:text-cacao"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {MOTIVOS_DENUNCIA.map((m) => (
+                    <label
+                      key={m}
+                      className="flex items-center gap-2.5 rounded-lg bg-white ring-1 ring-marfil px-3 py-2.5 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="motivo-denuncia"
+                        value={m}
+                        checked={motivoDen === m}
+                        onChange={() => setMotivoDen(m)}
+                        className="accent-[#D64534]"
+                      />
+                      <span className="text-sm text-cacao">{m}</span>
+                    </label>
+                  ))}
+                </div>
+                {motivoDen === "Otro" && (
+                  <textarea
+                    value={detalleDen}
+                    onChange={(e) => setDetalleDen(e.target.value)}
+                    rows={2}
+                    placeholder="Cuéntanos qué pasa (opcional)"
+                    className="w-full rounded-xl ring-1 ring-marfil px-3 py-2.5 text-sm text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+                  />
+                )}
+                {errorDen && (
+                  <div className="rounded-lg bg-[#FBE5E1] ring-1 ring-[#F3CFC8] p-2.5 text-sm text-[#A5341F]">
+                    {errorDen}
+                  </div>
+                )}
+                <button
+                  onClick={enviarDenuncia}
+                  disabled={!motivoDen || enviandoDen}
+                  className="w-full rounded-xl bg-[#D64534] text-white py-3 font-bold hover:brightness-95 disabled:opacity-50 transition-colors"
+                >
+                  {enviandoDen ? "Enviando…" : "Enviar denuncia"}
+                </button>
+              </div>
+            ))}
         </div>
       </div>
     </div>
