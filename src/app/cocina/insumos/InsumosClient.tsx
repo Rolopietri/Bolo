@@ -571,13 +571,6 @@ export function InsumosClient({
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 rounded-lg ring-1 ring-marfil px-3 py-2"
         />
-        <a
-          href="/cocina/inventario/conteo"
-          title="Cuadrar el inventario con un conteo físico"
-          className="shrink-0 px-2 py-2 text-[11px] uppercase tracking-widest text-cacao-mute hover:text-cacao whitespace-nowrap"
-        >
-          Conteo físico
-        </a>
       </div>
 
       {/* Filtros */}
