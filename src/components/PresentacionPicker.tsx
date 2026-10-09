@@ -5,6 +5,7 @@ import {
   armarPresentacion,
   CONTENIDO_SUGERIDO,
   leerPresentacion,
+  PRESENTACIONES_LIQUIDAS,
   SUELTO,
   TIPOS_PRESENTACION,
   UNIDADES_CONTENIDO,
@@ -87,6 +88,14 @@ export function PresentacionPicker({
               if (sug && !p.cantidad) {
                 setUnidadOtra(false);
                 actualizar({ tipo: v, ...sug });
+              } else if (
+                PRESENTACIONES_LIQUIDAS.includes(v) &&
+                !p.cantidad &&
+                (p.unidad === "kg" || p.unidad === "g")
+              ) {
+                // Una garrafa o botella trae líquido: arrancar en litros.
+                setUnidadOtra(false);
+                actualizar({ ...p, tipo: v, unidad: "L" });
               } else {
                 actualizar({ ...p, tipo: v });
               }

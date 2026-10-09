@@ -25,8 +25,8 @@ import {
   getTasaBcvPorFecha,
 } from "@/lib/data/cocina";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { CalendarIcon, ChevronIcon } from "@/components/icons";
-import { displayCantidad, opcionesCantidad } from "@/lib/units";
+import { CalendarIcon, ChevronIcon, WarningIcon } from "@/components/icons";
+import { displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -71,6 +71,12 @@ function fmtQty(n: number): string {
 }
 
 /** Formatea un monto de dinero a 2 decimales para el campo enlazado. */
+/** Precio por unidad legible: 2 decimales, o más si es muy chico. */
+function fmtPrecio(n: number): string {
+  if (!Number.isFinite(n)) return "—";
+  return `$${n >= 0.01 ? n.toFixed(2) : n.toPrecision(2)}`;
+}
+
 function fmtMoney(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "";
   return String(Number(n.toFixed(2)));
@@ -138,6 +144,9 @@ export function ComprasClient() {
   // true si el proveedor lo sugirió el sistema al elegir el insumo (se puede
   // reemplazar al cambiar de insumo); false si lo eligió la persona.
   const [proveedorAuto, setProveedorAuto] = useState(false);
+  // Avisos de cordura antes de guardar (precio muy distinto, fecha rara). Si
+  // hay alguno, se pide confirmación en vez de guardar directo.
+  const [avisosCompra, setAvisosCompra] = useState<string[] | null>(null);
   // Estado de los colapsables del historial (por fecha). Guardamos solo las
   // fechas que el usuario abrió/cerró a mano; por defecto se abre la más
   // reciente (índice 0) y el resto queda colapsado.
@@ -391,6 +400,37 @@ export function ComprasClient() {
   const cantidadEnCompra =
     cantPorCompra > 0 ? cantidadEnBase / cantPorCompra : Number(form.cantidad) || 0;
 
+  // Precio por unidad base que dejaría esta compra, frente al actual. Si cambia
+  // mucho suele ser un error de tipeo (ej. monto en el campo de Bs en vez de $).
+  const precioNuevoBase =
+    cantidadEnBase > 0 && usdConIva > 0 ? usdConIva / cantidadEnBase : null;
+  const precioActualBase = insumoSeleccionado?.precioBaseUsd ?? null;
+  const cambioPrecio =
+    precioNuevoBase !== null && precioActualBase && precioActualBase > 0
+      ? precioNuevoBase / precioActualBase - 1
+      : null;
+  const cambioFuerte = cambioPrecio !== null && Math.abs(cambioPrecio) > 0.5;
+
+  function avisosDeCordura(): string[] {
+    const out: string[] = [];
+    if (insumoSeleccionado && precioNuevoBase !== null && cambioFuerte && precioActualBase) {
+      const antes = precioLegible(precioActualBase, insumoSeleccionado.unidadBase);
+      const ahora = precioLegible(precioNuevoBase, insumoSeleccionado.unidadBase);
+      out.push(
+        `El precio pasaría de ${fmtPrecio(antes.precio)} a ${fmtPrecio(ahora.precio)} por ${ahora.unidad} (${cambioPrecio! > 0 ? "+" : ""}${Math.round(cambioPrecio! * 100)} %). Revisa el monto y si lo escribiste en Bs o en $.`,
+      );
+    }
+    const dias = Math.round(
+      (new Date(`${form.fecha}T12:00:00`).getTime() -
+        new Date(`${hoyISO()}T12:00:00`).getTime()) /
+        86400000,
+    );
+    if (dias > 0) out.push(`La fecha es futura (${fmtFecha(form.fecha)}).`);
+    else if (dias < -30)
+      out.push(`La fecha es de hace ${-dias} días (${fmtFecha(form.fecha)}).`);
+    return out;
+  }
+
   // Proveedores que despachan cada insumo: el habitual (ficha del insumo)
   // primero y luego los que ya le vendieron, del más reciente al más viejo.
   const proveedoresPorInsumo = useMemo(() => {
@@ -518,6 +558,10 @@ export function ComprasClient() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    await guardarCompra(false);
+  }
+
+  async function guardarCompra(confirmado: boolean) {
     if (!form.insumoId || !form.fecha || !(cantidadEnCompra > 0)) return;
     setError(null);
 
@@ -550,6 +594,14 @@ export function ComprasClient() {
     if (!(precioUsd > 0)) {
       setError("Ingresa el monto de la factura (en Bs o en $).");
       return;
+    }
+
+    if (!confirmado) {
+      const avisos = avisosDeCordura();
+      if (avisos.length > 0) {
+        setAvisosCompra(avisos);
+        return;
+      }
     }
 
     // Dejamos constancia en las notas de que el IVA se agregó (así el historial
@@ -784,6 +836,21 @@ export function ComprasClient() {
                   </button>
                 </div>
               )}
+              {!creandoProveedor &&
+                form.proveedorId &&
+                (() => {
+                  const p = proveedores.find((x) => x.id === form.proveedorId);
+                  if (!p || p.contactoTelefono || p.contactoEmail) return null;
+                  return (
+                    <span className="text-[11px] text-cacao-mute block mt-1">
+                      Proveedor sin datos de contacto: complétalo luego en{" "}
+                      <Link href="/cocina/proveedores" className="underline hover:text-terracotta">
+                        Proveedores
+                      </Link>
+                      .
+                    </span>
+                  );
+                })()}
             </label>
           </div>
 
@@ -917,7 +984,7 @@ export function ComprasClient() {
               la forma de pago.
             </p>
             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <label className="block">
+              <label className={`block ${pagaEnBs ? "" : "sm:order-2 order-2"}`}>
                 <span className="text-xs text-cacao-mute flex items-center gap-1">
                   Monto en Bs
                   {pagaEnBs && (
@@ -934,10 +1001,10 @@ export function ComprasClient() {
                   placeholder="0"
                   value={form.precioTotalBs}
                   onChange={(e) => onMontoBs(e.target.value)}
-                  className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+                  className={`mt-1 w-full rounded-lg px-3 py-2 ${pagaEnBs ? "ring-2 ring-terracotta/50" : "ring-1 ring-marfil"}`}
                 />
               </label>
-              <label className="block">
+              <label className={`block ${pagaEnBs ? "" : "sm:order-1 order-1"}`}>
                 <span className="text-xs text-cacao-mute flex items-center gap-1">
                   Monto en $
                   {!pagaEnBs && (
@@ -954,7 +1021,7 @@ export function ComprasClient() {
                   placeholder="0"
                   value={form.precioTotalUsd}
                   onChange={(e) => onMontoUsd(e.target.value)}
-                  className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+                  className={`mt-1 w-full rounded-lg px-3 py-2 ${!pagaEnBs ? "ring-2 ring-terracotta/50" : "ring-1 ring-marfil"}`}
                 />
               </label>
             </div>
@@ -1003,6 +1070,31 @@ export function ComprasClient() {
                     {" · "}incluye IVA {Number(form.ivaPorc) || 0}%
                   </span>
                 )}
+                {insumoSeleccionado && precioNuevoBase !== null && (() => {
+                  const ahora = precioLegible(precioNuevoBase, insumoSeleccionado.unidadBase);
+                  const antes =
+                    precioActualBase && precioActualBase > 0
+                      ? precioLegible(precioActualBase, insumoSeleccionado.unidadBase)
+                      : null;
+                  return (
+                    <span
+                      className={`block mt-1 text-xs ${cambioFuerte ? "text-terracotta font-medium" : "text-cacao-soft"}`}
+                    >
+                      {cambioFuerte && (
+                        <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />
+                      )}
+                      Queda a {fmtPrecio(ahora.precio)} / {ahora.unidad}
+                      {antes && (
+                        <>
+                          {" "}(antes {fmtPrecio(antes.precio)} / {antes.unidad}
+                          {cambioPrecio !== null &&
+                            `, ${cambioPrecio > 0 ? "+" : ""}${Math.round(cambioPrecio * 100)} %`}
+                          )
+                        </>
+                      )}
+                    </span>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -1268,6 +1360,29 @@ export function ComprasClient() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={avisosCompra !== null}
+        title="Revisa antes de guardar"
+        message={
+          <ul className="space-y-2 text-sm text-cacao">
+            {(avisosCompra ?? []).map((a) => (
+              <li key={a} className="flex gap-2">
+                <WarningIcon className="mt-0.5 size-4 shrink-0 text-terracotta" />
+                <span>{a}</span>
+              </li>
+            ))}
+          </ul>
+        }
+        confirmLabel="Está bien, guardar"
+        cancelLabel="Corregir"
+        danger={false}
+        onConfirm={() => {
+          setAvisosCompra(null);
+          guardarCompra(true);
+        }}
+        onCancel={() => setAvisosCompra(null)}
+      />
 
       <ConfirmDialog
         open={pendienteBorrar !== null}

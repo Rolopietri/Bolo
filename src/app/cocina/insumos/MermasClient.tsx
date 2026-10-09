@@ -171,8 +171,8 @@ export function MermasClient() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-2xl bg-white ring-1 ring-marfil p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 border-y border-marfil divide-y sm:divide-y-0 sm:divide-x divide-marfil">
+              <div className="py-4 sm:px-4 sm:first:pl-0">
                 <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
                   Valor perdido
                 </div>
@@ -184,7 +184,7 @@ export function MermasClient() {
                   {resumen.sinCosto > 0 && ` · ${resumen.sinCosto} sin precio`}
                 </div>
               </div>
-              <div className="rounded-2xl bg-white ring-1 ring-marfil p-4">
+              <div className="py-4 sm:px-4 sm:first:pl-0">
                 <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
                   Por tipo
                 </div>
@@ -197,7 +197,7 @@ export function MermasClient() {
                   ))}
                 </ul>
               </div>
-              <div className="rounded-2xl bg-white ring-1 ring-marfil p-4">
+              <div className="py-4 sm:px-4 sm:first:pl-0">
                 <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
                   Dónde más se pierde
                 </div>
@@ -212,12 +212,12 @@ export function MermasClient() {
               </div>
             </div>
 
-            <ul className="rounded-2xl bg-white ring-1 ring-marfil divide-y divide-marfil">
+            <ul className="border-b border-marfil divide-y divide-marfil">
               {enPeriodo.map((m) => {
                 const ins = insumoById.get(m.insumoId);
                 const val = valorDe(m);
                 return (
-                  <li key={m.id} className="px-5 py-2.5 flex items-center justify-between gap-3 text-sm">
+                  <li key={m.id} className="py-3 flex items-center justify-between gap-3 text-sm">
                     <div className="min-w-0">
                       <div className="text-cacao truncate">{ins?.nombre ?? "Insumo"}</div>
                       <div className="text-xs text-cacao-soft">

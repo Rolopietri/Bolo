@@ -18,6 +18,7 @@ import {
 } from "@/lib/data/cocina";
 import {
   listCategoriasInsumo,
+  createCategoriaInsumo,
   type CategoriaInsumo,
 } from "@/lib/data/categoriasInsumo";
 import { UnitCalculator } from "@/components/UnitCalculator";
@@ -405,6 +406,20 @@ export function InsumosClient({
       notas: form.notas.trim() || undefined,
       activo: true,
     };
+    // Una categoría nueva escrita en el formulario entra a la lista oficial
+    // (la de Administración), para no tener categorías "sueltas".
+    const cat = form.categoria.trim();
+    if (
+      cat &&
+      !categoriasInsumo.some((c) => c.nombre.toLowerCase() === cat.toLowerCase())
+    ) {
+      try {
+        const nueva = await createCategoriaInsumo(cat);
+        setCategoriasInsumo((prev) => [...prev, nueva]);
+      } catch {
+        // Si la lista oficial no está disponible, el insumo igual se guarda.
+      }
+    }
     try {
       // Guardamos el id del item que se va a editar/crear para hacer scroll
       // hacia él después de cerrar el form. Así el usuario no pierde el lugar
@@ -498,7 +513,13 @@ export function InsumosClient({
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(i);
     });
-    return Array.from(map.entries());
+    // Orden estable (alfabético, "Sin categoría" al final) para que los
+    // botones no cambien de lugar después de editar o comprar.
+    return Array.from(map.entries())
+      .map(([k, ins]) => [k, [...ins].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))] as const)
+      .sort(([a], [b]) =>
+        a === "Sin categoría" ? 1 : b === "Sin categoría" ? -1 : a.localeCompare(b, "es"),
+      );
   }, [filtered]);
 
   // Categorías que YA existen en el catálogo (para los pills de filtro). Usa la
@@ -591,6 +612,7 @@ export function InsumosClient({
         <input
           type="text"
           placeholder="Buscar insumo por nombre..."
+          aria-label="Buscar insumo"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 rounded-lg ring-1 ring-marfil px-3 py-2"
@@ -692,6 +714,7 @@ export function InsumosClient({
           <input
             type="text"
             placeholder="Nombre del insumo (ej: Café en grano)"
+            aria-label="Nombre del insumo"
             value={form.nombre}
             onChange={(e) => setForm({ ...form, nombre: e.target.value })}
             autoFocus
@@ -829,6 +852,19 @@ export function InsumosClient({
                 }
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
               />
+              {Number(form.precioCompraUsd) > 0 &&
+                Number(form.cantidadPorCompra) > 0 &&
+                form.unidadBase && (
+                  <span className="text-[11px] text-cacao-mute block mt-1">
+                    {(() => {
+                      const p = precioLegible(
+                        Number(form.precioCompraUsd) / Number(form.cantidadPorCompra),
+                        form.unidadBase,
+                      );
+                      return `= $${p.precio >= 0.01 ? p.precio.toFixed(2) : p.precio.toPrecision(2)} / ${p.unidad}`;
+                    })()}
+                  </span>
+                )}
             </label>
             <label className="text-sm text-cacao">
               Stock total (físico)
@@ -912,6 +948,7 @@ export function InsumosClient({
           </div>
           <textarea
             placeholder="Notas (opcional)"
+            aria-label="Notas"
             value={form.notas}
             onChange={(e) => setForm({ ...form, notas: e.target.value })}
             rows={2}
@@ -1011,7 +1048,7 @@ export function InsumosClient({
                           {etiquetaPresentacion(i)}
                         </div>
                       </div>
-                      <div className="col-span-4 sm:col-span-3">
+                      <div className="col-span-6 sm:col-span-3">
                         <div className="text-xs text-cacao-mute uppercase tracking-widest">
                           Precio
                         </div>
@@ -1026,7 +1063,7 @@ export function InsumosClient({
                           onError={setError}
                         />
                       </div>
-                      <div className="col-span-4 sm:col-span-2">
+                      <div className="col-span-6 sm:col-span-2">
                         <div className="text-xs text-cacao-mute uppercase tracking-widest">
                           {i.stockComprometido > 0 ? "Stock libre" : "Stock"}
                         </div>
@@ -1047,26 +1084,26 @@ export function InsumosClient({
                           </div>
                         )}
                       </div>
-                      <div className="col-span-4 sm:col-span-2 flex flex-wrap sm:justify-end gap-x-3 gap-y-1 text-xs uppercase tracking-widest">
+                      <div className="col-span-12 sm:col-span-2 flex flex-wrap sm:justify-end gap-2 text-[11px] uppercase tracking-widest">
                         {i.activo ? (
                           <>
                             <button
                               onClick={() => setPerdidaInsumo(i)}
-                              className="text-cacao-soft hover:text-terracotta"
+                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
                               title="Registrar pérdida, merma o mal estado"
                             >
                               Pérdida
                             </button>
                             <button
                               onClick={() => startEdit(i)}
-                              className="text-cacao-soft hover:text-cacao"
+                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
                             >
                               Editar
                             </button>
                             {onVerHistorial && (
                               <button
                                 onClick={() => onVerHistorial(i.id)}
-                                className="text-cacao-soft hover:text-cacao"
+                                className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
                                 title="Ver cada cambio de stock de este insumo (auditoría)"
                               >
                                 Historial
@@ -1074,7 +1111,7 @@ export function InsumosClient({
                             )}
                             <button
                               onClick={() => setPendienteDesactivar(i.id)}
-                              className="text-cacao-soft hover:text-terracotta"
+                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
                               title="Ocultar del catálogo sin borrar (conserva el histórico). Se puede reactivar."
                             >
                               Desactivar
@@ -1084,20 +1121,20 @@ export function InsumosClient({
                           <>
                             <button
                               onClick={() => startEdit(i)}
-                              className="text-cacao-soft hover:text-cacao"
+                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
                             >
                               Editar
                             </button>
                             <button
                               onClick={() => setActivo(i.id, true)}
-                              className="text-cacao-soft hover:text-cacao font-medium"
+                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao font-medium"
                               title="Volver a activar este insumo"
                             >
                               Reactivar
                             </button>
                             <button
                               onClick={() => setPendienteBorrar(i.id)}
-                              className="text-cacao-soft hover:text-terracotta"
+                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
                               title="Borrar definitivamente del catálogo (no se puede deshacer)"
                             >
                               Borrar

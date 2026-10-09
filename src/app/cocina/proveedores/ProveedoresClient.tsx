@@ -59,6 +59,22 @@ function modalidadesLabel(p: Proveedor): string {
   return out.length > 0 ? out.join(" · ") : "Sin definir";
 }
 
+/** Datos que le faltan a un proveedor para trabajar con él (contacto y formas
+ *  de pago). Suele pasar con los creados al vuelo desde Insumos o Compras. */
+function faltantes(p: Proveedor): string[] {
+  const out: string[] = [];
+  if (!p.contactoTelefono && !p.contactoEmail) out.push("contacto");
+  if (
+    !p.aceptaUsdEfectivo &&
+    !p.aceptaUsdDivisa &&
+    !p.aceptaBsBcvDolar &&
+    !p.aceptaBsBcvEuro &&
+    !p.aceptaBsParalela
+  )
+    out.push("formas de pago");
+  return out;
+}
+
 export function ProveedoresClient() {
   const [items, setItems] = useState<Proveedor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -379,7 +395,18 @@ export function ProveedoresClient() {
                 className="p-5 flex flex-wrap items-start justify-between gap-3"
               >
                 <div className="min-w-0">
-                  <div className="font-medium text-cacao">{p.nombre}</div>
+                  <div className="font-medium text-cacao">
+                    {p.nombre}
+                    {faltantes(p).length > 0 && (
+                      <span
+                        className="ml-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 align-middle text-[10px] uppercase tracking-widest text-amber-800 ring-1 ring-amber-200"
+                        title={`Falta: ${faltantes(p).join(" y ")}`}
+                      >
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
+                        Falta {faltantes(p).join(" y ")}
+                      </span>
+                    )}
+                  </div>
                   {(p.contactoNombre ||
                     p.contactoTelefono ||
                     p.contactoEmail) && (

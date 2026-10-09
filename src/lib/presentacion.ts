@@ -34,6 +34,9 @@ export const TIPOS_PRESENTACION = [
 /** Unidades en que se expresa lo que trae la presentación. */
 export const UNIDADES_CONTENIDO = ["kg", "g", "L", "ml", "unidad"];
 
+/** Presentaciones que casi siempre traen líquido: su unidad arranca en L. */
+export const PRESENTACIONES_LIQUIDAS = ["Botella", "Garrafa", "Galón", "Bidón"];
+
 /** Contenido sugerido al elegir un tipo (solo si aún no escribió nada). */
 export const CONTENIDO_SUGERIDO: Record<string, { cantidad: string; unidad: string }> = {
   Docena: { cantidad: "12", unidad: "unidad" },
