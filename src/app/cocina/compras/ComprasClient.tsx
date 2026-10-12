@@ -20,7 +20,9 @@ import {
   createProveedor,
   listInsumos,
   listProveedores,
+  listInsumoProveedores,
   updateInsumo,
+  type InsumoProveedor,
   getTasaBcvActual,
   getTasaBcvPorFecha,
 } from "@/lib/data/cocina";
@@ -144,6 +146,9 @@ export function ComprasClient() {
   // true si el proveedor lo sugirió el sistema al elegir el insumo (se puede
   // reemplazar al cambiar de insumo); false si lo eligió la persona.
   const [proveedorAuto, setProveedorAuto] = useState(false);
+  // Vínculos insumo ↔ proveedor guardados en la base (BOLO-04). Vacío si la
+  // tabla aún no existe: entonces se usa solo el historial de compras.
+  const [vinculos, setVinculos] = useState<InsumoProveedor[]>([]);
   // Avisos de cordura antes de guardar (precio muy distinto, fecha rara). Si
   // hay alguno, se pide confirmación en vez de guardar directo.
   const [avisosCompra, setAvisosCompra] = useState<string[] | null>(null);
@@ -158,17 +163,19 @@ export function ComprasClient() {
     let cancelled = false;
     (async () => {
       try {
-        const [c, ins, prov, t] = await Promise.all([
+        const [c, ins, prov, t, links] = await Promise.all([
           listCompras(),
           listInsumos(),
           listProveedores(),
           getTasaBcvActual(),
+          listInsumoProveedores(),
         ]);
         if (!cancelled) {
           setCompras(c);
           setInsumos(ins);
           setProveedores(prov);
           setTasa(t);
+          setVinculos(links);
         }
       } catch (e) {
         if (!cancelled)
@@ -431,29 +438,40 @@ export function ComprasClient() {
     return out;
   }
 
-  // Proveedores que despachan cada insumo: el habitual (ficha del insumo)
-  // primero y luego los que ya le vendieron, del más reciente al más viejo.
+  // Proveedores que despachan cada insumo, con la fecha de su última compra:
+  // los vínculos guardados (BOLO-04), el historial de compras y el proveedor
+  // de la ficha. Ordenados del que vendió más recientemente al que aún no.
   const proveedoresPorInsumo = useMemo(() => {
-    const map = new Map<string, string[]>();
-    for (const c of compras) {
-      if (!c.proveedorId) continue;
-      const arr = map.get(c.insumoId) ?? [];
-      if (!arr.includes(c.proveedorId)) arr.push(c.proveedorId);
-      map.set(c.insumoId, arr);
+    const map = new Map<string, Map<string, string | null>>();
+    const add = (insumoId: string, provId: string, fecha: string | null) => {
+      const m = map.get(insumoId) ?? new Map<string, string | null>();
+      const prev = m.get(provId) ?? null;
+      m.set(provId, prev && fecha ? (prev > fecha ? prev : fecha) : (prev ?? fecha));
+      map.set(insumoId, m);
+    };
+    for (const v of vinculos) add(v.insumoId, v.proveedorId, v.ultimaCompra);
+    for (const c of compras) if (c.proveedorId) add(c.insumoId, c.proveedorId, c.fecha);
+    for (const i of insumos) if (i.proveedorId) add(i.id, i.proveedorId, null);
+    const out = new Map<string, { id: string; ultima: string | null }[]>();
+    for (const [insumoId, m] of map) {
+      out.set(
+        insumoId,
+        Array.from(m, ([id, ultima]) => ({ id, ultima })).sort((x, y) =>
+          x.ultima === y.ultima ? 0 : !x.ultima ? 1 : !y.ultima ? -1 : y.ultima.localeCompare(x.ultima),
+        ),
+      );
     }
-    for (const i of insumos) {
-      if (!i.proveedorId) continue;
-      const arr = (map.get(i.id) ?? []).filter((id) => id !== i.proveedorId);
-      map.set(i.id, [i.proveedorId, ...arr]);
-    }
-    return map;
-  }, [compras, insumos]);
+    return out;
+  }, [vinculos, compras, insumos]);
 
   const proveedoresDelInsumo = useMemo(() => {
-    const ids = form.insumoId ? (proveedoresPorInsumo.get(form.insumoId) ?? []) : [];
-    return ids
-      .map((id) => proveedores.find((p) => p.id === id))
-      .filter((p): p is Proveedor => !!p);
+    const lista = form.insumoId ? (proveedoresPorInsumo.get(form.insumoId) ?? []) : [];
+    return lista
+      .map(({ id, ultima }) => {
+        const p = proveedores.find((x) => x.id === id);
+        return p ? { ...p, ultima } : null;
+      })
+      .filter((p): p is Proveedor & { ultima: string | null } => !!p);
   }, [form.insumoId, proveedoresPorInsumo, proveedores]);
   const otrosProveedores = proveedores.filter(
     (p) => !proveedoresDelInsumo.some((x) => x.id === p.id),
@@ -745,7 +763,7 @@ export function ComprasClient() {
                   }));
                   // Sugerir su proveedor (habitual o el último que le vendió) si
                   // aún no se eligió uno a mano.
-                  const sugerido = proveedoresPorInsumo.get(nuevoId)?.[0];
+                  const sugerido = proveedoresPorInsumo.get(nuevoId)?.[0]?.id;
                   if (sugerido && (!form.proveedorId || proveedorAuto)) {
                     elegirProveedor(sugerido);
                     setProveedorAuto(true);
@@ -785,7 +803,7 @@ export function ComprasClient() {
                       {proveedoresDelInsumo.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.nombre}
-                          {p.id === insumoSeleccionado?.proveedorId ? " · habitual" : ""}
+                          {p.ultima ? ` · compra ${fmtFecha(p.ultima)}` : " · sin compras aún"}
                         </option>
                       ))}
                     </optgroup>

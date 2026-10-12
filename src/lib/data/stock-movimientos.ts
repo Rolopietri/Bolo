@@ -23,6 +23,7 @@ type Row = {
   fecha: string;
   nota: string | null;
   created_at: string;
+  valor_usd?: number | string | null;
 };
 
 function rowToMov(r: Row): StockMovimiento {
@@ -36,6 +37,7 @@ function rowToMov(r: Row): StockMovimiento {
     fecha: r.fecha,
     nota: r.nota ?? undefined,
     createdAt: r.created_at,
+    valorUsd: r.valor_usd == null ? undefined : Number(r.valor_usd),
   };
 }
 
@@ -150,6 +152,8 @@ export type AjusteConteo = {
   cantidad: number;
   /** Precio base del insumo (USD por unidad base), para valorar la merma. */
   precioBase: number | null;
+  /** Valor congelado al registrar el conteo (BOLO-04), si existe. */
+  valorUsd: number | null;
   nota?: string;
 };
 
@@ -159,6 +163,7 @@ type AjusteRow = {
   cantidad: number | string;
   fecha: string;
   nota: string | null;
+  valor_usd?: number | string | null;
   insumos: {
     nombre: string | null;
     unidad_base: string | null;
@@ -171,7 +176,9 @@ export async function listAjustesConteo(): Promise<AjusteConteo[]> {
   const sb = createSupabaseBrowserClient();
   const { data, error } = await sb
     .from("stock_movimientos")
-    .select("id, insumo_id, cantidad, fecha, nota, insumos(nombre, unidad_base, categoria_compra, precio_base_usd)")
+    // "*" en vez de columnas sueltas: así valor_usd llega si existe (BOLO-04)
+    // sin romper la consulta en una base que aún no lo tiene.
+    .select("*, insumos(nombre, unidad_base, categoria_compra, precio_base_usd)")
     .eq("tipo", "ajuste")
     .eq("motivo", "Conteo físico")
     .order("fecha", { ascending: false })
@@ -186,6 +193,7 @@ export async function listAjustesConteo(): Promise<AjusteConteo[]> {
     fecha: r.fecha,
     cantidad: Number(r.cantidad),
     precioBase: r.insumos?.precio_base_usd == null ? null : Number(r.insumos.precio_base_usd),
+    valorUsd: r.valor_usd == null ? null : Number(r.valor_usd),
     nota: r.nota ?? undefined,
   }));
 }

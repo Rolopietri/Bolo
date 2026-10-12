@@ -1064,6 +1064,9 @@ export type StockMovimiento = {
   fecha: string;            // YYYY-MM-DD
   nota?: string;
   createdAt: string;
+  /** Valor en USD congelado al registrarlo (BOLO-04). Si falta, se estima con
+   *  el precio actual del insumo. */
+  valorUsd?: number;
 };
 
 // ── Planes de producción (M5) ──────────────────────────────────

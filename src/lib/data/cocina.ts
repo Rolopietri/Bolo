@@ -666,3 +666,34 @@ export async function upsertTasaBcvParalela(
     if (error) throw error;
   }
 }
+
+// ── Proveedores por insumo (BOLO-04) ───────────────────────────────
+export type InsumoProveedor = {
+  insumoId: string;
+  proveedorId: string;
+  /** Fecha (YYYY-MM-DD) de la última compra a ese proveedor, o null. */
+  ultimaCompra: string | null;
+};
+
+/** Vínculos insumo ↔ proveedor. Si la tabla aún no existe en la base, devuelve
+ *  una lista vacía (las pantallas usan entonces el historial de compras). */
+export async function listInsumoProveedores(): Promise<InsumoProveedor[]> {
+  try {
+    const sb = createSupabaseBrowserClient();
+    const { data, error } = await sb
+      .from("insumo_proveedores")
+      .select("insumo_id, proveedor_id, ultima_compra");
+    if (error) return [];
+    return ((data ?? []) as {
+      insumo_id: string;
+      proveedor_id: string;
+      ultima_compra: string | null;
+    }[]).map((r) => ({
+      insumoId: r.insumo_id,
+      proveedorId: r.proveedor_id,
+      ultimaCompra: r.ultima_compra,
+    }));
+  } catch {
+    return [];
+  }
+}

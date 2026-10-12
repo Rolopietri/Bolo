@@ -5,7 +5,7 @@
 //     vencimiento, merma, etc. Valoradas al precio base y con "deshacer".
 //  2. Merma por conteo: lo que faltó entre el sistema y el conteo físico.
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { TIPOS_PERDIDA, type Insumo, type StockMovimiento } from "@/lib/types";
 import { listInsumos } from "@/lib/data/cocina";
 import { listMovimientos, deleteMovimiento } from "@/lib/data/stock-movimientos";
@@ -78,10 +78,16 @@ export function MermasClient() {
   }
 
   const insumoById = useMemo(() => new Map(insumos.map((i) => [i.id, i] as const)), [insumos]);
-  const valorDe = (m: StockMovimiento) => {
-    const p = insumoById.get(m.insumoId)?.precioBaseUsd;
-    return p != null ? Math.abs(m.cantidad) * p : null;
-  };
+  // El valor congelado al registrar la pérdida manda (BOLO-04); si no existe,
+  // se estima con el precio actual del insumo.
+  const valorDe = useCallback(
+    (m: StockMovimiento) => {
+      if (m.valorUsd != null) return m.valorUsd;
+      const p = insumoById.get(m.insumoId)?.precioBaseUsd;
+      return p != null ? Math.abs(m.cantidad) * p : null;
+    },
+    [insumoById],
+  );
 
   const enPeriodo = useMemo(() => {
     if (periodo === "todo") return movs;
@@ -95,9 +101,8 @@ export function MermasClient() {
     const porTipo = new Map<string, number>();
     const porInsumo = new Map<string, number>();
     for (const m of enPeriodo) {
-      const p = insumoById.get(m.insumoId)?.precioBaseUsd;
-      if (p == null) { sinCosto++; continue; }
-      const v = Math.abs(m.cantidad) * p;
+      const v = valorDe(m);
+      if (v == null) { sinCosto++; continue; }
       total += v;
       porTipo.set(m.tipo, (porTipo.get(m.tipo) ?? 0) + v);
       porInsumo.set(m.insumoId, (porInsumo.get(m.insumoId) ?? 0) + v);
@@ -106,7 +111,7 @@ export function MermasClient() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
     return { total, sinCosto, porTipo, top };
-  }, [enPeriodo, insumoById]);
+  }, [enPeriodo, valorDe]);
 
   async function borrar(id: string, devolver: boolean) {
     try {

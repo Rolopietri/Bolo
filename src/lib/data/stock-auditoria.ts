@@ -19,6 +19,11 @@ export type StockAuditoria = {
   comprometidoNuevo: number | null;
   origen: OrigenAuditoria;
   changedAt: string;
+  /** Por qué cambió (compra, venta, perdida:mal_estado…). Null en registros
+   *  anteriores a BOLO-04. */
+  motivo: string | null;
+  /** Usuario que hizo el cambio (null si fue directo en la base). */
+  changedBy: string | null;
 };
 
 type Row = {
@@ -32,6 +37,8 @@ type Row = {
   comprometido_nuevo: number | string | null;
   origen: string;
   changed_at: string;
+  motivo?: string | null;
+  changed_by?: string | null;
 };
 
 function num(v: number | string | null): number | null {
@@ -50,6 +57,8 @@ function rowToEntry(r: Row): StockAuditoria {
     comprometidoNuevo: num(r.comprometido_nuevo),
     origen: (r.origen as OrigenAuditoria) ?? "directo",
     changedAt: r.changed_at,
+    motivo: r.motivo ?? null,
+    changedBy: r.changed_by ?? null,
   };
 }
 
@@ -67,4 +76,51 @@ export async function listStockAuditoria(
   const { data, error } = await q;
   if (error) throw error;
   return (data as Row[]).map(rowToEntry);
+}
+
+/** Nombre visible de cada usuario (id → nombre). Si la función de la base aún
+ *  no existe, devuelve un mapa vacío y la pantalla sigue funcionando. */
+export async function nombresUsuarios(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  try {
+    const sb = createSupabaseBrowserClient();
+    const { data, error } = await sb.rpc("nombres_usuarios", { p_ids: ids });
+    if (error) return out;
+    for (const r of (data ?? []) as { id: string; nombre: string | null }[]) {
+      if (r.nombre) out.set(r.id, r.nombre);
+    }
+  } catch {
+    // sin nombres: se muestra solo el motivo
+  }
+  return out;
+}
+
+/** Texto para el motivo guardado por la base (ver BOLO-04). */
+export function motivoLabel(motivo: string | null): string | null {
+  if (!motivo) return null;
+  if (motivo.startsWith("perdida:")) {
+    const t = motivo.slice("perdida:".length);
+    const tipos: Record<string, string> = {
+      perdida: "Pérdida",
+      mal_estado: "Pérdida · mal estado",
+      merma: "Pérdida · merma",
+      vencimiento: "Pérdida · vencimiento",
+      otro: "Pérdida · otro",
+    };
+    return tipos[t] ?? "Pérdida";
+  }
+  const map: Record<string, string> = {
+    alta: "Alta del insumo",
+    edicion: "Edición manual",
+    compra: "Compra",
+    compra_revertida: "Compra borrada o editada",
+    perdida_deshecha: "Pérdida deshecha",
+    conteo: "Conteo físico",
+    plan: "Plan de producción",
+    venta: "Venta",
+    merma_receta: "Merma de receta",
+    venta_revertida: "Venta borrada",
+  };
+  return map[motivo] ?? motivo;
 }

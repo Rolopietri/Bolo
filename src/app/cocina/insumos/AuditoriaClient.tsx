@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { listInsumos } from "@/lib/data/cocina";
 import {
   listStockAuditoria,
+  motivoLabel,
+  nombresUsuarios,
   type StockAuditoria,
   type OrigenAuditoria,
 } from "@/lib/data/stock-auditoria";
@@ -101,6 +103,7 @@ export function AuditoriaClient({
     insumoInicial ?? "todos",
   );
   const [filterOrigen, setFilterOrigen] = useState<FiltroOrigen>("todos");
+  const [nombres, setNombres] = useState<Map<string, string>>(new Map());
   const [soloFisico, setSoloFisico] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -114,6 +117,13 @@ export function AuditoriaClient({
         ]);
         if (!vivo) return;
         setEntries(aud);
+        // Nombres de quienes hicieron los cambios (si la base ya los expone).
+        const ids = Array.from(
+          new Set(aud.map((a) => a.changedBy).filter((x): x is string => !!x)),
+        );
+        nombresUsuarios(ids).then((m) => {
+          if (vivo) setNombres(m);
+        });
         setInsumos(ins);
       } catch (e) {
         if (!vivo) return;
@@ -307,7 +317,7 @@ export function AuditoriaClient({
                     </th>
                   )}
                   <th className="px-4 py-3 text-[11px] uppercase tracking-widest text-cacao-mute font-medium">
-                    Origen
+                    Motivo · quién
                   </th>
                 </tr>
               </thead>
@@ -352,8 +362,13 @@ export function AuditoriaClient({
                         <span
                           className={`inline-block rounded-full px-2.5 py-0.5 text-[11px] ring-1 ${meta.className}`}
                         >
-                          {meta.label}
+                          {motivoLabel(e.motivo) ?? meta.label}
                         </span>
+                        {e.changedBy && nombres.get(e.changedBy) && (
+                          <span className="block mt-1 text-[11px] text-cacao-soft">
+                            {nombres.get(e.changedBy)}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   );

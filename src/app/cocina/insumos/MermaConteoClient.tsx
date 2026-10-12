@@ -21,7 +21,9 @@ function fFecha(iso: string): string {
   const [y, m, d] = iso.split("-");
   return d && m && y ? `${d}/${m}/${y}` : iso;
 }
-const valorDe = (a: AjusteConteo) => (a.precioBase != null ? Math.abs(a.cantidad) * a.precioBase : null);
+// El valor congelado al registrar manda; si no hay, se estima con el precio actual.
+const valorDe = (a: AjusteConteo) =>
+  a.valorUsd != null ? a.valorUsd : a.precioBase != null ? Math.abs(a.cantidad) * a.precioBase : null;
 
 export function MermaConteoClient() {
   const [items, setItems] = useState<AjusteConteo[]>([]);
