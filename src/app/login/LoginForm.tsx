@@ -9,16 +9,21 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
  * entra con ellos. Por debajo usa Supabase Auth (email + password); la sesión
  * se guarda en cookies y el middleware deja pasar.
  *
- * Modo "recuperar": pide el correo y dispara un enlace de recuperación
- * (supabase.auth.resetPasswordForEmail). El enlace llega al correo, pasa por
- * /auth/callback (que canjea el código) y aterriza en /restablecer, donde el
- * usuario escribe su nueva contraseña. Así nadie depende del operador.
+ * Modo "recuperar": recuperación de contraseña con CÓDIGO de 6 dígitos (no
+ * enlace). Flujo en dos pasos:
+ *   1) Pedir: el usuario escribe su correo -> resetPasswordForEmail envía un
+ *      código de 6 dígitos (requiere que la plantilla "Reset Password" de
+ *      Supabase incluya {{ .Token }}).
+ *   2) Código: el usuario escribe el código -> verifyOtp({ type: "recovery" })
+ *      abre una sesión de recuperación y lo mandamos a /restablecer para poner
+ *      la contraseña nueva. Así verificamos que de verdad tenga acceso al correo
+ *      antes de dejar cambiar la clave, y no depende de enlaces que se rompen.
  *
  * Nota: para que el registro entre de una (sin confirmar por correo), hay que
- * desactivar "Confirm email" en Supabase → Authentication. Si está activo, se
- * muestra un aviso para que el usuario revise su correo.
+ * desactivar "Confirm email" en Supabase → Authentication.
  */
 type Modo = "entrar" | "registro" | "recuperar";
+type PasoRec = "pedir" | "codigo";
 
 export function LoginForm() {
   const search = useSearchParams();
@@ -27,6 +32,8 @@ export function LoginForm() {
   const [modo, setModo] = useState<Modo>("entrar");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [codigo, setCodigo] = useState("");
+  const [pasoRec, setPasoRec] = useState<PasoRec>("pedir");
   const [status, setStatus] = useState<"idle" | "checking">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [aviso, setAviso] = useState("");
@@ -35,6 +42,26 @@ export function LoginForm() {
     setModo(nuevo);
     setErrorMsg("");
     setAviso("");
+    setPasoRec("pedir");
+    setCodigo("");
+  }
+
+  async function enviarCodigo(correo: string) {
+    setStatus("checking");
+    setErrorMsg("");
+    try {
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(correo);
+      if (error) throw error;
+      setStatus("idle");
+      setPasoRec("codigo");
+      setAviso(
+        "Si ese correo tiene una cuenta, te enviamos un código de 6 dígitos. Revisa tu bandeja de entrada (y la carpeta de spam). Vence en una hora.",
+      );
+    } catch {
+      setStatus("idle");
+      setErrorMsg("No se pudo enviar el código. Intenta de nuevo en un momento.");
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -43,32 +70,47 @@ export function LoginForm() {
     setAviso("");
 
     const correo = email.trim().toLowerCase();
-    if (!correo.includes("@") || !correo.includes(".")) {
-      setErrorMsg("Escribe un correo válido.");
-      return;
-    }
 
-    // --- Recuperar contraseña: solo necesita el correo ---
+    // --- Recuperar contraseña ---
     if (modo === "recuperar") {
+      if (!correo.includes("@") || !correo.includes(".")) {
+        setErrorMsg("Escribe un correo válido.");
+        return;
+      }
+      // Paso 1: pedir el código
+      if (pasoRec === "pedir") {
+        await enviarCodigo(correo);
+        return;
+      }
+      // Paso 2: verificar el código
+      const token = codigo.trim();
+      if (token.length < 6) {
+        setErrorMsg("Escribe el código de 6 dígitos que te llegó al correo.");
+        return;
+      }
       setStatus("checking");
       try {
         const supabase = createSupabaseBrowserClient();
-        const { error } = await supabase.auth.resetPasswordForEmail(correo, {
-          redirectTo: `${window.location.origin}/auth/callback?next=/restablecer`,
+        const { error } = await supabase.auth.verifyOtp({
+          email: correo,
+          token,
+          type: "recovery",
         });
         if (error) throw error;
-        setStatus("idle");
-        setAviso(
-          "Si ese correo tiene una cuenta, te enviamos un enlace para crear una nueva contraseña. Revisa tu bandeja de entrada (y la carpeta de spam). El enlace vence en una hora.",
-        );
+        // Código correcto: ya hay sesión de recuperación -> a poner la clave.
+        window.location.href = "/restablecer";
       } catch {
         setStatus("idle");
-        setErrorMsg("No se pudo enviar el enlace. Intenta de nuevo en un momento.");
+        setErrorMsg("Código incorrecto o vencido. Revisa el correo o pide uno nuevo.");
       }
       return;
     }
 
-    // --- Entrar / Registro: necesitan contraseña ---
+    // --- Entrar / Registro: necesitan correo + contraseña ---
+    if (!correo.includes("@") || !correo.includes(".")) {
+      setErrorMsg("Escribe un correo válido.");
+      return;
+    }
     if (password.length < 6) {
       setErrorMsg("La contraseña debe tener al menos 6 caracteres.");
       return;
@@ -114,6 +156,7 @@ export function LoginForm() {
 
   // --- Vista de recuperar contraseña (sin pestañas) ---
   if (esRecuperar) {
+    const enPaso2 = pasoRec === "codigo";
     return (
       <div className="space-y-4">
         <div className="text-center">
@@ -121,7 +164,9 @@ export function LoginForm() {
             Recuperar contraseña
           </h2>
           <p className="mt-1 text-sm text-cacao-soft">
-            Escribe tu correo y te enviamos un enlace para crear una nueva.
+            {enPaso2
+              ? "Escribe el código de 6 dígitos que te llegó al correo."
+              : "Escribe tu correo y te enviamos un código de verificación."}
           </p>
         </div>
 
@@ -136,20 +181,47 @@ export function LoginForm() {
               inputMode="email"
               autoComplete="email"
               required
-              autoFocus
+              autoFocus={!enPaso2}
+              disabled={enPaso2}
               placeholder="tucorreo@ejemplo.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1.5 w-full rounded-xl ring-1 ring-marfil px-3.5 py-3 text-base text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+              className="mt-1.5 w-full rounded-xl ring-1 ring-marfil px-3.5 py-3 text-base text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta disabled:bg-marfil-light disabled:text-cacao-soft"
             />
           </label>
+
+          {enPaso2 && (
+            <label className="block">
+              <span className="text-sm font-semibold text-cacao">
+                Código de verificación
+              </span>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                required
+                autoFocus
+                maxLength={6}
+                placeholder="______"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
+                className="mt-1.5 w-full rounded-xl ring-1 ring-marfil px-3.5 py-3 text-center text-2xl font-bold tracking-[0.5em] text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+              />
+            </label>
+          )}
 
           <button
             type="submit"
             disabled={status === "checking"}
             className="w-full rounded-xl bg-terracotta text-white py-3 text-base font-bold hover:bg-terracotta-deep disabled:opacity-50 transition-colors"
           >
-            {status === "checking" ? "Enviando..." : "Enviarme el enlace"}
+            {status === "checking"
+              ? enPaso2
+                ? "Verificando..."
+                : "Enviando..."
+              : enPaso2
+                ? "Verificar código"
+                : "Enviarme el código"}
           </button>
 
           {aviso && (
@@ -161,6 +233,20 @@ export function LoginForm() {
             <div className="rounded-lg bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-3 text-sm text-[#7A2419]">
               {errorMsg}
             </div>
+          )}
+
+          {enPaso2 && (
+            <button
+              type="button"
+              onClick={() => {
+                const correo = email.trim().toLowerCase();
+                if (correo.includes("@")) enviarCodigo(correo);
+              }}
+              disabled={status === "checking"}
+              className="w-full text-sm font-semibold text-terracotta hover:text-terracotta-deep disabled:opacity-50"
+            >
+              Reenviar código
+            </button>
           )}
         </form>
 
