@@ -9,11 +9,16 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
  * entra con ellos. Por debajo usa Supabase Auth (email + password); la sesión
  * se guarda en cookies y el middleware deja pasar.
  *
+ * Modo "recuperar": pide el correo y dispara un enlace de recuperación
+ * (supabase.auth.resetPasswordForEmail). El enlace llega al correo, pasa por
+ * /auth/callback (que canjea el código) y aterriza en /restablecer, donde el
+ * usuario escribe su nueva contraseña. Así nadie depende del operador.
+ *
  * Nota: para que el registro entre de una (sin confirmar por correo), hay que
  * desactivar "Confirm email" en Supabase → Authentication. Si está activo, se
  * muestra un aviso para que el usuario revise su correo.
  */
-type Modo = "entrar" | "registro";
+type Modo = "entrar" | "registro" | "recuperar";
 
 export function LoginForm() {
   const search = useSearchParams();
@@ -26,6 +31,12 @@ export function LoginForm() {
   const [errorMsg, setErrorMsg] = useState("");
   const [aviso, setAviso] = useState("");
 
+  function cambiarModo(nuevo: Modo) {
+    setModo(nuevo);
+    setErrorMsg("");
+    setAviso("");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMsg("");
@@ -36,6 +47,28 @@ export function LoginForm() {
       setErrorMsg("Escribe un correo válido.");
       return;
     }
+
+    // --- Recuperar contraseña: solo necesita el correo ---
+    if (modo === "recuperar") {
+      setStatus("checking");
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { error } = await supabase.auth.resetPasswordForEmail(correo, {
+          redirectTo: `${window.location.origin}/auth/callback?next=/restablecer`,
+        });
+        if (error) throw error;
+        setStatus("idle");
+        setAviso(
+          "Si ese correo tiene una cuenta, te enviamos un enlace para crear una nueva contraseña. Revisa tu bandeja de entrada (y la carpeta de spam). El enlace vence en una hora.",
+        );
+      } catch {
+        setStatus("idle");
+        setErrorMsg("No se pudo enviar el enlace. Intenta de nuevo en un momento.");
+      }
+      return;
+    }
+
+    // --- Entrar / Registro: necesitan contraseña ---
     if (password.length < 6) {
       setErrorMsg("La contraseña debe tener al menos 6 caracteres.");
       return;
@@ -77,6 +110,72 @@ export function LoginForm() {
   }
 
   const esRegistro = modo === "registro";
+  const esRecuperar = modo === "recuperar";
+
+  // --- Vista de recuperar contraseña (sin pestañas) ---
+  if (esRecuperar) {
+    return (
+      <div className="space-y-4">
+        <div className="text-center">
+          <h2 className="font-cinzel text-lg font-bold text-cacao">
+            Recuperar contraseña
+          </h2>
+          <p className="mt-1 text-sm text-cacao-soft">
+            Escribe tu correo y te enviamos un enlace para crear una nueva.
+          </p>
+        </div>
+
+        <form
+          onSubmit={handleSubmit}
+          className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
+        >
+          <label className="block">
+            <span className="text-sm font-semibold text-cacao">Correo</span>
+            <input
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              required
+              autoFocus
+              placeholder="tucorreo@ejemplo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1.5 w-full rounded-xl ring-1 ring-marfil px-3.5 py-3 text-base text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={status === "checking"}
+            className="w-full rounded-xl bg-terracotta text-white py-3 text-base font-bold hover:bg-terracotta-deep disabled:opacity-50 transition-colors"
+          >
+            {status === "checking" ? "Enviando..." : "Enviarme el enlace"}
+          </button>
+
+          {aviso && (
+            <div className="rounded-lg bg-[#E7F2EA] ring-1 ring-[#BFE0CB] p-3 text-sm text-[#2F7A49]">
+              {aviso}
+            </div>
+          )}
+          {errorMsg && (
+            <div className="rounded-lg bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-3 text-sm text-[#7A2419]">
+              {errorMsg}
+            </div>
+          )}
+        </form>
+
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => cambiarModo("entrar")}
+            className="text-sm font-semibold text-terracotta hover:text-terracotta-deep"
+          >
+            ← Volver a entrar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -84,10 +183,7 @@ export function LoginForm() {
       <div className="flex gap-1.5 rounded-2xl bg-marfil-light ring-1 ring-marfil p-1.5">
         <button
           type="button"
-          onClick={() => {
-            setModo("entrar");
-            setErrorMsg("");
-          }}
+          onClick={() => cambiarModo("entrar")}
           className={
             "flex-1 rounded-xl py-2.5 font-bold text-sm transition-colors " +
             (!esRegistro ? "bg-white text-cacao shadow-sm" : "text-cacao-soft")
@@ -97,10 +193,7 @@ export function LoginForm() {
         </button>
         <button
           type="button"
-          onClick={() => {
-            setModo("registro");
-            setErrorMsg("");
-          }}
+          onClick={() => cambiarModo("registro")}
           className={
             "flex-1 rounded-xl py-2.5 font-bold text-sm transition-colors " +
             (esRegistro ? "bg-white text-cacao shadow-sm" : "text-cacao-soft")
@@ -172,6 +265,19 @@ export function LoginForm() {
           </div>
         )}
       </form>
+
+      {/* ¿Olvidaste tu contraseña? — solo tiene sentido al entrar */}
+      {!esRegistro && (
+        <div className="text-center">
+          <button
+            type="button"
+            onClick={() => cambiarModo("recuperar")}
+            className="text-sm font-semibold text-terracotta hover:text-terracotta-deep"
+          >
+            ¿Olvidaste tu contraseña?
+          </button>
+        </div>
+      )}
     </div>
   );
 }

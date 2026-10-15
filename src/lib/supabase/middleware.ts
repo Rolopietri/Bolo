@@ -12,6 +12,7 @@ import { moduloActivo } from "@/lib/modulos.mjs";
 // (no exigen sesión de bolo); su seguridad la pone el token de operador.
 const PUBLIC_PATHS = [
   "/login",
+  "/restablecer",
   "/auth",
   "/operador",
   "/api/operador",
