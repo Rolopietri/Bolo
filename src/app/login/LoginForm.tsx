@@ -85,7 +85,7 @@ export function LoginForm() {
       // Paso 2: verificar el código
       const token = codigo.trim();
       if (token.length < 6) {
-        setErrorMsg("Escribe el código de 6 dígitos que te llegó al correo.");
+        setErrorMsg("Escribe el código que te llegó al correo.");
         return;
       }
       setStatus("checking");
@@ -165,7 +165,7 @@ export function LoginForm() {
           </h2>
           <p className="mt-1 text-sm text-cacao-soft">
             {enPaso2
-              ? "Escribe el código de 6 dígitos que te llegó al correo."
+              ? "Escribe el código que te llegó al correo."
               : "Escribe tu correo y te enviamos un código de verificación."}
           </p>
         </div>
@@ -201,11 +201,11 @@ export function LoginForm() {
                 autoComplete="one-time-code"
                 required
                 autoFocus
-                maxLength={6}
-                placeholder="______"
+                maxLength={10}
+                placeholder="Código"
                 value={codigo}
                 onChange={(e) => setCodigo(e.target.value.replace(/\D/g, ""))}
-                className="mt-1.5 w-full rounded-xl ring-1 ring-marfil px-3.5 py-3 text-center text-2xl font-bold tracking-[0.5em] text-cacao placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
+                className="mt-1.5 w-full rounded-xl ring-1 ring-marfil px-3.5 py-3 text-center text-2xl font-bold tracking-[0.3em] text-cacao placeholder:text-base placeholder:font-normal placeholder:tracking-normal placeholder:text-cacao-mute focus:outline-none focus:ring-2 focus:ring-terracotta"
               />
             </label>
           )}
