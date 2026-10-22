@@ -14,10 +14,10 @@ import { BcvRateBanner } from "./BcvRateBanner";
 // Primeros pasos: lo PRIMERO y más visible al entrar a Cocina. Guía sencilla
 // para montar la cocina desde cero, pensada para alguien sin experiencia.
 const PASOS: { href: string; label: string; desc: string }[] = [
-  { href: "/cocina/proveedores", label: "Agrega tus proveedores", desc: "A quién le compras y cómo le pagas." },
-  { href: "/cocina/insumos", label: "Carga tus insumos", desc: "Qué compras, en qué unidad y a qué precio." },
-  { href: "/cocina/recetas", label: "Crea tus recetas", desc: "Qué preparas con esos insumos." },
-  { href: "/cocina/compras", label: "Registra tus compras", desc: "Precios y stock reales del día." },
+  { href: "/cocina/proveedores", label: "Proveedores", desc: "A quién le compras" },
+  { href: "/cocina/insumos", label: "Insumos", desc: "Qué compras" },
+  { href: "/cocina/recetas", label: "Recetas", desc: "Qué preparas" },
+  { href: "/cocina/compras", label: "Compras", desc: "Precios y stock" },
 ];
 
 const modulos: (MenuItem & {
@@ -75,32 +75,31 @@ export default function CocinaHub() {
           </p>
         </section>
 
-        {/* ── Para empezar: lo primero y más visible ───────────────────── */}
+        {/* ── Para empezar: línea de 4 pasos, simple y en orden ────────── */}
         <section aria-label="Para empezar" className="mb-10">
-          <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">
+          <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft mb-5">
             Para empezar
           </h2>
-          <ol className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ol className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-0">
+            {/* Línea base que conecta los números (solo en fila/desktop). */}
+            <span
+              aria-hidden
+              className="hidden sm:block absolute top-5 left-[12.5%] right-[12.5%] h-px bg-marfil"
+            />
             {PASOS.map((paso, i) => (
-              <li key={paso.href}>
+              <li key={paso.href} className="sm:flex-1 sm:min-w-0">
                 <Link
                   href={paso.href}
-                  className="group flex items-start gap-4 rounded-2xl bg-white ring-1 ring-marfil p-5 transition-colors hover:bg-marfil-soft hover:ring-terracotta/40"
+                  className="group relative z-10 flex items-center gap-3 sm:flex-col sm:gap-2 sm:text-center"
                 >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-terracotta text-white font-cinzel text-lg leading-none">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-terracotta text-white font-cinzel text-lg leading-none transition-colors group-hover:bg-cacao">
                     {i + 1}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block font-medium text-lg leading-tight text-cacao group-hover:text-terracotta transition-colors">
+                  <span className="min-w-0 sm:mt-1">
+                    <span className="block font-medium text-cacao group-hover:text-terracotta transition-colors">
                       {paso.label}
                     </span>
-                    <span className="mt-1 block text-sm text-cacao-soft">
-                      {paso.desc}
-                    </span>
-                    <span className="mt-2 inline-flex items-center gap-1 text-[11px] uppercase tracking-widest text-cacao group-hover:text-terracotta transition-colors">
-                      {i === 0 ? "Empezar" : "Ir"}
-                      <ChevronIcon className="size-3.5 transition-transform group-hover:translate-x-0.5" />
-                    </span>
+                    <span className="block text-xs text-cacao-soft">{paso.desc}</span>
                   </span>
                 </Link>
               </li>
