@@ -2,12 +2,23 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChatIcon, SparkleIcon, ChevronIcon } from "@/components/icons";
+import { DESTINOS, EVENTO_GUIAR, type ClaveDestino } from "./_destinos";
 
 // Burbujita de ayuda presente en toda la sección de Cocina. Conversa con el
-// asistente (/api/asistente), que responde dudas y consulta los datos del
-// cliente cuando hace falta. Pensado para personas sin experiencia.
+// asistente (/api/asistente), que responde dudas, consulta los datos del
+// cliente cuando hace falta y puede GUIAR con un cursor en pantalla (botón
+// "Te muestro"). Pensado para personas sin experiencia.
 
-type Mensaje = { role: "user" | "assistant"; content: string };
+type Mensaje = {
+  role: "user" | "assistant";
+  content: string;
+  /** Destino a señalar con el cursor-guía, si el AI ofreció mostrarlo. */
+  destino?: ClaveDestino;
+};
+
+function guiarHacia(destino: ClaveDestino) {
+  window.dispatchEvent(new CustomEvent(EVENTO_GUIAR, { detail: destino }));
+}
 
 const SALUDO =
   "¡Hola! Soy tu asistente. Te ayudo a montar tu cocina paso a paso y a resolver dudas. ¿En qué te echo una mano?";
@@ -50,9 +61,11 @@ export function AsistenteBolo() {
         body: JSON.stringify({ messages: nuevos.filter((_, i) => i > 0) }),
       });
       const data = await r.json();
+      const destino: ClaveDestino | undefined =
+        data.accion?.destino && data.accion.destino in DESTINOS ? data.accion.destino : undefined;
       setMensajes((prev) => [
         ...prev,
-        { role: "assistant", content: data.reply ?? "No pude responder, intenta de nuevo." },
+        { role: "assistant", content: data.reply ?? "No pude responder, intenta de nuevo.", destino },
       ]);
     } catch {
       setMensajes((prev) => [
@@ -97,7 +110,10 @@ export function AsistenteBolo() {
           {/* Mensajes */}
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
             {mensajes.map((m, i) => (
-              <div key={i} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+              <div
+                key={i}
+                className={m.role === "user" ? "flex flex-col items-end" : "flex flex-col items-start"}
+              >
                 <p
                   className={
                     m.role === "user"
@@ -107,6 +123,15 @@ export function AsistenteBolo() {
                 >
                   {m.content}
                 </p>
+                {m.destino && (
+                  <button
+                    type="button"
+                    onClick={() => guiarHacia(m.destino!)}
+                    className="mt-1.5 inline-flex items-center gap-1.5 rounded-full bg-cacao px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-terracotta"
+                  >
+                    <SparkleIcon className="size-3.5" /> Te muestro
+                  </button>
+                )}
               </div>
             ))}
 

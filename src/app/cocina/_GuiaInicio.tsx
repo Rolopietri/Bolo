@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { BulbIcon, HelpIcon, ChevronIcon } from "@/components/icons";
+import { EVENTO_IR_PASO } from "./_destinos";
 
 // Guía de inicio enfocada: muestra UN paso a la vez (empieza por Proveedores),
 // con ayuda a pedido — un "?" que al pasar el mouse (o tocar en móvil) explica
@@ -74,6 +75,16 @@ export function GuiaInicio() {
     setEjIdx(0);
     setVerAyuda(false);
   };
+
+  // El cursor-guía puede pedir que la guía salte a un paso antes de apuntar.
+  useEffect(() => {
+    const manejar = (e: Event) => {
+      const i = (e as CustomEvent).detail as number;
+      if (typeof i === "number" && i >= 0 && i < PASOS.length) irAPaso(i);
+    };
+    window.addEventListener(EVENTO_IR_PASO, manejar);
+    return () => window.removeEventListener(EVENTO_IR_PASO, manejar);
+  }, []);
 
   return (
     <section aria-label="Para empezar" className="mb-10">
@@ -157,6 +168,7 @@ export function GuiaInicio() {
         <div className="mt-5">
           <Link
             href={p.href}
+            data-guia="guia-cta"
             className="inline-flex items-center gap-2 rounded-xl bg-cacao text-white px-5 py-2.5 font-medium hover:bg-terracotta transition-colors"
           >
             {p.cta}

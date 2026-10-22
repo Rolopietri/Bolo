@@ -75,6 +75,7 @@ export default function CocinaHub() {
         {/* ── Atajo rápido ─────────────────────────────────────────────── */}
         <Link
           href="/cocina/plato"
+          data-guia="guia-plato"
           className="group mt-8 flex items-center gap-4 border-y border-marfil py-5"
         >
           <span className="grid size-12 shrink-0 place-items-center rounded-full bg-terracotta text-white">

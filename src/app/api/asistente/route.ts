@@ -13,6 +13,7 @@
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { CLAVES_DESTINO, DESTINOS, type ClaveDestino } from "../../cocina/_destinos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,8 @@ La cocina se monta en 4 pasos, en orden:
 Los módulos están en /cocina/proveedores, /cocina/insumos, /cocina/recetas, /cocina/compras.
 
 Cuando el cliente pregunte por SU avance, qué le falta, cuántos proveedores/insumos/recetas tiene, o pida seguimiento, USA las herramientas para leer sus datos reales antes de responder. No inventes cifras. Si una herramienta devuelve vacío, anímalo con el siguiente paso concreto.
+
+Puedes GUIAR visualmente: si el cliente pregunta DÓNDE está algo, cómo llegar a una función, o no encuentra un botón, usa la herramienta "mostrar_en_pantalla" con el destino adecuado. Un cursor se moverá solo en la pantalla para señalárselo. Al usarla, dilo con naturalidad y breve, por ejemplo: "¡Claro! Mira, te llevo hasta ahí." No describas coordenadas ni rutas técnicas; deja que el cursor lo muestre.
 
 Nunca pidas ni muestres contraseñas, tokens ni datos sensibles. Si te preguntan algo fuera de bolo (política, salud, etc.), responde con amabilidad que solo puedes ayudar con la plataforma.`;
 
@@ -63,6 +66,25 @@ const HERRAMIENTAS = [
     name: "listar_recetas",
     description: "Lista las recetas del cliente con sus porciones (hasta 30).",
     input_schema: { type: "object" as const, properties: {}, additionalProperties: false },
+  },
+  {
+    name: "mostrar_en_pantalla",
+    description:
+      "Mueve un cursor en la pantalla del cliente para señalarle dónde está una función. Úsala cuando pregunte DÓNDE está algo o cómo llegar. Destinos: " +
+      CLAVES_DESTINO.map((k) => `${k} (${DESTINOS[k].etiqueta})`).join("; ") +
+      ".",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        destino: {
+          type: "string" as const,
+          enum: CLAVES_DESTINO,
+          description: "Qué función mostrarle en pantalla.",
+        },
+      },
+      required: ["destino"],
+      additionalProperties: false,
+    },
   },
 ];
 
@@ -150,11 +172,15 @@ export async function POST(request: Request) {
     content: m.content,
   }));
 
+  // Si el modelo pide mostrar algo en pantalla, lo recordamos para devolverlo
+  // al chat (el cursor-guía del cliente lo anima).
+  let accion: { destino: ClaveDestino } | null = null;
+
   try {
     for (let vuelta = 0; vuelta < MAX_VUELTAS; vuelta++) {
       const respuesta = await anthropic.messages.create({
         model: MODELO,
-        max_tokens: 1024,
+        max_tokens: 1600,
         system: SISTEMA,
         tools: HERRAMIENTAS,
         messages: mensajes,
@@ -165,12 +191,22 @@ export async function POST(request: Request) {
         const resultados: Anthropic.ToolResultBlockParam[] = [];
         for (const bloque of respuesta.content) {
           if (bloque.type === "tool_use") {
-            const salida = await ejecutarHerramienta(sb, bloque.name);
-            resultados.push({
-              type: "tool_result",
-              tool_use_id: bloque.id,
-              content: salida,
-            });
+            if (bloque.name === "mostrar_en_pantalla") {
+              const d = (bloque.input as { destino?: string })?.destino;
+              if (d && (CLAVES_DESTINO as string[]).includes(d)) {
+                accion = { destino: d as ClaveDestino };
+              }
+              resultados.push({
+                type: "tool_result",
+                tool_use_id: bloque.id,
+                content: accion
+                  ? JSON.stringify({ ok: true, mostrando: DESTINOS[accion.destino].etiqueta })
+                  : JSON.stringify({ ok: false, error: "destino desconocido" }),
+              });
+            } else {
+              const salida = await ejecutarHerramienta(sb, bloque.name);
+              resultados.push({ type: "tool_result", tool_use_id: bloque.id, content: salida });
+            }
           }
         }
         mensajes.push({ role: "user", content: resultados });
@@ -184,6 +220,7 @@ export async function POST(request: Request) {
         .trim();
       return NextResponse.json({
         reply: texto || "No estoy seguro de haber entendido. ¿Puedes decírmelo de otra forma?",
+        accion,
       });
     }
     return NextResponse.json({
