@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import Link from "next/link";
 import { Suspense } from "react";
 import { RecetasList } from "./RecetasList";
+import { PasoSiguiente } from "../_PasoSiguiente";
 
 export default function RecetasPage() {
   return (
@@ -45,6 +46,11 @@ export default function RecetasPage() {
         >
           <RecetasList />
         </Suspense>
+        <PasoSiguiente
+          paso={3}
+          seguirTexto="seguir creando recetas"
+          siguiente={{ href: "/cocina/compras", label: "Compras" }}
+        />
       </main>
     </>
   );

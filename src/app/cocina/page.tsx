@@ -11,6 +11,15 @@ import {
 } from "@/components/icons";
 import { BcvRateBanner } from "./BcvRateBanner";
 
+// Primeros pasos: lo PRIMERO y más visible al entrar a Cocina. Guía sencilla
+// para montar la cocina desde cero, pensada para alguien sin experiencia.
+const PASOS: { href: string; label: string; desc: string }[] = [
+  { href: "/cocina/proveedores", label: "Agrega tus proveedores", desc: "A quién le compras y cómo le pagas." },
+  { href: "/cocina/insumos", label: "Carga tus insumos", desc: "Qué compras, en qué unidad y a qué precio." },
+  { href: "/cocina/recetas", label: "Crea tus recetas", desc: "Qué preparas con esos insumos." },
+  { href: "/cocina/compras", label: "Registra tus compras", desc: "Precios y stock reales del día." },
+];
+
 const modulos: (MenuItem & {
   /** Identificador interno (no se muestra). */
   clave: string;
@@ -61,13 +70,47 @@ export default function CocinaHub() {
             Cocina
           </h1>
           <p className="mt-3 font-serif italic text-cacao-soft max-w-2xl">
-            Catálogo de insumos, recetas, costos e inventario. Sigue los pasos
-            de “Para empezar”: cada sección usa los datos de la anterior.
+            Sigue estos 4 pasos para dejar tu cocina lista. Hazlos en orden: cada
+            paso usa lo del anterior.
           </p>
+        </section>
+
+        {/* ── Para empezar: lo primero y más visible ───────────────────── */}
+        <section aria-label="Para empezar" className="mb-10">
+          <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">
+            Para empezar
+          </h2>
+          <ol className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {PASOS.map((paso, i) => (
+              <li key={paso.href}>
+                <Link
+                  href={paso.href}
+                  className="group flex items-start gap-4 rounded-2xl bg-white ring-1 ring-marfil p-5 transition-colors hover:bg-marfil-soft hover:ring-terracotta/40"
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-terracotta text-white font-cinzel text-lg leading-none">
+                    {i + 1}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-medium text-lg leading-tight text-cacao group-hover:text-terracotta transition-colors">
+                      {paso.label}
+                    </span>
+                    <span className="mt-1 block text-sm text-cacao-soft">
+                      {paso.desc}
+                    </span>
+                    <span className="mt-2 inline-flex items-center gap-1 text-[11px] uppercase tracking-widest text-cacao group-hover:text-terracotta transition-colors">
+                      {i === 0 ? "Empezar" : "Ir"}
+                      <ChevronIcon className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ol>
         </section>
 
         <BcvRateBanner />
 
+        {/* ── Atajo rápido ─────────────────────────────────────────────── */}
         <Link
           href="/cocina/plato"
           className="group mt-8 flex items-center gap-4 border-y border-marfil py-5"
@@ -90,39 +133,12 @@ export default function CocinaHub() {
           <ChevronIcon className="size-5 text-cacao-mute transition group-hover:translate-x-1 group-hover:text-terracotta" />
         </Link>
 
+        {/* ── Todos los módulos (referencia) ───────────────────────────── */}
         <section className="mt-10">
           <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">
             Módulos
           </h2>
           <MenuLista items={modulosVisibles} className="mt-2" />
-        </section>
-
-        <section className="mt-10">
-          <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">
-            Para empezar
-          </h2>
-          <ol className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-5">
-            {[
-              { href: "/cocina/proveedores", label: "Proveedores", desc: "A quién le compras" },
-              { href: "/cocina/insumos", label: "Insumos", desc: "Qué compras y en qué unidad" },
-              { href: "/cocina/recetas", label: "Recetas", desc: "Qué preparas con ellos" },
-              { href: "/cocina/compras", label: "Compras", desc: "Precios y stock reales" },
-            ].map((paso, i) => (
-              <li key={paso.href}>
-                <Link href={paso.href} className="group flex items-start gap-3">
-                  <span className="grid size-7 shrink-0 place-items-center rounded-full ring-1 ring-terracotta/40 text-sm font-semibold text-terracotta group-hover:bg-terracotta group-hover:text-white transition-colors">
-                    {i + 1}
-                  </span>
-                  <span className="text-sm">
-                    <span className="block font-semibold text-cacao group-hover:text-terracotta transition-colors">
-                      {paso.label}
-                    </span>
-                    <span className="block text-xs text-cacao-soft">{paso.desc}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ol>
         </section>
       </main>
     </>

@@ -1,6 +1,7 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
 import { ProveedoresClient } from "./ProveedoresClient";
+import { PasoSiguiente } from "../_PasoSiguiente";
 
 export default function ProveedoresPage() {
   return (
@@ -27,6 +28,11 @@ export default function ProveedoresPage() {
           </Link>
         </section>
         <ProveedoresClient />
+        <PasoSiguiente
+          paso={1}
+          seguirTexto="seguir agregando proveedores"
+          siguiente={{ href: "/cocina/insumos", label: "Insumos" }}
+        />
       </main>
     </>
   );

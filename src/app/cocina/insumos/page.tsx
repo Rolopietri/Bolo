@@ -1,6 +1,7 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
 import { InsumosTabs, type Vista } from "./InsumosTabs";
+import { PasoSiguiente } from "../_PasoSiguiente";
 
 const VISTAS: Vista[] = ["catalogo", "alertas", "mermas", "auditoria"];
 
@@ -36,6 +37,11 @@ export default async function InsumosPage({
           </Link>
         </section>
         <InsumosTabs vistaInicial={vistaInicial} />
+        <PasoSiguiente
+          paso={2}
+          seguirTexto="seguir cargando insumos"
+          siguiente={{ href: "/cocina/recetas", label: "Recetas" }}
+        />
       </main>
     </>
   );
