@@ -343,3 +343,23 @@ export function HelpIcon(props: SVGProps<SVGSVGElement>) {
     </Svg>
   );
 }
+
+/** Burbuja de chat (asistente, conversación). */
+export function ChatIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M21 11.5a7.5 7.5 0 0 1-10.9 6.7L4 20l1.3-3.8A7.5 7.5 0 1 1 21 11.5z" />
+      <path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01" />
+    </Svg>
+  );
+}
+
+/** Destello (IA, asistente inteligente). */
+export function SparkleIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3l1.6 4.8L18 9.5l-4.4 1.7L12 16l-1.6-4.8L6 9.5l4.4-1.7L12 3z" />
+      <path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7.7-2z" />
+    </Svg>
+  );
+}
