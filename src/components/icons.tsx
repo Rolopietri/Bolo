@@ -321,3 +321,25 @@ export function BoltIcon(props: SVGProps<SVGSVGElement>) {
     </Svg>
   );
 }
+
+/** Bombillo (idea, ejemplo, ayuda sugerida). */
+export function BulbIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M9 18h6" />
+      <path d="M10 22h4" />
+      <path d="M15 14c.2-1 .7-1.7 1.5-2.5C17.7 10.2 18 9 18 8a6 6 0 0 0-12 0c0 1 .3 2.2 1.5 3.5.8.8 1.3 1.5 1.5 2.5" />
+    </Svg>
+  );
+}
+
+/** Círculo de ayuda (¿qué es esto?). */
+export function HelpIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3" />
+      <path d="M12 17h.01" />
+    </Svg>
+  );
+}

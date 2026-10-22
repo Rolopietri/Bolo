@@ -10,15 +10,7 @@ import {
   ChevronIcon,
 } from "@/components/icons";
 import { BcvRateBanner } from "./BcvRateBanner";
-
-// Primeros pasos: lo PRIMERO y más visible al entrar a Cocina. Guía sencilla
-// para montar la cocina desde cero, pensada para alguien sin experiencia.
-const PASOS: { href: string; label: string; desc: string }[] = [
-  { href: "/cocina/proveedores", label: "Proveedores", desc: "A quién le compras" },
-  { href: "/cocina/insumos", label: "Insumos", desc: "Qué compras" },
-  { href: "/cocina/recetas", label: "Recetas", desc: "Qué preparas" },
-  { href: "/cocina/compras", label: "Compras", desc: "Precios y stock" },
-];
+import { GuiaInicio } from "./_GuiaInicio";
 
 const modulos: (MenuItem & {
   /** Identificador interno (no se muestra). */
@@ -75,37 +67,8 @@ export default function CocinaHub() {
           </p>
         </section>
 
-        {/* ── Para empezar: línea de 4 pasos, simple y en orden ────────── */}
-        <section aria-label="Para empezar" className="mb-10">
-          <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft mb-5">
-            Para empezar
-          </h2>
-          <ol className="relative flex flex-col gap-5 sm:flex-row sm:items-start sm:gap-0">
-            {/* Línea base que conecta los números (solo en fila/desktop). */}
-            <span
-              aria-hidden
-              className="hidden sm:block absolute top-5 left-[12.5%] right-[12.5%] h-px bg-marfil"
-            />
-            {PASOS.map((paso, i) => (
-              <li key={paso.href} className="sm:flex-1 sm:min-w-0">
-                <Link
-                  href={paso.href}
-                  className="group relative z-10 flex items-center gap-3 sm:flex-col sm:gap-2 sm:text-center"
-                >
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-terracotta text-white font-cinzel text-lg leading-none transition-colors group-hover:bg-cacao">
-                    {i + 1}
-                  </span>
-                  <span className="min-w-0 sm:mt-1">
-                    <span className="block font-medium text-cacao group-hover:text-terracotta transition-colors">
-                      {paso.label}
-                    </span>
-                    <span className="block text-xs text-cacao-soft">{paso.desc}</span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ol>
-        </section>
+        {/* ── Para empezar: un paso a la vez, con ayuda y ejemplos ───────── */}
+        <GuiaInicio />
 
         <BcvRateBanner />
 
