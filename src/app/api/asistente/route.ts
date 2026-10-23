@@ -226,10 +226,27 @@ export async function POST(request: Request) {
     return NextResponse.json({
       reply: "Esto me está tomando más de lo normal. ¿Puedes reformular tu pregunta?",
     });
-  } catch {
-    return NextResponse.json(
-      { reply: "Tuve un problema para responder. Intenta de nuevo en un momento." },
-      { status: 200 },
-    );
+  } catch (err) {
+    // Mensaje claro según el tipo de fallo (ayuda a diagnosticar la config).
+    console.error("[asistente] error:", err);
+    let reply = "Tuve un problema para responder. Intenta de nuevo en un momento.";
+    if (err instanceof Anthropic.AuthenticationError) {
+      reply =
+        "La clave de Claude no es válida (revísala en Vercel → ANTHROPIC_API_KEY; que no tenga espacios).";
+    } else if (err instanceof Anthropic.PermissionDeniedError) {
+      reply =
+        "La cuenta de Claude no tiene permiso para este modelo. Avísame y lo ajusto.";
+    } else if (err instanceof Anthropic.RateLimitError) {
+      reply = "Hay mucho tráfico en este momento. Intenta de nuevo en un ratico.";
+    } else if (err instanceof Anthropic.NotFoundError) {
+      reply =
+        "El modelo no está disponible para tu cuenta. Avísame y lo cambio por otro.";
+    } else if (err instanceof Anthropic.BadRequestError) {
+      reply =
+        "Claude rechazó la solicitud. Suele ser falta de saldo: entra a console.anthropic.com → Billing y carga crédito.";
+    } else if (err instanceof Anthropic.APIError) {
+      reply = `Claude devolvió un error (${err.status ?? "desconocido"}). Revisa saldo y clave en console.anthropic.com.`;
+    }
+    return NextResponse.json({ reply }, { status: 200 });
   }
 }
