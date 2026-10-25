@@ -37,7 +37,7 @@ import {
 import { stockLibre } from "@/lib/types";
 import { normalizarBusqueda } from "@/lib/text";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { WarningIcon } from "@/components/icons";
+import { WarningIcon, CameraIcon } from "@/components/icons";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -120,6 +120,27 @@ const emptyForm: FormState = {
   notas: "",
 };
 
+// Reduce una foto y la convierte a base64 (JPEG) para el reconocedor por visión.
+// Achicar antes de enviar baja el costo y el tiempo sin perder legibilidad.
+async function archivoABase64(
+  file: File,
+  maxLado = 1280,
+  calidad = 0.82,
+): Promise<{ data: string; tipo: string }> {
+  const bitmap = await createImageBitmap(file);
+  const escala = Math.min(1, maxLado / Math.max(bitmap.width, bitmap.height));
+  const w = Math.max(1, Math.round(bitmap.width * escala));
+  const h = Math.max(1, Math.round(bitmap.height * escala));
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("sin canvas");
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const dataUrl = canvas.toDataURL("image/jpeg", calidad);
+  return { data: dataUrl.split(",")[1] ?? "", tipo: "image/jpeg" };
+}
+
 export function InsumosClient({
   onVerAlertas,
   onVerMermas,
@@ -156,6 +177,9 @@ export function InsumosClient({
   const [importando, setImportando] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
+  // Reconocimiento de insumo por foto de la etiqueta.
+  const [reconociendo, setReconociendo] = useState(false);
+  const [errorFoto, setErrorFoto] = useState<string | null>(null);
   // true cuando el usuario eligió "+ Nueva categoría…" en el desplegable.
   const [creandoCategoria, setCreandoCategoria] = useState(false);
   // Alta de proveedor en línea desde el desplegable "Proveedor" del form.
@@ -271,6 +295,56 @@ export function InsumosClient({
     setNuevoProveedor("");
     setEditingId(null);
     setAdding(false);
+  }
+
+  // Lee una foto de la etiqueta y autocompleta el formulario con lo reconocido.
+  async function reconocerFoto(file: File) {
+    setErrorFoto(null);
+    setReconociendo(true);
+    try {
+      const { data, tipo } = await archivoABase64(file);
+      const r = await fetch("/api/insumos/reconocer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagen: data, tipo }),
+      });
+      const json = await r.json();
+      const c = json?.campos as
+        | {
+            nombre?: string;
+            marca?: string;
+            categoria?: string;
+            unidadCompra?: string;
+            cantidadPorCompra?: string;
+            unidadBase?: string;
+          }
+        | undefined;
+      if (!c) {
+        setErrorFoto(json?.error || "No pude leer la etiqueta. Prueba con otra foto.");
+        return;
+      }
+      setForm((f) => ({
+        ...f,
+        nombre: c.nombre || f.nombre,
+        categoria: c.categoria || f.categoria,
+        unidadCompra: c.unidadCompra || f.unidadCompra,
+        cantidadPorCompra: c.cantidadPorCompra || f.cantidadPorCompra,
+        unidadBase: c.unidadBase || f.unidadBase,
+        notas: c.marca
+          ? f.notas
+            ? `${f.notas} · ${c.marca}`
+            : `Marca: ${c.marca}`
+          : f.notas,
+      }));
+      // Si la categoría reconocida no existe en la lista, habilita crearla.
+      if (c.categoria && !categoriasDisponibles.includes(c.categoria)) {
+        setCreandoCategoria(true);
+      }
+    } catch {
+      setErrorFoto("No pude procesar la foto. Intenta de nuevo.");
+    } finally {
+      setReconociendo(false);
+    }
   }
 
   // Da de alta un proveedor mínimo (solo nombre) desde el form de insumo y lo
@@ -711,6 +785,39 @@ export function InsumosClient({
           <h2 className="font-display text-sm tracking-[0.2em] uppercase text-cacao">
             {editingId ? "Editar insumo" : "Nuevo insumo"}
           </h2>
+          {!editingId && (
+            <div className="flex flex-col gap-1">
+              <label
+                className={`inline-flex w-fit items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
+                  reconociendo
+                    ? "bg-marfil text-cacao-soft"
+                    : "cursor-pointer bg-marfil-soft text-cacao hover:bg-marfil"
+                }`}
+              >
+                <CameraIcon className="size-4 text-terracotta" />
+                {reconociendo ? "Leyendo la etiqueta…" : "Tomar foto de la etiqueta"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  disabled={reconociendo}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void reconocerFoto(f);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+              <span className="text-xs text-cacao-soft">
+                Tómale una foto al empaque y relleno los datos por ti. Revisa antes de
+                guardar.
+              </span>
+              {errorFoto && (
+                <span className="text-xs text-terracotta-deep">{errorFoto}</span>
+              )}
+            </div>
+          )}
           <input
             type="text"
             placeholder="Nombre del insumo (ej: Café en grano)"
