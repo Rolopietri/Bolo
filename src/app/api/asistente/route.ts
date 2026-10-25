@@ -164,7 +164,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "sin mensajes" }, { status: 400 });
   }
 
-  const anthropic = new Anthropic({ apiKey });
+  // Si la clave no está amarrada a un workspace, Anthropic exige el header
+  // anthropic-workspace-id. Lo pasamos si está configurado (opcional).
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+  const anthropic = new Anthropic({
+    apiKey,
+    ...(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}),
+  });
   const sb = await createSupabaseServerClient();
 
   const mensajes: Anthropic.MessageParam[] = historial.map((m) => ({
