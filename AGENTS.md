@@ -15,3 +15,10 @@ uno nuevo al mismo archivo con el mismo estilo— **en vez de emojis**.
   emojis (nada de 🟢🟡🔴).
 - Para advertencias: `WarningIcon` o el color del texto, no ⚠️.
 - Glifos tipográficos neutros (✓ ✕ ✎ ↺ ★, flechas ← →) sí pueden quedarse.
+
+## Cursor Cloud specific instructions
+
+- Node 22 y npm. Instalar dependencias con `npm ci` (hay `package-lock.json`). Servidor de desarrollo: `npm run dev` (`next dev --webpack`), puerto 3000.
+- Abrir **http://localhost:3000**. Next 16 bloquea los recursos de desarrollo si la página se abre por `127.0.0.1`: el HTML llega, pero la app no se hidrata y los botones no responden. El log del servidor lo dice y apunta a `allowedDevOrigins`.
+- Sin `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` el proxy no pide login. Eventos, calendario y la lista vieja de tareas guardan en `localStorage` (en `/eventos` se puede crear un evento y sigue ahí al recargar). Cocina, Administración y Mercado leen Supabase: sin esas variables esas listas se quedan en «Cargando…».
+- Verificación: `npm run test:unidades`, `npm run test:pce`, `npx tsc --noEmit` y `npm run build` pasan. `npm run test:modulos` falla en 4 casos porque el menú por defecto ya incluye `marketplace` y el script todavía espera solo cocina y administración. `npm run lint` reporta errores ya presentes en marketplace y operador.
