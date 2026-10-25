@@ -1,0 +1,337 @@
+{
+  "nota": "Datos de ejemplo (demo de bolo)",
+  "proveedores": [
+    {
+      "nombre": "Mercado La Candelaria",
+      "contactoNombre": "Mostrador",
+      "contactoTelefono": "0412-5550101",
+      "contactoEmail": "pedidos@mercadocandelaria.demo",
+      "aceptaBsBcvDolar": true,
+      "aceptaBsBcvEuro": false,
+      "aceptaBsParalela": false,
+      "aceptaUsdEfectivo": true,
+      "aceptaUsdDivisa": false
+    },
+    {
+      "nombre": "Lácteos El Hatillo",
+      "contactoNombre": "Pedidos",
+      "contactoTelefono": "0414-5550102",
+      "contactoEmail": "pedidos@lacteoshatillo.demo",
+      "aceptaBsBcvDolar": true,
+      "aceptaBsBcvEuro": false,
+      "aceptaBsParalela": false,
+      "aceptaUsdEfectivo": false,
+      "aceptaUsdDivisa": true
+    },
+    {
+      "nombre": "Avícola Los Ruices",
+      "contactoNombre": "Despacho",
+      "contactoTelefono": "0424-5550103",
+      "contactoEmail": "despacho@avicolaruices.demo",
+      "aceptaBsBcvDolar": false,
+      "aceptaBsBcvEuro": false,
+      "aceptaBsParalela": false,
+      "aceptaUsdEfectivo": true,
+      "aceptaUsdDivisa": false
+    }
+  ],
+  "insumos": [
+    {
+      "nombre": "Harina de maíz precocida",
+      "categoria": "panaderia",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 1.8,
+      "stockMinimo": 4000,
+      "proveedor": "Mercado La Candelaria"
+    },
+    {
+      "nombre": "Queso blanco",
+      "categoria": "lacteos",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 7.5,
+      "stockMinimo": 2000,
+      "proveedor": "Lácteos El Hatillo"
+    },
+    {
+      "nombre": "Pollo pechuga",
+      "categoria": "proteinas",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 6.4,
+      "stockMinimo": 2500,
+      "proveedor": "Avícola Los Ruices"
+    },
+    {
+      "nombre": "Cebolla",
+      "categoria": "frutas",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 1.2,
+      "stockMinimo": 800,
+      "proveedor": "Mercado La Candelaria"
+    },
+    {
+      "nombre": "Pimentón",
+      "categoria": "frutas",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 1.8,
+      "stockMinimo": 500,
+      "proveedor": "Mercado La Candelaria"
+    },
+    {
+      "nombre": "Aceite vegetal",
+      "categoria": "condimentos",
+      "unidadCompra": "L",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "ml",
+      "precioCompraUsd": 3.4,
+      "stockMinimo": 400,
+      "proveedor": "Mercado La Candelaria"
+    },
+    {
+      "nombre": "Sal",
+      "categoria": "condimentos",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 0.8,
+      "stockMinimo": 200,
+      "proveedor": "Mercado La Candelaria"
+    },
+    {
+      "nombre": "Parchita",
+      "categoria": "frutas",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 2.6,
+      "stockMinimo": 1500,
+      "proveedor": "Mercado La Candelaria"
+    },
+    {
+      "nombre": "Azúcar",
+      "categoria": "otros",
+      "unidadCompra": "kg",
+      "cantidadPorCompra": 1000,
+      "unidadBase": "g",
+      "precioCompraUsd": 1.1,
+      "stockMinimo": 400,
+      "proveedor": "Mercado La Candelaria"
+    },
+    {
+      "nombre": "Aguacate",
+      "categoria": "frutas",
+      "unidadCompra": "unidad",
+      "cantidadPorCompra": 1,
+      "unidadBase": "unidad",
+      "precioCompraUsd": 1.1,
+      "stockMinimo": 12,
+      "proveedor": "Mercado La Candelaria"
+    }
+  ],
+  "recetas": [
+    {
+      "nombre": "Arepa con queso",
+      "categoria": "desayuno",
+      "porciones": 10,
+      "tiempoPrepMin": 15,
+      "tiempoCoccionMin": 10,
+      "precioSugeridoUsd": 3.5,
+      "procedimiento": "Mezcla la harina con agua y una pizca de sal hasta una masa suave. Arma arepas de 80 g y cuécelas en budare. Ábrelas y rellena con queso blanco.",
+      "ingredientes": [
+        { "insumo": "Harina de maíz precocida", "cantidad": 800, "unidad": "g" },
+        { "insumo": "Queso blanco", "cantidad": 500, "unidad": "g" },
+        { "insumo": "Sal", "cantidad": 8, "unidad": "g" }
+      ]
+    },
+    {
+      "nombre": "Pollo a la plancha",
+      "categoria": "plato",
+      "porciones": 8,
+      "tiempoPrepMin": 15,
+      "tiempoCoccionMin": 20,
+      "precioSugeridoUsd": 8,
+      "procedimiento": "Sazona la pechuga con sal. Dora el pollo a la plancha con un hilo de aceite. Saltea cebolla y pimentón y sírvelos encima.",
+      "ingredientes": [
+        { "insumo": "Pollo pechuga", "cantidad": 1600, "unidad": "g" },
+        { "insumo": "Cebolla", "cantidad": 320, "unidad": "g" },
+        { "insumo": "Pimentón", "cantidad": 240, "unidad": "g" },
+        { "insumo": "Aceite vegetal", "cantidad": 80, "unidad": "ml" },
+        { "insumo": "Sal", "cantidad": 12, "unidad": "g" }
+      ]
+    },
+    {
+      "nombre": "Jugo de parchita",
+      "categoria": "jugos",
+      "porciones": 8,
+      "tiempoPrepMin": 10,
+      "precioSugeridoUsd": 2.5,
+      "procedimiento": "Licúa la pulpa de parchita con agua y azúcar. Cuela y sirve frío.",
+      "ingredientes": [
+        { "insumo": "Parchita", "cantidad": 1600, "unidad": "g" },
+        { "insumo": "Azúcar", "cantidad": 200, "unidad": "g" }
+      ]
+    },
+    {
+      "nombre": "Ensalada de aguacate",
+      "categoria": "plato",
+      "porciones": 6,
+      "tiempoPrepMin": 10,
+      "precioSugeridoUsd": 4.5,
+      "procedimiento": "Corta el aguacate y la cebolla. Aliña con aceite y sal justo antes de servir.",
+      "ingredientes": [
+        { "insumo": "Aguacate", "cantidad": 6, "unidad": "unidad" },
+        { "insumo": "Cebolla", "cantidad": 180, "unidad": "g" },
+        { "insumo": "Aceite vegetal", "cantidad": 90, "unidad": "ml" },
+        { "insumo": "Sal", "cantidad": 6, "unidad": "g" }
+      ]
+    }
+  ],
+  "compras": [
+    {
+      "insumo": "Harina de maíz precocida",
+      "proveedor": "Mercado La Candelaria",
+      "diasAtras": 5,
+      "cantidad": 3,
+      "precioTotalUsd": 5.4,
+      "modalidadPago": "efectivo",
+      "pagada": true
+    },
+    {
+      "insumo": "Queso blanco",
+      "proveedor": "Lácteos El Hatillo",
+      "diasAtras": 4,
+      "cantidad": 2,
+      "precioTotalUsd": 15,
+      "modalidadPago": "bcv_dolar",
+      "pagada": true
+    },
+    {
+      "insumo": "Pollo pechuga",
+      "proveedor": "Avícola Los Ruices",
+      "diasAtras": 3,
+      "cantidad": 4,
+      "precioTotalUsd": 25.6,
+      "modalidadPago": "efectivo",
+      "pagada": false,
+      "numeroFactura": "DEMO-220"
+    },
+    {
+      "insumo": "Cebolla",
+      "proveedor": "Mercado La Candelaria",
+      "diasAtras": 3,
+      "cantidad": 1,
+      "precioTotalUsd": 1.2,
+      "modalidadPago": "efectivo",
+      "pagada": true
+    },
+    {
+      "insumo": "Aceite vegetal",
+      "proveedor": "Mercado La Candelaria",
+      "diasAtras": 6,
+      "cantidad": 2,
+      "precioTotalUsd": 6.8,
+      "modalidadPago": "efectivo",
+      "pagada": true
+    },
+    {
+      "insumo": "Sal",
+      "proveedor": "Mercado La Candelaria",
+      "diasAtras": 6,
+      "cantidad": 1,
+      "precioTotalUsd": 0.8,
+      "modalidadPago": "efectivo",
+      "pagada": true
+    },
+    {
+      "insumo": "Parchita",
+      "proveedor": "Mercado La Candelaria",
+      "diasAtras": 2,
+      "cantidad": 2,
+      "precioTotalUsd": 5.2,
+      "modalidadPago": "efectivo",
+      "pagada": true
+    },
+    {
+      "insumo": "Azúcar",
+      "proveedor": "Mercado La Candelaria",
+      "diasAtras": 6,
+      "cantidad": 1,
+      "precioTotalUsd": 1.1,
+      "modalidadPago": "efectivo",
+      "pagada": true
+    },
+    {
+      "insumo": "Aguacate",
+      "proveedor": "Mercado La Candelaria",
+      "diasAtras": 2,
+      "cantidad": 6,
+      "precioTotalUsd": 6.6,
+      "modalidadPago": "efectivo",
+      "pagada": true
+    }
+  ],
+  "ventas": [
+    {
+      "receta": "Arepa con queso",
+      "diasAtras": 2,
+      "cantidad": 12,
+      "precioUnitarioUsd": 3.5
+    },
+    {
+      "receta": "Pollo a la plancha",
+      "diasAtras": 1,
+      "cantidad": 6,
+      "precioUnitarioUsd": 8
+    },
+    {
+      "receta": "Jugo de parchita",
+      "diasAtras": 1,
+      "cantidad": 4,
+      "precioUnitarioUsd": 2.5
+    },
+    {
+      "receta": "Ensalada de aguacate",
+      "diasAtras": 0,
+      "cantidad": 4,
+      "precioUnitarioUsd": 4.5
+    }
+  ],
+  "menaje": [
+    {
+      "nombre": "Plato hondo 24 cm",
+      "categoria": "Vajilla",
+      "descripcion": "Plato hondo para sopa y pasta.",
+      "cantidad": 36,
+      "precioReposicionUsd": 4.2
+    },
+    {
+      "nombre": "Vaso de agua",
+      "categoria": "Cristalería",
+      "descripcion": "Vaso liso de mesa.",
+      "cantidad": 24,
+      "precioReposicionUsd": 2.8
+    },
+    {
+      "nombre": "Tenedor de mesa",
+      "categoria": "Cubiertos",
+      "descripcion": "Tenedor de acero para el servicio.",
+      "cantidad": 40,
+      "precioReposicionUsd": 1.1
+    }
+  ],
+  "pedidoEjemplo": [
+    { "receta": "Arepa con queso", "raciones": 40 },
+    { "receta": "Pollo a la plancha", "raciones": 20 },
+    { "receta": "Jugo de parchita", "raciones": 24 },
+    { "receta": "Ensalada de aguacate", "raciones": 12 }
+  ]
+}

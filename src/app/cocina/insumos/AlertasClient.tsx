@@ -8,6 +8,7 @@ import { displayCantidad } from "@/lib/units";
 import { listInsumos, listProveedores } from "@/lib/data/cocina";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 export function AlertasClient({
   onConteoAlertas,
@@ -107,17 +108,13 @@ export function AlertasClient({
       </section>
 
       {insumos.length === 0 ? (
-        <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center">
-          <h2 className="font-display tracking-widest uppercase text-cacao text-sm">
-            Aún no tienes insumos
-          </h2>
-          <p className="mt-2 font-serif italic text-cacao-soft">
-            Las alertas aparecen cuando tus insumos tienen stock y un mínimo definido.{" "}
-            <Link href="/cocina/insumos" className="not-italic font-semibold underline hover:text-terracotta">
-              Crear el primer insumo
-            </Link>
-          </p>
-        </div>
+        <EstadoVacioCocina
+          titulo="Todavía no hay insumos para vigilar"
+          beneficio="Las alertas aparecen cuando un insumo baja del mínimo. Con el ejemplo verás qué está agotado y qué conviene reponer."
+          cta="Agregar insumo"
+          href="/cocina/insumos"
+          onDemo={reintentarCarga}
+        />
       ) : agotados.length === 0 && bajos.length === 0 ? (
         <div className="rounded-2xl bg-emerald-50 ring-1 ring-emerald-200 p-8 text-center">
           <div className="mb-2 flex justify-center text-emerald-600">

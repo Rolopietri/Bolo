@@ -34,6 +34,7 @@ import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 type FormState = {
   insumoId: string;
@@ -1227,11 +1228,13 @@ export function ComprasClient() {
           onReintentar={reintentarCarga}
         />
       ) : compras.length === 0 ? (
-        <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
-          <p className="font-serif italic text-cacao-soft">
-            Sin compras registradas todavía.
-          </p>
-        </div>
+        <EstadoVacioCocina
+          titulo="Todavía no hay compras"
+          beneficio="Al registrar una compra se actualizan el stock y el precio del insumo. El costo de tus platos queda al día."
+          cta="Registrar compra"
+          onCta={() => setAdding(true)}
+          onDemo={reintentarCarga}
+        />
       ) : (
         <div className="rounded-2xl bg-white ring-1 ring-marfil overflow-hidden divide-y divide-marfil">
           {gruposPorFecha.map((grupo, idx) => {

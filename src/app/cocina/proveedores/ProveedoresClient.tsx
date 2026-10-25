@@ -13,6 +13,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { Importador, type CampoImport } from "@/components/Importador";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 /** Columnas que el importador intenta reconocer en el Excel/CSV de proveedores. */
 const CAMPOS_PROVEEDOR: CampoImport[] = [
@@ -381,11 +382,13 @@ export function ProveedoresClient() {
           onReintentar={reintentarCarga}
         />
       ) : items.length === 0 ? (
-        <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
-          <p className="font-serif italic text-cacao-soft mb-4">
-            Todavía no hay proveedores. Agrega el primero.
-          </p>
-        </div>
+        <EstadoVacioCocina
+          titulo="Todavía no hay proveedores"
+          beneficio="Aquí ves a quién le compras y cómo le pagas. Sin eso, las compras y el pedido sugerido no saben a quién pedirle."
+          cta="Agregar proveedor"
+          onCta={() => setAdding(true)}
+          onDemo={reintentarCarga}
+        />
       ) : (
         <div className="rounded-2xl bg-white ring-1 ring-marfil overflow-hidden">
           <ul className="divide-y divide-marfil">

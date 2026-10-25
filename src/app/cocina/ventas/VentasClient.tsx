@@ -33,6 +33,7 @@ import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 /** Xetux nombra el archivo con la fecha en que se generó el reporte, ej.
  *  "Detallado_por_ProductoThu_Sep_03_22_25_34_VET_2026.xls" → 2026-09-03. El
@@ -639,6 +640,19 @@ export function VentasClient() {
     <div className="space-y-6">
       {error && <ErrorBanner>{error}</ErrorBanner>}
 
+      {ventas.length === 0 && (
+        <EstadoVacioCocina
+          titulo="Todavía no hay ventas"
+          beneficio="Cada venta descuenta los ingredientes de la receta. El inventario baja solo, sin contar a mano."
+          cta="Registrar venta"
+          onCta={() => {
+            setTab("registrar");
+            document.getElementById("registro-venta")?.scrollIntoView({ behavior: "smooth" });
+          }}
+          onDemo={reintentarCarga}
+        />
+      )}
+
       {/* Tabs */}
       <div className="flex flex-wrap gap-2">
         {(
@@ -666,6 +680,7 @@ export function VentasClient() {
       {/* TAB: Registro manual */}
       {tab === "registrar" && (
         <form
+          id="registro-venta"
           onSubmit={handleRegistroManual}
           className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
         >
@@ -1355,11 +1370,9 @@ export function VentasClient() {
               Cargando...
             </div>
           ) : ventas.length === 0 ? (
-            <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
-              <p className="font-serif italic text-cacao-soft">
-                Sin ventas registradas todavía.
-              </p>
-            </div>
+            <p className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center font-serif italic text-cacao-soft">
+              El historial aparece aquí cuando registres la primera venta.
+            </p>
           ) : (
             <div className="rounded-2xl bg-white ring-1 ring-marfil overflow-hidden divide-y divide-marfil">
               {ventasPorFecha.map((grupo, idx) => {

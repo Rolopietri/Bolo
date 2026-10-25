@@ -20,6 +20,7 @@ import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { normalizarBusqueda } from "@/lib/text";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 const SIN_CATEGORIA = "__sin_categoria__";
 
@@ -308,21 +309,19 @@ export function RecetasList() {
         </div>
       )}
 
-      {filtered.length === 0 ? (
+      {items.length === 0 ? (
+        <EstadoVacioCocina
+          titulo="Todavía no hay recetas"
+          beneficio="Una receta junta los insumos, el costo y el precio de venta. Con dos o tres platos ya puedes armar un pedido."
+          cta="Crear receta"
+          href="/cocina/recetas/nuevo"
+          onDemo={reintentarCarga}
+        />
+      ) : filtered.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
-          <p className="font-serif italic text-cacao-soft mb-4">
-            {items.length === 0
-              ? "Aún no hay recetas. Crea la primera."
-              : "Sin resultados en esta búsqueda."}
+          <p className="font-serif italic text-cacao-soft">
+            Sin resultados en esta búsqueda.
           </p>
-          {items.length === 0 && (
-            <Link
-              href="/cocina/recetas/nuevo"
-              className="inline-block rounded-xl bg-cacao text-white px-5 py-2.5 font-medium hover:bg-terracotta transition-colors"
-            >
-              + Nueva receta
-            </Link>
-          )}
         </div>
       ) : vista === "costeo" ? (
         <div className="space-y-2">

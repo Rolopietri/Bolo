@@ -49,3 +49,8 @@ con `pg_get_functiondef`). Se consolidó así:
 Duplicación peligrosa: **ninguna**. Las únicas funciones en 2 archivos son las 4
 del motor con trigger (bundle + canónico), que es el patrón correcto. Migrar a
 una carpeta `migrations/` numerada queda como higiene futura, sin urgencia.
+
+## Datos demo (opt-in)
+`supabase/demo/cocina-demo-seed.sql` **no** forma parte del orden alfabético.
+Es un ejemplo para el proyecto de ensayo bolodemo. No lo pegues en una base
+con operación real. Cómo correrlo: ver el encabezado de ese archivo y el README.
