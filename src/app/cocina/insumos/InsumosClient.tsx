@@ -38,6 +38,7 @@ import { stockLibre } from "@/lib/types";
 import { normalizarBusqueda } from "@/lib/text";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WarningIcon, CameraIcon, ImageIcon } from "@/components/icons";
+import { CamaraCaptura } from "./_CamaraCaptura";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -180,6 +181,7 @@ export function InsumosClient({
   // Reconocimiento de insumo por foto de la etiqueta.
   const [reconociendo, setReconociendo] = useState(false);
   const [errorFoto, setErrorFoto] = useState<string | null>(null);
+  const [camaraAbierta, setCamaraAbierta] = useState(false);
   // true cuando el usuario eligió "+ Nueva categoría…" en el desplegable.
   const [creandoCategoria, setCreandoCategoria] = useState(false);
   // Alta de proveedor en línea desde el desplegable "Proveedor" del form.
@@ -297,12 +299,11 @@ export function InsumosClient({
     setAdding(false);
   }
 
-  // Lee una foto de la etiqueta y autocompleta el formulario con lo reconocido.
-  async function reconocerFoto(file: File) {
+  // Envía una imagen (ya en base64) al reconocedor y autocompleta el formulario.
+  async function enviarReconocer(data: string, tipo: string) {
     setErrorFoto(null);
     setReconociendo(true);
     try {
-      const { data, tipo } = await archivoABase64(file);
       const r = await fetch("/api/insumos/reconocer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -344,6 +345,16 @@ export function InsumosClient({
       setErrorFoto("No pude procesar la foto. Intenta de nuevo.");
     } finally {
       setReconociendo(false);
+    }
+  }
+
+  // Desde un archivo (galería): lo reduce y lo manda a reconocer.
+  async function reconocerFoto(file: File) {
+    try {
+      const { data, tipo } = await archivoABase64(file);
+      await enviarReconocer(data, tipo);
+    } catch {
+      setErrorFoto("No pude procesar la foto. Intenta de nuevo.");
     }
   }
 
@@ -788,29 +799,20 @@ export function InsumosClient({
           {!editingId && (
             <div className="flex flex-col gap-1">
               <div className="flex flex-wrap gap-2">
-                {/* Cámara: capturar la foto en el momento */}
-                <label
+                {/* Cámara: abre la webcam/cámara en vivo para capturar al momento */}
+                <button
+                  type="button"
+                  onClick={() => setCamaraAbierta(true)}
+                  disabled={reconociendo}
                   className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
                     reconociendo
                       ? "bg-marfil text-cacao-soft"
-                      : "cursor-pointer bg-marfil-soft text-cacao hover:bg-marfil"
+                      : "bg-marfil-soft text-cacao hover:bg-marfil"
                   }`}
                 >
                   <CameraIcon className="size-4 text-terracotta" />
                   {reconociendo ? "Leyendo la etiqueta…" : "Tomar foto"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    disabled={reconociendo}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void reconocerFoto(f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
+                </button>
                 {/* Galería: elegir una imagen existente */}
                 <label
                   className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
@@ -840,6 +842,12 @@ export function InsumosClient({
               </span>
               {errorFoto && (
                 <span className="text-xs text-terracotta-deep">{errorFoto}</span>
+              )}
+              {camaraAbierta && (
+                <CamaraCaptura
+                  onCapturar={(data, tipo) => void enviarReconocer(data, tipo)}
+                  onCerrar={() => setCamaraAbierta(false)}
+                />
               )}
             </div>
           )}
