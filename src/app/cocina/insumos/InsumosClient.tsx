@@ -37,7 +37,7 @@ import {
 import { stockLibre } from "@/lib/types";
 import { normalizarBusqueda } from "@/lib/text";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { WarningIcon, CameraIcon } from "@/components/icons";
+import { WarningIcon, CameraIcon, ImageIcon } from "@/components/icons";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -787,31 +787,56 @@ export function InsumosClient({
           </h2>
           {!editingId && (
             <div className="flex flex-col gap-1">
-              <label
-                className={`inline-flex w-fit items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
-                  reconociendo
-                    ? "bg-marfil text-cacao-soft"
-                    : "cursor-pointer bg-marfil-soft text-cacao hover:bg-marfil"
-                }`}
-              >
-                <CameraIcon className="size-4 text-terracotta" />
-                {reconociendo ? "Leyendo la etiqueta…" : "Tomar foto de la etiqueta"}
-                <input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="hidden"
-                  disabled={reconociendo}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void reconocerFoto(f);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+              <div className="flex flex-wrap gap-2">
+                {/* Cámara: capturar la foto en el momento */}
+                <label
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
+                    reconociendo
+                      ? "bg-marfil text-cacao-soft"
+                      : "cursor-pointer bg-marfil-soft text-cacao hover:bg-marfil"
+                  }`}
+                >
+                  <CameraIcon className="size-4 text-terracotta" />
+                  {reconociendo ? "Leyendo la etiqueta…" : "Tomar foto"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    disabled={reconociendo}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void reconocerFoto(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {/* Galería: elegir una imagen existente */}
+                <label
+                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
+                    reconociendo
+                      ? "bg-marfil text-cacao-soft"
+                      : "cursor-pointer bg-marfil-soft text-cacao hover:bg-marfil"
+                  }`}
+                >
+                  <ImageIcon className="size-4 text-terracotta" />
+                  Galería
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={reconociendo}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void reconocerFoto(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              </div>
               <span className="text-xs text-cacao-soft">
-                Tómale una foto al empaque y relleno los datos por ti. Revisa antes de
-                guardar.
+                Toma una foto del empaque o elige una de tu galería y relleno los datos
+                por ti. Revisa antes de guardar.
               </span>
               {errorFoto && (
                 <span className="text-xs text-terracotta-deep">{errorFoto}</span>

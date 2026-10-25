@@ -354,6 +354,17 @@ export function CameraIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Imagen / galería de fotos. */
+export function ImageIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="M21 15l-5-5L5 21" />
+    </Svg>
+  );
+}
+
 /** Burbuja de chat (asistente, conversación). */
 export function ChatIcon(props: SVGProps<SVGSVGElement>) {
   return (
