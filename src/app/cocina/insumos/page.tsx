@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import Link from "next/link";
 import { InsumosTabs, type Vista } from "./InsumosTabs";
 import { PasoSiguiente } from "../_PasoSiguiente";
+import { PasosCocina } from "../_PasosCocina";
 
 const VISTAS: Vista[] = ["catalogo", "alertas", "mermas", "auditoria"];
 
@@ -36,6 +37,7 @@ export default async function InsumosPage({
             ← Insumos e Inventario
           </Link>
         </section>
+        <PasosCocina actual={2} className="mb-8" />
         <InsumosTabs vistaInicial={vistaInicial} />
         <PasoSiguiente
           paso={2}

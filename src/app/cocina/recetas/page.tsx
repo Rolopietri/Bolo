@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { RecetasList } from "./RecetasList";
 import { PasoSiguiente } from "../_PasoSiguiente";
+import { PasosCocina } from "../_PasosCocina";
 
 export default function RecetasPage() {
   return (
@@ -37,6 +38,7 @@ export default function RecetasPage() {
             </Link>
           </div>
         </section>
+        <PasosCocina actual={3} className="mb-8" />
         <Suspense
           fallback={
             <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">

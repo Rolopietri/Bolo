@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import Link from "next/link";
 import { ComprasClient } from "./ComprasClient";
 import { PasoSiguiente } from "../_PasoSiguiente";
+import { PasosCocina } from "../_PasosCocina";
 
 export default function ComprasPage() {
   return (
@@ -28,6 +29,7 @@ export default function ComprasPage() {
             ← Compras, Ventas y Pedidos
           </Link>
         </section>
+        <PasosCocina actual={4} className="mb-8" />
         <ComprasClient />
         <PasoSiguiente paso={4} seguirTexto="seguir registrando compras" />
       </main>

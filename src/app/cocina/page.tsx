@@ -10,15 +10,7 @@ import {
   ChevronIcon,
 } from "@/components/icons";
 import { BcvRateBanner } from "./BcvRateBanner";
-
-// Los 4 pasos del montaje, para la línea horizontal. El cursor-guía apunta a
-// cada uno con su data-guia.
-const PASOS: { href: string; label: string; guia: string }[] = [
-  { href: "/cocina/proveedores", label: "Proveedores", guia: "paso-proveedores" },
-  { href: "/cocina/insumos", label: "Insumos", guia: "paso-insumos" },
-  { href: "/cocina/recetas", label: "Recetas", guia: "paso-recetas" },
-  { href: "/cocina/compras", label: "Compras", guia: "paso-compras" },
-];
+import { PasosCocina } from "./_PasosCocina";
 
 const modulos: (MenuItem & {
   /** Identificador interno (no se muestra). */
@@ -122,31 +114,7 @@ export default function CocinaHub() {
         </div>
 
         {/* ── Los 4 pasos en una línea horizontal ──────────────────────── */}
-        <section aria-label="Los 4 pasos" className="mt-7">
-          <ol className="relative flex items-start justify-between gap-1">
-            {/* Línea base que conecta los números */}
-            <span
-              aria-hidden
-              className="absolute top-4 left-[12.5%] right-[12.5%] h-px bg-marfil"
-            />
-            {PASOS.map((p, i) => (
-              <li key={p.href} className="relative z-10 min-w-0 flex-1">
-                <Link
-                  href={p.href}
-                  data-guia={p.guia}
-                  className="group flex flex-col items-center gap-1.5 text-center"
-                >
-                  <span className="grid size-8 place-items-center rounded-full bg-marfil font-cinzel text-sm text-cacao-soft transition-colors group-hover:bg-terracotta group-hover:text-white">
-                    {i + 1}
-                  </span>
-                  <span className="text-xs leading-tight text-cacao transition-colors group-hover:text-terracotta sm:text-sm">
-                    {p.label}
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ol>
-        </section>
+        <PasosCocina className="mt-7" />
 
         {/* ── Todos los módulos (referencia) ───────────────────────────── */}
         <section className="mt-10">

@@ -2,6 +2,7 @@ import { Header } from "@/components/Header";
 import Link from "next/link";
 import { ProveedoresClient } from "./ProveedoresClient";
 import { PasoSiguiente } from "../_PasoSiguiente";
+import { PasosCocina } from "../_PasosCocina";
 
 export default function ProveedoresPage() {
   return (
@@ -27,6 +28,7 @@ export default function ProveedoresPage() {
             ← Insumos e Inventario
           </Link>
         </section>
+        <PasosCocina actual={1} className="mb-8" />
         <ProveedoresClient />
         <PasoSiguiente
           paso={1}
