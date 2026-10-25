@@ -241,11 +241,9 @@ export async function POST(request: Request) {
     } else if (err instanceof Anthropic.NotFoundError) {
       reply =
         "El modelo no está disponible para tu cuenta. Avísame y lo cambio por otro.";
-    } else if (err instanceof Anthropic.BadRequestError) {
-      reply =
-        "Claude rechazó la solicitud. Suele ser falta de saldo: entra a console.anthropic.com → Billing y carga crédito.";
     } else if (err instanceof Anthropic.APIError) {
-      reply = `Claude devolvió un error (${err.status ?? "desconocido"}). Revisa saldo y clave en console.anthropic.com.`;
+      // Mostramos el detalle real de Claude para diagnosticar (temporal).
+      reply = `Claude devolvió un error (${err.status ?? "?"}). Detalle: ${err.message}`;
     }
     return NextResponse.json({ reply }, { status: 200 });
   }
