@@ -1,6 +1,7 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
 import { ComprasClient } from "./ComprasClient";
+import { PasoSiguiente } from "../_PasoSiguiente";
 
 export default function ComprasPage() {
   return (
@@ -28,6 +29,7 @@ export default function ComprasPage() {
           </Link>
         </section>
         <ComprasClient />
+        <PasoSiguiente paso={4} seguirTexto="seguir registrando compras" />
       </main>
     </>
   );

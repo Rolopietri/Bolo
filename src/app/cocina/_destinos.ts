@@ -34,29 +34,30 @@ export const DESTINOS = {
     selector: '[data-guia="mod-marketplace"]',
     etiqueta: "dónde está el Mercado (proveedores y equipos)",
   },
-  // ── Pasos del montaje de Cocina ─────────────────────────────────────
+  // ── Cocina: botones y pasos del montaje ─────────────────────────────
+  empezar: {
+    ruta: "/cocina",
+    selector: '[data-guia="cocina-empezar"]',
+    etiqueta: "por dónde empezar a montar tu cocina",
+  },
   proveedores: {
     ruta: "/cocina",
-    paso: 0,
-    selector: '[data-guia="guia-cta"]',
+    selector: '[data-guia="paso-proveedores"]',
     etiqueta: "dónde agregar tus proveedores",
   },
   insumos: {
     ruta: "/cocina",
-    paso: 1,
-    selector: '[data-guia="guia-cta"]',
+    selector: '[data-guia="paso-insumos"]',
     etiqueta: "dónde cargar tus insumos",
   },
   recetas: {
     ruta: "/cocina",
-    paso: 2,
-    selector: '[data-guia="guia-cta"]',
+    selector: '[data-guia="paso-recetas"]',
     etiqueta: "dónde crear tus recetas",
   },
   compras: {
     ruta: "/cocina",
-    paso: 3,
-    selector: '[data-guia="guia-cta"]',
+    selector: '[data-guia="paso-compras"]',
     etiqueta: "dónde registrar tus compras",
   },
   plato: {
