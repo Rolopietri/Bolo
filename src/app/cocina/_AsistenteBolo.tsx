@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { ChatIcon, SparkleIcon, ChevronIcon } from "@/components/icons";
-import { DESTINOS, EVENTO_GUIAR, type ClaveDestino } from "./_destinos";
+import { DESTINOS, EVENTO_ABRIR, EVENTO_GUIAR, type ClaveDestino } from "./_destinos";
 
 // Burbujita de ayuda presente en toda la sección de Cocina. Conversa con el
 // asistente (/api/asistente), que responde dudas, consulta los datos del
@@ -21,13 +22,13 @@ function guiarHacia(destino: ClaveDestino) {
 }
 
 const SALUDO =
-  "¡Hola! Soy tu asistente. Te ayudo a montar tu cocina paso a paso y a resolver dudas. ¿En qué te echo una mano?";
+  "¡Hola! Soy tu asistente. Te ayudo a usar bolo y te llevo directo a donde necesites. ¿Qué quieres hacer?";
 
 const SUGERENCIAS = [
   "¿Por dónde empiezo?",
-  "¿Qué es un proveedor?",
   "¿Qué me falta por configurar?",
-  "¿Para qué sirven las recetas?",
+  "Llévame a Cocina",
+  "¿Dónde registro un cobro?",
 ];
 
 export function AsistenteBolo() {
@@ -37,6 +38,7 @@ export function AsistenteBolo() {
   const [cargando, setCargando] = useState(false);
   const finRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (abierto) finRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -45,6 +47,13 @@ export function AsistenteBolo() {
   useEffect(() => {
     if (abierto) inputRef.current?.focus();
   }, [abierto]);
+
+  // Permite abrir la burbujita desde otros lugares (ej. botón en la portada).
+  useEffect(() => {
+    const abrir = () => setAbierto(true);
+    window.addEventListener(EVENTO_ABRIR, abrir);
+    return () => window.removeEventListener(EVENTO_ABRIR, abrir);
+  }, []);
 
   async function enviar(pregunta: string) {
     const limpio = pregunta.trim();
@@ -58,7 +67,7 @@ export function AsistenteBolo() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // No mandamos el saludo inicial (no es parte real de la conversación).
-        body: JSON.stringify({ messages: nuevos.filter((_, i) => i > 0) }),
+        body: JSON.stringify({ messages: nuevos.filter((_, i) => i > 0), pagina: pathname }),
       });
       const data = await r.json();
       const destino: ClaveDestino | undefined =

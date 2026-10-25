@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import { AsistentePlataforma } from "./_AsistentePlataforma";
 
 export const metadata: Metadata = {
   title: "bolo",
@@ -37,6 +38,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col font-sans">
         {children}
+        <AsistentePlataforma />
         <script
           dangerouslySetInnerHTML={{
             __html:

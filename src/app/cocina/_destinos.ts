@@ -18,6 +18,23 @@ export type Destino = {
 };
 
 export const DESTINOS = {
+  // ── Módulos de la plataforma (se señalan en su tarjeta del inicio) ──
+  inicio_cocina: {
+    ruta: "/",
+    selector: '[data-guia="mod-cocina"]',
+    etiqueta: "dónde está el módulo de Cocina",
+  },
+  inicio_administracion: {
+    ruta: "/",
+    selector: '[data-guia="mod-administracion"]',
+    etiqueta: "dónde está Administración (cuentas y dinero)",
+  },
+  inicio_marketplace: {
+    ruta: "/",
+    selector: '[data-guia="mod-marketplace"]',
+    etiqueta: "dónde está el Mercado (proveedores y equipos)",
+  },
+  // ── Pasos del montaje de Cocina ─────────────────────────────────────
   proveedores: {
     ruta: "/cocina",
     paso: 0,
@@ -57,3 +74,5 @@ export const CLAVES_DESTINO = Object.keys(DESTINOS) as ClaveDestino[];
 export const EVENTO_GUIAR = "bolo:guiar";
 /** Evento global para que la guía de inicio salte a un paso. */
 export const EVENTO_IR_PASO = "bolo:ir-paso";
+/** Evento global para abrir la burbujita del asistente desde otro lugar. */
+export const EVENTO_ABRIR = "bolo:abrir-asistente";

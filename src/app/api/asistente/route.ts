@@ -25,23 +25,27 @@ const MAX_VUELTAS = 5; // tope de iteraciones del ciclo de herramientas
 type Rol = "user" | "assistant";
 type MensajeEntrada = { role: Rol; content: string };
 
-const SISTEMA = `Eres el asistente de "bolo", una plataforma para montar y manejar una cocina/negocio de comida, pensada para personas SIN experiencia previa.
+const SISTEMA = `Eres el asistente de "bolo", una plataforma simple para manejar un negocio de comida y eventos, pensada para personas SIN experiencia previa. Tu misión número uno: que cualquiera use bolo sin entrenamiento. Si el cliente no sabe algo, lo guías y lo llevas directo.
 
 Tono: cálido, cercano y claro, en español venezolano sencillo. Tutea. Respuestas cortas (2-5 frases), sin tecnicismos. Si algo es un proceso, dalo en pasos numerados breves.
 
-La cocina se monta en 4 pasos, en orden:
+La plataforma tiene módulos, a los que se entra desde el inicio ("/"):
+- Cocina (/cocina): insumos, recetas, compras y costos.
+- Administración (/administracion): cuentas, cobros y dinero.
+- Mercado (/marketplace): proveedores, equipos y reventa.
+(Según el negocio también puede haber Tareas, Eventos, Presupuestos y WiFi.)
+
+En Cocina, montar todo son 4 pasos en orden:
 1. Proveedores — a quién le compras y cómo le pagas.
 2. Insumos — qué compras (ingredientes/materiales), con precio y unidad.
 3. Recetas — qué preparas con esos insumos; bolo calcula costo y precio sugerido.
 4. Compras — registras lo que compras; así el inventario y los costos quedan reales.
 
-Los módulos están en /cocina/proveedores, /cocina/insumos, /cocina/recetas, /cocina/compras.
+Cuando el cliente pregunte por SU avance, qué le falta o cuántos proveedores/insumos/recetas tiene, USA las herramientas de datos antes de responder. No inventes cifras. Si algo está vacío, anímalo con el siguiente paso concreto.
 
-Cuando el cliente pregunte por SU avance, qué le falta, cuántos proveedores/insumos/recetas tiene, o pida seguimiento, USA las herramientas para leer sus datos reales antes de responder. No inventes cifras. Si una herramienta devuelve vacío, anímalo con el siguiente paso concreto.
+Puedes GUIAR visualmente: si el cliente pregunta DÓNDE está algo, cómo llegar a una función o a un módulo, o no encuentra un botón, usa la herramienta "mostrar_en_pantalla" con el destino adecuado. Un cursor se moverá solo en la pantalla para señalárselo. Al usarla, dilo breve y natural, por ejemplo: "¡Claro! Mira, te llevo hasta ahí." No describas coordenadas ni rutas técnicas; deja que el cursor lo muestre.
 
-Puedes GUIAR visualmente: si el cliente pregunta DÓNDE está algo, cómo llegar a una función, o no encuentra un botón, usa la herramienta "mostrar_en_pantalla" con el destino adecuado. Un cursor se moverá solo en la pantalla para señalárselo. Al usarla, dilo con naturalidad y breve, por ejemplo: "¡Claro! Mira, te llevo hasta ahí." No describas coordenadas ni rutas técnicas; deja que el cursor lo muestre.
-
-Nunca pidas ni muestres contraseñas, tokens ni datos sensibles. Si te preguntan algo fuera de bolo (política, salud, etc.), responde con amabilidad que solo puedes ayudar con la plataforma.`;
+Nunca pidas ni muestres contraseñas, tokens ni datos sensibles. Si te preguntan algo fuera de bolo, responde con amabilidad que solo puedes ayudar con la plataforma.`;
 
 // ── Herramientas (solo lectura) ───────────────────────────────────────────
 const HERRAMIENTAS = [
@@ -151,7 +155,7 @@ export async function POST(request: Request) {
     });
   }
 
-  let entrada: { messages?: MensajeEntrada[] };
+  let entrada: { messages?: MensajeEntrada[]; pagina?: string };
   try {
     entrada = await request.json();
   } catch {
@@ -163,6 +167,11 @@ export async function POST(request: Request) {
   if (historial.length === 0) {
     return NextResponse.json({ error: "sin mensajes" }, { status: 400 });
   }
+  // Contexto: en qué página está el cliente ahora (para ayuda relevante).
+  const pagina = typeof entrada.pagina === "string" ? entrada.pagina.slice(0, 120) : "";
+  const sistema = pagina
+    ? `${SISTEMA}\n\nAhora mismo el cliente está en la página: ${pagina}`
+    : SISTEMA;
 
   // Si la clave no está amarrada a un workspace, Anthropic exige el header
   // anthropic-workspace-id. Lo pasamos si está configurado (opcional).
@@ -187,7 +196,7 @@ export async function POST(request: Request) {
       const respuesta = await anthropic.messages.create({
         model: MODELO,
         max_tokens: 1600,
-        system: SISTEMA,
+        system: sistema,
         tools: HERRAMIENTAS,
         messages: mensajes,
       });
@@ -233,24 +242,11 @@ export async function POST(request: Request) {
       reply: "Esto me está tomando más de lo normal. ¿Puedes reformular tu pregunta?",
     });
   } catch (err) {
-    // Mensaje claro según el tipo de fallo (ayuda a diagnosticar la config).
+    // El detalle técnico queda en los logs del servidor; al cliente, mensaje amable.
     console.error("[asistente] error:", err);
-    let reply = "Tuve un problema para responder. Intenta de nuevo en un momento.";
-    if (err instanceof Anthropic.AuthenticationError) {
-      reply =
-        "La clave de Claude no es válida (revísala en Vercel → ANTHROPIC_API_KEY; que no tenga espacios).";
-    } else if (err instanceof Anthropic.PermissionDeniedError) {
-      reply =
-        "La cuenta de Claude no tiene permiso para este modelo. Avísame y lo ajusto.";
-    } else if (err instanceof Anthropic.RateLimitError) {
-      reply = "Hay mucho tráfico en este momento. Intenta de nuevo en un ratico.";
-    } else if (err instanceof Anthropic.NotFoundError) {
-      reply =
-        "El modelo no está disponible para tu cuenta. Avísame y lo cambio por otro.";
-    } else if (err instanceof Anthropic.APIError) {
-      // Mostramos el detalle real de Claude para diagnosticar (temporal).
-      reply = `Claude devolvió un error (${err.status ?? "?"}). Detalle: ${err.message}`;
-    }
-    return NextResponse.json({ reply }, { status: 200 });
+    return NextResponse.json(
+      { reply: "Disculpa, se me enredó algo al responder. Intenta de nuevo en un momentico." },
+      { status: 200 },
+    );
   }
 }

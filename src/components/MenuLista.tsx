@@ -9,6 +9,8 @@ export type MenuItem = {
   Icon: ComponentType<SVGProps<SVGSVGElement>>;
   /** Fuera de servicio por ahora: se muestra atenuado y sin enlace. */
   disabled?: boolean;
+  /** Ancla opcional para el cursor-guía del asistente (atributo data-guia). */
+  dataGuia?: string;
 };
 
 /**
@@ -25,7 +27,7 @@ export function MenuLista({
 }) {
   return (
     <ul className={`divide-y divide-marfil border-y border-marfil ${className}`}>
-      {items.map(({ href, label, desc, Icon, disabled }) => {
+      {items.map(({ href, label, desc, Icon, disabled, dataGuia }) => {
         const contenido = (
           <>
             <span
@@ -61,11 +63,15 @@ export function MenuLista({
         return (
           <li key={href}>
             {disabled ? (
-              <div className="flex items-center gap-4 py-4 opacity-60">
+              <div data-guia={dataGuia} className="flex items-center gap-4 py-4 opacity-60">
                 {contenido}
               </div>
             ) : (
-              <Link href={href} className="group flex items-center gap-4 py-4">
+              <Link
+                href={href}
+                data-guia={dataGuia}
+                className="group flex items-center gap-4 py-4"
+              >
                 {contenido}
               </Link>
             )}
