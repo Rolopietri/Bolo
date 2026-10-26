@@ -27,6 +27,7 @@ import { UnitCalculator } from "@/components/UnitCalculator";
 import { UnidadSelect } from "@/components/UnidadSelect";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorCarga } from "@/components/ErrorCarga";
+import { EVENTO_PREPARAR, leerGuia } from "../_guiaAccion";
 import {
   convertirParaCosto,
   areCompatible,
@@ -148,6 +149,18 @@ export function RecetaForm({
   const [lineas, setLineas] = useState<LineForm[]>(
     existing?.ingredientes.map(lineFromIng) ?? [],
   );
+
+  useEffect(() => {
+    if (existing) return;
+    function aplicar() {
+      const g = leerGuia();
+      if (g?.preparar !== "form-receta") return;
+      if (g.relleno?.nombre) setNombre(g.relleno.nombre);
+    }
+    aplicar();
+    window.addEventListener(EVENTO_PREPARAR, aplicar);
+    return () => window.removeEventListener(EVENTO_PREPARAR, aplicar);
+  }, [existing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -684,6 +697,7 @@ export function RecetaForm({
         </h2>
         <input
           type="text"
+          data-guia="campo-receta-nombre"
           placeholder="Nombre de la receta"
           required
           value={nombre}

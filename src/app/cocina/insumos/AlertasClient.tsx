@@ -82,24 +82,29 @@ export function AlertasClient({
 
   if (loading) {
     return (
-      <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
+      <div
+        data-guia="alertas-resumen"
+        className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft"
+      >
         Cargando...
       </div>
     );
   }
   if (errorCarga) {
     return (
-      <ErrorCarga
-        que="los insumos para las alertas"
-        detalle={errorCarga}
-        onReintentar={reintentarCarga}
-      />
+      <div data-guia="alertas-resumen">
+        <ErrorCarga
+          que="los insumos para las alertas"
+          detalle={errorCarga}
+          onReintentar={reintentarCarga}
+        />
+      </div>
     );
   }
 
 
   return (
-    <div className="space-y-6">
+    <div data-guia="alertas-resumen" className="space-y-6">
       {/* Stats */}
       <section className="grid grid-cols-3 gap-3">
         <StatCard label="Agotados" value={agotados.length} accent="bg-red-50 ring-red-200" dot="bg-red-500" />

@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { AsistenteBolo } from "./cocina/_AsistenteBolo";
+import { BandejaSeguimiento } from "./cocina/_BandejaSeguimiento";
 import { GuiaCursor } from "./cocina/_GuiaCursor";
 
 // Monta el asistente (burbujita + cursor-guía) en TODA la plataforma, salvo en
@@ -16,6 +17,7 @@ export function AsistentePlataforma() {
   return (
     <>
       <AsistenteBolo />
+      <BandejaSeguimiento />
       <GuiaCursor />
     </>
   );

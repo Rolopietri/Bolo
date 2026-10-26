@@ -33,6 +33,7 @@ import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
+import { EVENTO_PREPARAR, leerGuia } from "../_guiaAccion";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
@@ -195,6 +196,19 @@ export function ComprasClient() {
     setErrorCarga(null);
     setIntento((n) => n + 1);
   }
+
+  useEffect(() => {
+    function aplicar() {
+      const g = leerGuia();
+      if (g?.preparar !== "form-compra") return;
+      setEditingId(null);
+      setForm({ ...emptyForm, fecha: todayISO() });
+      setAdding(true);
+    }
+    aplicar();
+    window.addEventListener(EVENTO_PREPARAR, aplicar);
+    return () => window.removeEventListener(EVENTO_PREPARAR, aplicar);
+  }, []);
 
   // La tasa BCV sugerida sigue la FECHA de la compra, no la de hoy: al cambiar la
   // fecha se carga la tasa vigente de ese día. Al AGREGAR (no editar) re-aplica esa
@@ -714,6 +728,8 @@ export function ComprasClient() {
 
       {!adding && (
         <button
+          type="button"
+          data-guia="abrir-compra"
           onClick={() => {
             // Prefijamos la tasa BCV $ del día (modalidad default: USD divisa)
             // para que el convertidor Bs↔$ funcione desde el inicio.
@@ -732,6 +748,7 @@ export function ComprasClient() {
 
       {adding && (
         <form
+          data-guia="form-compra"
           onSubmit={handleSubmit}
           className="mb-5 rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
         >

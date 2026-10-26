@@ -620,17 +620,19 @@ export function PedidoSugeridoClient({
       )}
 
       {recetas.length === 0 ? (
-        <EstadoVacioCocina
-          titulo="Todavía no hay con qué armar un pedido"
-          beneficio="Cuando tengas recetas y stock, eliges cuántas raciones preparar y bolo lista lo que falta comprar."
-          cta="Crear una receta"
-          href="/cocina/recetas/nuevo"
-          onDemo={reintentarCarga}
-        />
+        <div data-guia="pedido-raciones">
+          <EstadoVacioCocina
+            titulo="Todavía no hay con qué armar un pedido"
+            beneficio="Cuando tengas recetas y stock, eliges cuántas raciones preparar y bolo lista lo que falta comprar."
+            cta="Crear una receta"
+            href="/cocina/recetas/nuevo"
+            onDemo={reintentarCarga}
+          />
+        </div>
       ) : (
       <>
       {/* ─── Form objetivos ─── */}
-      <section className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3">
+      <section data-guia="pedido-raciones" className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3">
         <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">
           Raciones objetivo
         </h2>

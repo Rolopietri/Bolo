@@ -3,21 +3,26 @@
 // `mostrar_en_pantalla`; el cursor-guía (_GuiaCursor) usa el resto para
 // navegar, colocar la guía de inicio en el paso correcto y apuntar al elemento.
 //
-// Los selectores apuntan a elementos marcados con `data-guia="..."` que viven
-// en páginas que controlamos (la portada de Cocina y su guía de inicio).
+// `preparar` abre el formulario o la pestaña real antes de señalar, para no
+// quedarse en el botón del inicio. Los selectores apuntan a `data-guia="..."`.
+import type { PrepararPantalla } from "./_guiaAccion";
 
 export type Destino = {
   /** Ruta donde vive el elemento. */
   ruta: string;
+  /** Query sin "?", por ejemplo "vista=alertas". */
+  consulta?: string;
   /** Paso de la guía de inicio a activar antes de apuntar (0–3), si aplica. */
   paso?: number;
+  /** Qué debe abrir la pantalla antes de que el cursor señale. */
+  preparar?: PrepararPantalla;
   /** Selector del elemento a señalar. */
   selector: string;
   /** Texto corto de lo que se va a mostrar (para el botón "Te muestro"). */
   etiqueta: string;
 };
 
-export const DESTINOS = {
+const DESTINOS_BASE = {
   // ── Módulos de la plataforma (se señalan en su tarjeta del inicio) ──
   inicio_cocina: {
     ruta: "/",
@@ -34,7 +39,7 @@ export const DESTINOS = {
     selector: '[data-guia="mod-marketplace"]',
     etiqueta: "dónde está el Mercado (proveedores y equipos)",
   },
-  // ── Cocina: botones y pasos del montaje ─────────────────────────────
+  // ── Cocina: botones y pasos del montaje (guía de inicio) ───────────
   empezar: {
     ruta: "/cocina",
     selector: '[data-guia="cocina-empezar"]',
@@ -43,29 +48,82 @@ export const DESTINOS = {
   proveedores: {
     ruta: "/cocina",
     selector: '[data-guia="paso-proveedores"]',
-    etiqueta: "dónde agregar tus proveedores",
+    etiqueta: "el paso de proveedores",
   },
   insumos: {
     ruta: "/cocina",
     selector: '[data-guia="paso-insumos"]',
-    etiqueta: "dónde cargar tus insumos",
+    etiqueta: "el paso de insumos",
   },
   recetas: {
     ruta: "/cocina",
     selector: '[data-guia="paso-recetas"]',
-    etiqueta: "dónde crear tus recetas",
+    etiqueta: "el paso de recetas",
   },
   compras: {
     ruta: "/cocina",
     selector: '[data-guia="paso-compras"]',
-    etiqueta: "dónde registrar tus compras",
+    etiqueta: "el paso de compras",
   },
   plato: {
     ruta: "/cocina",
     selector: '[data-guia="guia-plato"]',
     etiqueta: "cómo crear un plato y ver su costo",
   },
+  // ── Formularios y pantallas reales ──────────────────────────────────
+  form_proveedor: {
+    ruta: "/cocina/proveedores",
+    preparar: "form-proveedor",
+    selector: '[data-guia="form-proveedor"]',
+    etiqueta: "el formulario para crear un proveedor",
+  },
+  form_insumo: {
+    ruta: "/cocina/insumos",
+    preparar: "form-insumo",
+    selector: '[data-guia="form-insumo"]',
+    etiqueta: "el formulario para cargar un insumo",
+  },
+  form_receta: {
+    ruta: "/cocina/recetas/nuevo",
+    preparar: "form-receta",
+    selector: '[data-guia="campo-receta-nombre"]',
+    etiqueta: "el formulario de una receta nueva",
+  },
+  form_compra: {
+    ruta: "/cocina/compras",
+    preparar: "form-compra",
+    selector: '[data-guia="form-compra"]',
+    etiqueta: "el formulario para registrar una compra",
+  },
+  alertas: {
+    ruta: "/cocina/insumos",
+    consulta: "vista=alertas",
+    preparar: "tab-alertas",
+    selector: '[data-guia="alertas-resumen"]',
+    etiqueta: "tus alertas de stock",
+  },
+  stock: {
+    ruta: "/cocina/insumos",
+    preparar: "buscar-insumo",
+    selector: '[data-guia="buscar-insumo"]',
+    etiqueta: "el buscador de insumos y su stock",
+  },
+  unidades: {
+    ruta: "/cocina/insumos",
+    preparar: "calculadora",
+    selector: '[data-guia="calculadora-unidades"]',
+    etiqueta: "la calculadora de gramos y kilos",
+  },
+  pedido: {
+    ruta: "/cocina/pedido",
+    selector: '[data-guia="pedido-raciones"]',
+    etiqueta: "dónde armas el pedido sugerido",
+  },
 } satisfies Record<string, Destino>;
+
+// El valor se ve como Destino (con `preparar` y `consulta` opcionales) para
+// que se puedan leer aunque no estén en todos los destinos.
+export const DESTINOS: Record<keyof typeof DESTINOS_BASE, Destino> = DESTINOS_BASE;
 
 export type ClaveDestino = keyof typeof DESTINOS;
 

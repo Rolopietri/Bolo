@@ -13,6 +13,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { Importador, type CampoImport } from "@/components/Importador";
+import { EVENTO_PREPARAR, leerGuia } from "../_guiaAccion";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 /** Columnas que el importador intenta reconocer en el Excel/CSV de proveedores. */
@@ -106,6 +107,28 @@ export function ProveedoresClient() {
       cancelled = true;
     };
   }, [intento]);
+
+  useEffect(() => {
+    function aplicar() {
+      const g = leerGuia();
+      if (g?.preparar !== "form-proveedor") return;
+      const c = g.relleno;
+      setEditingId(null);
+      setImportando(false);
+      setAdding(true);
+      setForm({
+        ...emptyForm,
+        nombre: c?.nombre ?? "",
+        contactoNombre: c?.contacto ?? "",
+        contactoTelefono: c?.telefono ?? "",
+        contactoEmail: c?.correo ?? "",
+        notas: c?.notas ?? "",
+      });
+    }
+    aplicar();
+    window.addEventListener(EVENTO_PREPARAR, aplicar);
+    return () => window.removeEventListener(EVENTO_PREPARAR, aplicar);
+  }, []);
 
   function reintentarCarga() {
     setLoading(true);
@@ -225,6 +248,8 @@ export function ProveedoresClient() {
             Importar proveedores
           </button>
           <button
+            type="button"
+            data-guia="abrir-proveedor"
             onClick={() => setAdding(true)}
             className="w-full rounded-xl ring-1 ring-marfil bg-white text-cacao py-3 font-bold hover:bg-marfil-soft transition-colors"
           >
@@ -245,6 +270,7 @@ export function ProveedoresClient() {
 
       {adding && (
         <form
+          data-guia="form-proveedor"
           onSubmit={handleSubmit}
           className="mb-5 rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
         >
