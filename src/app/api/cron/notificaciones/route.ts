@@ -12,6 +12,7 @@
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { registrarCorrida } from "@/lib/monitoreo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ async function enviarResend(key: string, from: string, to: string, subject: stri
 }
 
 export async function GET(request: Request) {
+  const inicio = Date.now();
   const secret = process.env.CRON_SECRET;
   if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) {
     return NextResponse.json({ error: "no autorizado" }, { status: 401 });
@@ -178,6 +180,12 @@ export async function GET(request: Request) {
       }
     }
   }
+
+  await registrarCorrida(sb, "notificaciones", inicio, {
+    estado: errores.length > 0 ? "error" : "ok",
+    detalle: { enviadas, errores: errores.length, cxcAviso },
+    error: errores.length > 0 ? `${errores.length} envío(s) fallaron` : undefined,
+  });
 
   return NextResponse.json({ enviadas, errores: errores.length, cxcAviso });
 }

@@ -6,6 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { registrarCorrida } from "@/lib/monitoreo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -66,6 +67,7 @@ function todayCaracas(): string {
 }
 
 export async function GET() {
+  const inicio = Date.now();
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   // Escribir la tasa con SERVICE-ROLE (clave de servidor, nunca se expone al
   // navegador). Así podemos bloquear la escritura anónima en RLS y evitar que
@@ -89,6 +91,10 @@ export async function GET() {
   ]);
 
   if (usdBs == null) {
+    await registrarCorrida(sb, "bcv", inicio, {
+      estado: "error",
+      error: "No se pudo obtener la tasa oficial del BCV",
+    });
     return NextResponse.json(
       { error: "No se pudo obtener tasa oficial BCV" },
       { status: 502 },
@@ -112,11 +118,20 @@ export async function GET() {
     );
 
   if (insErr) {
+    await registrarCorrida(sb, "bcv", inicio, {
+      estado: "error",
+      error: insErr.message,
+    });
     return NextResponse.json(
       { error: "DB error", detail: insErr.message },
       { status: 500 },
     );
   }
+
+  await registrarCorrida(sb, "bcv", inicio, {
+    estado: "ok",
+    detalle: { fecha, usdBs, eurBs, paralelaBs },
+  });
 
   return NextResponse.json({
     ok: true,
