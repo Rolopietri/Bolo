@@ -45,6 +45,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { Importador, type CampoImport } from "@/components/Importador";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 /** Columnas que el importador intenta reconocer en el Excel/CSV de insumos. */
 const CAMPOS_INSUMO: CampoImport[] = [
@@ -1122,11 +1123,17 @@ export function InsumosClient({
           detalle={errorCarga}
           onReintentar={reintentarCarga}
         />
+      ) : items.length === 0 ? (
+        <EstadoVacioCocina
+          titulo="Todavía no hay insumos"
+          beneficio="Cada ingrediente lleva su precio y su stock. Así las recetas calculan el costo real y las alertas avisan cuando falta."
+          cta="Agregar insumo"
+          onCta={() => setAdding(true)}
+          onDemo={reintentarCarga}
+        />
       ) : grouped.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
-          {items.length === 0
-            ? "Aún no tienes insumos. Crea el primero con “+ Nuevo insumo”."
-            : "Ningún insumo coincide con estos filtros."}
+          Ningún insumo coincide con estos filtros.
         </div>
       ) : (
         <div className="space-y-6">

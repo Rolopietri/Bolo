@@ -27,6 +27,7 @@ import {
 } from "@/lib/data/menaje";
 import { extractError } from "@/lib/data/error";
 import { normalizarBusqueda } from "@/lib/text";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 type TipoBaja = (typeof TIPOS_BAJA_MENAJE)[number]["value"];
 
@@ -932,10 +933,18 @@ export function MenajeClient() {
       )}
 
       {/* Lista de items agrupada */}
-      {grouped.length === 0 ? (
+      {items.length === 0 ? (
+        <EstadoVacioCocina
+          titulo="Todavía no hay menaje"
+          beneficio="Platos, vasos y cubiertos en un solo inventario. Registras roturas y compras sin perder la cuenta."
+          cta="Agregar menaje"
+          onCta={() => setAdding(true)}
+          onDemo={reintentarCarga}
+        />
+      ) : grouped.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-12 text-center">
           <p className="font-serif italic text-cacao-soft">
-            Aún no hay ítems en el menaje. Agrega el primero arriba.
+            Ningún ítem coincide con la búsqueda.
           </p>
         </div>
       ) : (

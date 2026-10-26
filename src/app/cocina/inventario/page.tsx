@@ -3,6 +3,7 @@ import Link from "next/link";
 import { funcionActiva } from "@/lib/modulos.mjs";
 import { MenuLista, type MenuItem } from "@/components/MenuLista";
 import { CalendarIcon, CartIcon, ReceiptIcon, ClipboardIcon } from "@/components/icons";
+import { InventarioVacio } from "./InventarioVacio";
 
 const PLANES: MenuItem = {
   href: "/cocina/inventario/planes",
@@ -61,6 +62,7 @@ export default function InventarioHubPage() {
             ← Cocina
           </Link>
         </section>
+        <InventarioVacio />
         <MenuLista items={modulos} />
       </main>
     </>

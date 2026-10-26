@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CalendarIcon, ChevronIcon, SaveIcon } from "@/components/icons";
+import { CalendarIcon, ChevronIcon, PlusIcon, SaveIcon } from "@/components/icons";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import type {
@@ -27,6 +27,7 @@ import {
   deletePedidoCocina,
 } from "@/lib/data/pedidos-cocina";
 import { extractError } from "@/lib/data/error";
+import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 type Objetivo = { recetaId: string; raciones: string };
 
@@ -618,6 +619,16 @@ export function PedidoSugeridoClient({
         </section>
       )}
 
+      {recetas.length === 0 ? (
+        <EstadoVacioCocina
+          titulo="Todavía no hay con qué armar un pedido"
+          beneficio="Cuando tengas recetas y stock, eliges cuántas raciones preparar y bolo lista lo que falta comprar."
+          cta="Crear una receta"
+          href="/cocina/recetas/nuevo"
+          onDemo={reintentarCarga}
+        />
+      ) : (
+      <>
       {/* ─── Form objetivos ─── */}
       <section className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3">
         <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">
@@ -725,10 +736,30 @@ export function PedidoSugeridoClient({
 
       {/* ─── Resultado del pedido sugerido ─── */}
       {pedido.items.length === 0 ? (
-        <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
-          {objetivos.length === 0
-            ? "Agrega recetas arriba para ver qué insumos comprar."
-            : "Con el stock actual, alcanza para preparar todo. No hace falta comprar nada."}
+        <div className="rounded-2xl bg-white ring-1 ring-marfil px-6 py-12 text-center">
+          {objetivos.length === 0 ? (
+            <>
+              <h2 className="font-cinzel text-xl tracking-[0.08em] uppercase text-cacao">
+                El pedido está en blanco
+              </h2>
+              <p className="mx-auto mt-3 max-w-md font-serif italic text-cacao-soft">
+                Agrega una receta y las raciones del servicio. bolo resta el
+                stock y arma la lista de compra.
+              </p>
+              <button
+                type="button"
+                onClick={addObjetivo}
+                className="mt-6 inline-flex items-center gap-2 rounded-xl bg-cacao text-white px-5 py-2.5 font-medium hover:bg-terracotta transition-colors"
+              >
+                <PlusIcon className="size-4" />
+                Agregar receta
+              </button>
+            </>
+          ) : (
+            <p className="font-serif italic text-cacao-soft">
+              Con el stock actual, alcanza para preparar todo. No hace falta comprar nada.
+            </p>
+          )}
         </div>
       ) : (
         <section className="space-y-4">
@@ -803,6 +834,8 @@ export function PedidoSugeridoClient({
             para que el stock se actualice automáticamente.
           </div>
         </section>
+      )}
+      </>
       )}
 
       {/* ─── Modal: guardar pedido ─── */}

@@ -67,6 +67,15 @@ Puntos clave:
 - Los archivos `cocina-*.sql`, `eventos-*.sql`, `presupuestos-*.sql`, etc. agregan
   el resto de tablas, columnas, funciones y triggers.
 - Los `*-seed.sql` cargan datos iniciales (plantillas, mobiliario).
+- **Demo de cocina (opt-in, solo bolodemo):** `supabase/demo/cocina-demo-seed.sql`
+  no entra en ese orden. Carga un ejemplo chico (proveedores, insumos, 4 recetas,
+  compras, ventas y menaje) para que alertas y pedido sugerido tengan sentido.
+  Es idempotente y no borra nada. También: `npm run seed:cocina-demo`
+  (`node --env-file=.env.local scripts/seed-cocina-demo.mjs`), que usa
+  `SUPABASE_SERVICE_ROLE_KEY` del entorno y no la escribe en el repo.
+  `npm run seed:cocina-demo -- --check` revisa el dataset sin tocar la base.
+  En la app, las listas vacías de cocina ofrecen «Cargar datos demo» con la
+  sesión del usuario (mismas políticas RLS).
 - La whitelist de acceso NO está en la base: se controla con `ALLOWED_EMAILS` en
   el código (`src/proxy.ts`).
 
