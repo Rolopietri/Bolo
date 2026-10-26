@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { DESTINOS, EVENTO_GUIAR, EVENTO_IR_PASO, type ClaveDestino, type Destino } from "./_destinos";
+import { leerGuia, publicarGuia } from "./_guiaAccion";
 
 // Cursor-guía: un puntero animado que viaja solo hasta la función que el
 // cliente busca. Lo dispara el asistente (evento EVENTO_GUIAR con la clave de
@@ -38,13 +39,26 @@ export function GuiaCursor() {
       const corrida = ++corridaRef.current; // invalida guías anteriores
       const vigente = () => corridaRef.current === corrida;
 
-      // 1. Navegar si el destino está en otra página.
-      if (pathname !== destino.ruta) {
-        router.push(destino.ruta);
+      // Abrir el formulario o la pestaña real. Si el chat ya publicó un
+      // relleno para este mismo preparar, no lo pisamos.
+      const previo = leerGuia();
+      if (destino.preparar && previo?.preparar !== destino.preparar) {
+        publicarGuia({ preparar: destino.preparar });
       }
 
-      // 2. Esperar a que exista el elemento (confirma que la página montó).
-      let el = await esperarElemento(destino.selector);
+      // 1. Navegar si el destino está en otra página (o en otra pestaña).
+      const href = destino.consulta ? `${destino.ruta}?${destino.consulta}` : destino.ruta;
+      const search = typeof window !== "undefined" ? window.location.search : "";
+      const enPagina =
+        pathname === destino.ruta &&
+        (!destino.consulta || search.includes(destino.consulta));
+      if (!enPagina) {
+        router.push(href);
+      }
+
+      // 2. Esperar a que exista el elemento (confirma que la página montó
+      // y, si hacía falta, que el formulario se abrió).
+      let el = await esperarElemento(destino.selector, 6000);
       if (!vigente() || !el) return;
 
       // 3. Colocar la guía de inicio en el paso correcto y dejar re-renderizar.

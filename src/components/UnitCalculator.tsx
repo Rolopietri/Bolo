@@ -15,15 +15,18 @@ import {
  */
 export function UnitCalculator({
   defaultOpen = false,
+  inicial,
   className = "",
 }: {
   defaultOpen?: boolean;
+  /** Valores iniciales. Para cambiarlos después, remonta el componente (key). */
+  inicial?: { cantidad?: string; from?: string; to?: string };
   className?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const [cantidad, setCantidad] = useState("1");
-  const [from, setFrom] = useState("kg");
-  const [to, setTo] = useState("g");
+  const [cantidad, setCantidad] = useState(inicial?.cantidad ?? "1");
+  const [from, setFrom] = useState(inicial?.from ?? "kg");
+  const [to, setTo] = useState(inicial?.to ?? "g");
 
   const num = Number(cantidad);
   const dimFrom = dimension(from);

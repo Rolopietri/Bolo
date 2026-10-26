@@ -4,7 +4,8 @@
 // eran sub-módulos aparte — alertas de stock, mermas/pérdidas y auditoría.
 // La pestaña activa se refleja en ?vista= para que los enlaces viejos
 // (/cocina/alertas, /cocina/auditoria, …) caigan directo en la correcta.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { EVENTO_PREPARAR, leerGuia } from "../_guiaAccion";
 import { InsumosClient } from "./InsumosClient";
 import { AlertasClient } from "./AlertasClient";
 import { MermasClient } from "./MermasClient";
@@ -26,6 +27,25 @@ export function InsumosTabs({ vistaInicial }: { vistaInicial: Vista }) {
   // Agotados + bajos, para el contador de la pestaña. Lo reportan el catálogo
   // y la vista de alertas cuando cargan.
   const [nAlertas, setNAlertas] = useState<number | null>(null);
+
+  useEffect(() => {
+    function aplicar() {
+      const g = leerGuia();
+      if (!g?.preparar) return;
+      if (g.preparar === "tab-alertas") setVista("alertas");
+      if (
+        g.preparar === "tab-catalogo" ||
+        g.preparar === "form-insumo" ||
+        g.preparar === "buscar-insumo" ||
+        g.preparar === "calculadora"
+      ) {
+        setVista("catalogo");
+      }
+    }
+    aplicar();
+    window.addEventListener(EVENTO_PREPARAR, aplicar);
+    return () => window.removeEventListener(EVENTO_PREPARAR, aplicar);
+  }, []);
 
   function ir(v: Vista, opts: { insumoId?: string } = {}) {
     setAuditoriaInsumo(opts.insumoId ?? null);

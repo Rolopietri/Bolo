@@ -11,8 +11,8 @@ import {
   ChartIcon,
   WifiIcon,
   StoreIcon,
-  SparkleIcon,
 } from "@/components/icons";
+import { CaraAgente } from "@/components/CaraAgente";
 import { BotonAsistente } from "./_BotonAsistente";
 
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
@@ -60,8 +60,8 @@ export default function Home() {
 
         {/* Puerta de entrada: el asistente. Lo primero y más grande. */}
         <section className="mb-10 rounded-3xl bg-cacao px-6 py-7 text-center text-white sm:px-8 sm:py-9">
-          <span className="mx-auto grid size-12 place-items-center rounded-full bg-white/10">
-            <SparkleIcon className="size-6 text-marfil" />
+          <span className="mx-auto inline-flex items-center rounded-full bg-white/10 px-3 py-1">
+            <CaraAgente className="h-10 w-auto text-white" title="bolo" />
           </span>
           <h2 className="mt-4 font-cinzel text-xl sm:text-2xl leading-tight">
             ¿Qué necesitas hacer hoy?

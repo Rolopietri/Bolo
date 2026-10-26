@@ -45,6 +45,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { Importador, type CampoImport } from "@/components/Importador";
+import { EVENTO_PREPARAR, leerGuia } from "../_guiaAccion";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 
 /** Columnas que el importador intenta reconocer en el Excel/CSV de insumos. */
@@ -176,6 +177,7 @@ export function InsumosClient({
   const [filterCat, setFilterCat] = useState<string>("todas");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState(false);
+  const [calcAbierta, setCalcAbierta] = useState(false);
   const [importando, setImportando] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
@@ -234,6 +236,33 @@ export function InsumosClient({
       cancelled = true;
     };
   }, [intento]);
+
+  useEffect(() => {
+    function aplicar() {
+      const g = leerGuia();
+      if (!g?.preparar) return;
+      if (g.preparar === "calculadora") setCalcAbierta(true);
+      if (g.preparar === "buscar-insumo") {
+        const q = g.relleno?.consulta || g.relleno?.nombre || "";
+        if (q) setSearch(q);
+      }
+      if (g.preparar === "form-insumo") {
+        const c = g.relleno;
+        setEditingId(null);
+        setImportando(false);
+        setAdding(true);
+        setForm({
+          ...emptyForm,
+          nombre: c?.nombre ?? "",
+          precioCompraUsd: c?.precio ?? "",
+          notas: c?.notas ?? "",
+        });
+      }
+    }
+    aplicar();
+    window.addEventListener(EVENTO_PREPARAR, aplicar);
+    return () => window.removeEventListener(EVENTO_PREPARAR, aplicar);
+  }, []);
 
   function reintentarCarga() {
     setLoading(true);
@@ -691,12 +720,20 @@ export function InsumosClient({
         </div>
       )}
 
-      <UnitCalculator className="mb-5" />
+      <div data-guia="calculadora-unidades">
+        <UnitCalculator
+          key={calcAbierta ? "ejemplo-gramos" : "calculadora"}
+          className="mb-5"
+          defaultOpen={calcAbierta}
+          inicial={calcAbierta ? { cantidad: "1000", from: "g", to: "kg" } : undefined}
+        />
+      </div>
 
       {/* Buscador */}
       <div className="mb-3 flex items-center gap-2">
         <input
           type="text"
+          data-guia="buscar-insumo"
           placeholder="Buscar insumo por nombre..."
           aria-label="Buscar insumo"
           value={search}
@@ -770,6 +807,8 @@ export function InsumosClient({
             Importar insumos
           </button>
           <button
+            type="button"
+            data-guia="abrir-insumo"
             onClick={() => setAdding(true)}
             className="w-full rounded-xl ring-1 ring-marfil bg-white text-cacao py-3 font-bold hover:bg-marfil-soft transition-colors"
           >
@@ -791,6 +830,7 @@ export function InsumosClient({
       {adding && (
         <form
           id="insumo-form"
+          data-guia="form-insumo"
           onSubmit={handleSubmit}
           className="mb-5 rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
         >
