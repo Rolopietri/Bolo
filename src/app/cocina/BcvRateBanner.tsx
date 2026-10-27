@@ -9,6 +9,13 @@ import type { TasaBcv } from "@/lib/types";
  *  consulta" nunca se confunden. */
 type Estado = "cargando" | "listo" | "error";
 
+function detalleTasa(error: string): string {
+  if (/url and api key are required|supabaseurl is required|supabasekey is required/i.test(error)) {
+    return "Falta la conexión con la base de datos.";
+  }
+  return error;
+}
+
 export function BcvRateBanner() {
   const [tasa, setTasa] = useState<TasaBcv | null>(null);
   const [estado, setEstado] = useState<Estado>("cargando");
@@ -127,7 +134,7 @@ export function BcvRateBanner() {
         </div>
       )}
       {estado === "error" && error && !actualizacionFallida && (
-        <div className="mt-2 text-xs text-cacao-mute break-words">{error}</div>
+        <div className="mt-2 text-xs text-cacao-mute break-words">{detalleTasa(error)}</div>
       )}
     </section>
   );

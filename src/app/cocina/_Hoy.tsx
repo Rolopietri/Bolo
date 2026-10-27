@@ -122,6 +122,14 @@ function numONull(v: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function mensajeCarga(e: unknown): string {
+  const bruto = extractError(e, "Error cargando");
+  if (/url and api key are required|supabaseurl is required|supabasekey is required/i.test(bruto)) {
+    return "Falta la conexión con la base de datos.";
+  }
+  return bruto;
+}
+
 function exigirConteo(
   que: string,
   res: { count: number | null; error: { message: string } | null },
@@ -223,7 +231,7 @@ export function Hoy() {
           setError(null);
         }
       } catch (e) {
-        if (!cancelado) setError(extractError(e, "Error cargando"));
+        if (!cancelado) setError(mensajeCarga(e));
       }
     })();
     return () => {
@@ -307,7 +315,7 @@ export function Hoy() {
         {error && (
           <ErrorCarga
             className="mt-4"
-            que="el resumen de hoy"
+            que="hoy"
             detalle={error}
             onReintentar={() => {
               setError(null);
