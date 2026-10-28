@@ -53,6 +53,8 @@ type Producto = {
   /** Monto en la moneda de la factura. */
   monto: string;
   exento: boolean;
+  /** La factura traía la cantidad con decimales: es peso (kg). */
+  pesable: boolean;
   origen: Origen;
 };
 
@@ -178,22 +180,18 @@ function proveedorPorNombre(proveedores: Proveedor[], nombre: string): Proveedor
  *  la cantidad se escribe en la unidad que se tenga a mano y se guarda en
  *  unidades de compra).
  *
- *  Si nadie eligió la unidad y no hay memoria, se adivina: la factura puede
- *  decir "10" en kilos y el insumo comprarse por bolsa de 10 kg. Se toma la
- *  unidad con la que el precio queda más parecido al precio actual del insumo
- *  (`usd` = lo que se pagó por ese producto). */
-function conversion(p: Producto, ins: Insumo | undefined, usd = 0) {
+ *  Si nadie eligió la unidad y no hay memoria, se sigue la costumbre de las
+ *  facturas venezolanas: una cantidad escrita con decimales ("1,1895") es peso
+ *  en kg (o L); una entera ("2") son unidades de la presentación del insumo. */
+function conversion(p: Producto, ins: Insumo | undefined) {
   if (!ins) return { opciones: [], unidad: "", enBase: 0, enCompra: Number(p.cantidad) || 0 };
   const opciones = opcionesCantidad(ins);
   const cpc = ins.cantidadPorCompra ?? 0;
-  const cant = Number(p.cantidad) || 0;
   let unidad = opciones.some((o) => o.key === p.unidad)
     ? p.unidad
     : (opciones.find((o) => Math.abs(o.factor - cpc) < 1e-9)?.key ?? opciones[0]?.key ?? "");
-  const actual = ins.precioBaseUsd ?? 0;
-  if (p.unidad === "" && p.origen !== "memoria" && usd > 0 && cant > 0 && actual > 0 && opciones.length > 1) {
-    const distancia = (factor: number) => Math.abs(Math.log(usd / (cant * factor) / actual));
-    unidad = opciones.reduce((mejor, o) => (distancia(o.factor) < distancia(factorDe(opciones, mejor)) ? o.key : mejor), unidad);
+  if (p.unidad === "" && p.origen !== "memoria" && p.pesable) {
+    unidad = opciones.find((o) => o.key === "kg" || o.key === "L")?.key ?? unidad;
   }
   const enBase = (Number(p.cantidad) || 0) * factorDe(opciones, unidad);
   const enCompra = cpc > 0 ? enBase / cpc : Number(p.cantidad) || 0;
@@ -377,6 +375,7 @@ export function EscanearFactura({
         unidad: "",
         monto: String(Number(l.total.toFixed(2))),
         exento: l.exento,
+        pesable: l.pesable,
         origen: "",
       };
     });
@@ -486,8 +485,8 @@ export function EscanearFactura({
   /** Precio por unidad que deja el producto, frente al actual del insumo. */
   function precioInfo(p: Producto) {
     const ins = insumoPorId.get(p.insumoId);
+    const { enBase } = conversion(p, ins);
     const usd = costo(p).usd;
-    const { enBase } = conversion(p, ins, usd);
     if (!ins || !(enBase > 0) || !(usd > 0)) return null;
     const nuevo = usd / enBase;
     const actual = ins.precioBaseUsd ?? null;
@@ -510,7 +509,7 @@ export function EscanearFactura({
       setError("Elige el insumo de cada producto, o quítalo con el botón de la papelera.");
       return;
     }
-    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra > 0))) {
+    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId)).enCompra > 0))) {
       setError("Cada producto necesita una cantidad y un monto mayores que cero.");
       return;
     }
@@ -545,7 +544,7 @@ export function EscanearFactura({
       const flete = Number(cab.fleteUsd) > 0 ? Number(cab.fleteUsd) : undefined;
       const inputs: CompraInput[] = productos.map((p, i) => {
         const c = costo(p);
-        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId), c.usd);
+        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId));
         return {
           insumoId: p.insumoId,
           proveedorId: cab.proveedorId || undefined,
@@ -569,7 +568,7 @@ export function EscanearFactura({
           productos.map((p) => ({
             descripcion: p.descripcion,
             insumoId: p.insumoId,
-            factorCantidad: conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra / (p.cantidadFactura || 1),
+            factorCantidad: conversion(p, insumoPorId.get(p.insumoId)).enCompra / (p.cantidadFactura || 1),
           })),
           memoria,
         );
@@ -914,7 +913,7 @@ export function EscanearFactura({
             <ul className="mt-1 divide-y divide-marfil">
               {productos.map((p) => {
                 const ins = insumoPorId.get(p.insumoId);
-                const conv = conversion(p, ins, costo(p).usd);
+                const conv = conversion(p, ins);
                 const info = precioInfo(p);
                 return (
                   <li key={p.key} className="py-3 space-y-1.5">
@@ -1016,7 +1015,7 @@ export function EscanearFactura({
               onClick={() =>
                 setProductos((ps) => [
                   ...ps,
-                  { key: nuevaKey(), descripcion: "", cantidadFactura: 1, insumoId: "", cantidad: "", unidad: "", monto: "", exento: false, origen: "" },
+                  { key: nuevaKey(), descripcion: "", cantidadFactura: 1, insumoId: "", cantidad: "", unidad: "", monto: "", exento: false, pesable: false, origen: "" },
                 ])
               }
               className="mt-1 inline-flex items-center gap-1.5 text-sm text-cacao hover:text-terracotta"

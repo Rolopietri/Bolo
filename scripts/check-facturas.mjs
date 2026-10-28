@@ -139,6 +139,29 @@ igual("f3 igtf", f3.igtf, 1800);
 igual("f3 total", f3.total, 61800);
 igual("f3 a cuadrar", totalProductos(f3), 60000);
 
+// ── Cantidades: con decimales = peso (kg); enteras = unidades ──
+const f6 = parseFactura(`
+EL TORO C.A.
+RIF J-59957472-8
+1,1895 x 61.700,00
+CARNE DE RES (G) 73.392,22
+1,250 X 4.000,00
+POLLO (G) 5.000,00
+10,000 x 5.000,00
+CARNE MOLIDA (G) 50.000,00
+2 X 1.000,00
+HUEVOS (E) 2.000,00
+`);
+igual("f6 #lineas", f6.lineas.length, 4);
+igual("f6 carne cant", f6.lineas[0]?.cantidad, 1.1895);
+igual("f6 carne pesable", f6.lineas[0]?.pesable, true);
+igual("f6 pollo cant (1,250 = 1,25)", f6.lineas[1]?.cantidad, 1.25);
+igual("f6 molida 10,000 = 10 kg", f6.lineas[2]?.cantidad, 10);
+igual("f6 molida pesable", f6.lineas[2]?.pesable, true);
+igual("f6 huevos cant", f6.lineas[3]?.cantidad, 2);
+igual("f6 huevos no pesable", f6.lineas[3]?.pesable, false);
+igual("cant al inicio con decimales", parseFactura("RIF J-1234567-8\n0,750 QUESO BLANCO 6,00 4,50").lineas[0]?.cantidad, 0.75);
+
 // ── Rótulos del resumen mal leídos por el OCR ──
 const f4 = parseFactura(`
 LA GRANJA C.A.

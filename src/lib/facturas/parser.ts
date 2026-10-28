@@ -20,6 +20,9 @@ export type LineaLeida = {
    *  total); "baja" si solo trae un monto suelto: puede ser un renglón que no
    *  es producto (dirección, teléfono mal leído…). */
   confianza: "alta" | "baja";
+  /** La cantidad venía escrita con decimales ("1,1895", "10,000"): en las
+   *  facturas venezolanas eso es PESO (kg). Entera ("2") son unidades. */
+  pesable: boolean;
 };
 
 export type FacturaLeida = {
@@ -58,6 +61,20 @@ export function normalizarDescripcion(s: string): string {
     .replace(/\b([a-z]) (?=[a-z]\b)/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/** Lee una CANTIDAD. A diferencia de los montos, la coma de una cantidad es
+ *  siempre decimal: las máquinas fiscales imprimen "1,250" (1,25 kg), nunca
+ *  mil doscientos cincuenta. */
+export function parseCantidad(raw: string): number | null {
+  const s = raw.trim();
+  if (/^\d+,\d+$/.test(s)) return Number(s.replace(",", "."));
+  return parseNumero(s);
+}
+
+/** true si la cantidad está escrita con decimales (es un peso). */
+function escritaConDecimales(raw: string): boolean {
+  return /^\d+[.,]\d+$/.test(raw.trim()) && !/^\d{1,3}\.\d{3}$/.test(raw.trim());
 }
 
 /** RIF canónico: letra + dígitos + dígito verificador, sin guiones (J123456789). */
@@ -174,15 +191,18 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
   if (finales.length === 0) return null;
   // Cantidad al inicio ("2 HARINA PAN 45,00 90,00") y código del producto.
   let cantInicial: number | null = null;
-  if (tokens.length > 1 && /^\d{1,4}([.,]\d{1,3})?$/.test(tokens[0])) {
-    cantInicial = parseNumero(tokens[0]);
+  let pesable = false;
+  if (tokens.length > 1 && /^\d{1,4}([.,]\d{1,4})?$/.test(tokens[0])) {
+    cantInicial = parseCantidad(tokens[0]);
+    pesable = escritaConDecimales(tokens[0]);
     tokens.shift();
   }
   // Código interno largo al inicio ("7591002000011 HARINA…", "A-1023 HARINA…").
   if (tokens.length > 1 && /\d/.test(tokens[0]) && tokens[0].replace(/[^0-9]/g, "").length >= 4 && !/(kg|gr?|ml|lt?)$/i.test(tokens[0])) {
     tokens.shift();
-    if (cantInicial === null && tokens.length > 1 && /^\d{1,4}([.,]\d{1,3})?$/.test(tokens[0])) {
-      cantInicial = parseNumero(tokens[0]);
+    if (cantInicial === null && tokens.length > 1 && /^\d{1,4}([.,]\d{1,4})?$/.test(tokens[0])) {
+      cantInicial = parseCantidad(tokens[0]);
+      pesable = escritaConDecimales(tokens[0]);
       tokens.shift();
     }
   }
@@ -233,7 +253,9 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
     precioUnit = cantidad > 0 ? total / cantidad : undefined;
   }
   if (!(cantidad > 0)) cantidad = 1;
-  return { descripcion, cantidad, precioUnit, total, exento, confianza: finales.length >= 2 ? "alta" : "baja" };
+  // Sin cantidad al inicio, una cantidad no entera también delata un peso.
+  if (cantInicial === null && !Number.isInteger(cantidad)) pesable = true;
+  return { descripcion, cantidad, precioUnit, total, exento, confianza: finales.length >= 2 ? "alta" : "baja", pesable };
 }
 
 /** Lee la factura completa a partir de su texto. */
@@ -319,13 +341,13 @@ export function parseFactura(texto: string): FacturaLeida {
   }
 
   // Productos (la cabecera del proveedor, hasta su RIF, nunca es un producto).
-  let pendiente: { cantidad: number; precio: number } | null = null;
+  let pendiente: { cantidad: number; precio: number; pesable: boolean } | null = null;
   for (let i = idxRif + 1; i < lineas.length; i++) {
     const cx = lineas[i].match(RE_CANT_X_PRECIO);
     if (cx) {
-      const cantidad = parseNumero(cx[1]);
+      const cantidad = parseCantidad(cx[1]);
       const precio = parseNumero(cx[2]);
-      pendiente = cantidad && precio ? { cantidad, precio } : null;
+      pendiente = cantidad && precio ? { cantidad, precio, pesable: escritaConDecimales(cx[1]) } : null;
       continue;
     }
     const linea = parseLineaProducto(lineas[i]);
@@ -334,6 +356,7 @@ export function parseFactura(texto: string): FacturaLeida {
       linea.cantidad = pendiente.cantidad;
       linea.precioUnit = pendiente.precio;
       linea.confianza = "alta";
+      linea.pesable = pendiente.pesable;
     }
     pendiente = null;
     if (linea) out.lineas.push(linea);
