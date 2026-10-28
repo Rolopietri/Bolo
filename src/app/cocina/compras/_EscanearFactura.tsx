@@ -479,6 +479,15 @@ export function EscanearFactura({
   // ── Cuentas ──
   const iva = (Number(cab.ivaPorc) || 0) / 100;
   const tasaNum = Number(cab.tasa) || 0;
+  // Moneda en que se PAGA (según la modalidad), para marcarla como en el
+  // formulario manual: "Bs · BCV $/€/paralela" se paga en Bs; el resto en $.
+  const pagaEnBs = cab.modalidadPago === "bcv_dolar" || cab.modalidadPago === "bcv_euro" || cab.modalidadPago === "paralela";
+  const monedaPago: "bs" | "usd" = pagaEnBs ? "bs" : "usd";
+  /** De dónde sale la tasa, para mostrarla junto al total. */
+  const origenTasa =
+    tasaSugerida !== null && Math.abs(tasaNum - Number(tasaSugerida)) <= 0.009
+      ? `${cab.modalidadPago === "bcv_euro" ? "BCV €" : cab.modalidadPago === "paralela" ? "paralela" : "BCV"} del ${fmtFecha(cab.fecha)}`
+      : "tasa puesta a mano";
 
   /** Lo que realmente se pagó por un producto, con IVA si corresponde. */
   function costo(p: Producto): { usd: number; bs?: number; enMoneda: number } {
@@ -986,19 +995,43 @@ export function EscanearFactura({
                       ) : (
                         <input disabled placeholder="Elige el insumo" className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-marfil-soft text-sm" />
                       )}
-                      <label className="mt-1 flex rounded-lg ring-1 ring-marfil bg-white focus-within:ring-terracotta/60">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          inputMode="decimal"
-                          value={p.monto}
-                          onChange={(e) => setProducto(p.key, { monto: e.target.value })}
-                          aria-label="Monto"
-                          className="min-w-0 flex-1 rounded-l-lg bg-transparent px-3 py-2 outline-none"
-                        />
-                        <span className="shrink-0 self-center px-3 text-sm text-cacao-soft">{cab.moneda === "bs" ? "Bs" : "$"}</span>
-                      </label>
+                      <div>
+                        <label
+                          className={`mt-1 flex rounded-lg bg-white focus-within:ring-terracotta/60 ${
+                            cab.moneda === monedaPago ? "ring-2 ring-terracotta/50" : "ring-1 ring-marfil"
+                          }`}
+                        >
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            inputMode="decimal"
+                            value={p.monto}
+                            onChange={(e) => setProducto(p.key, { monto: e.target.value })}
+                            aria-label="Monto"
+                            className="min-w-0 flex-1 rounded-l-lg bg-transparent px-3 py-2 outline-none"
+                          />
+                          <span className="shrink-0 self-center px-3 text-sm text-cacao-soft">
+                            {cab.moneda === "bs" ? "Bs" : "$"}
+                            {cab.moneda === monedaPago && (
+                              <span className="ml-1 text-[10px] uppercase tracking-widest text-terracotta">· pago</span>
+                            )}
+                          </span>
+                        </label>
+                        {/* Equivalente en vivo en la otra moneda (lo que se guarda, con IVA). */}
+                        {Number(p.monto) > 0 && tasaNum > 0 && (
+                          <span className="mt-0.5 block text-right text-[11px] text-cacao-soft">
+                            ={" "}
+                            <b className="font-medium text-cacao">
+                              {cab.moneda === "bs" ? fmtMonto(costo(p).usd, "usd") : fmtMonto(costo(p).bs ?? 0, "bs")}
+                            </b>
+                            {cab.moneda !== monedaPago && (
+                              <span className="ml-1 text-[10px] uppercase tracking-widest text-terracotta">· pago</span>
+                            )}
+                            {cab.ivaModo === "sin" && !p.exento && <span> con IVA</span>}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="text-[11px] text-cacao-mute">
                       {p.descripcion && <>«{p.descripcion}» · </>}
@@ -1079,10 +1112,27 @@ export function EscanearFactura({
 
           {productos.length > 0 && (
             <div className="rounded-lg bg-marfil-soft ring-1 ring-marfil px-3 py-2 text-sm">
-              <span className="text-cacao-mute">Total que se guarda: </span>
-              <span className="text-cacao font-medium">${totalUsd.toFixed(2)}</span>
-              {cab.moneda === "bs" && <span className="text-cacao-soft"> · {fmtMonto(totalMoneda, "bs")}</span>}
-              {cab.ivaModo === "sin" && <span className="text-cacao-mute"> · incluye IVA {Number(cab.ivaPorc) || 0}%</span>}
+              <span className="text-cacao-mute">Total que se guarda</span>
+              <div className="mt-1 grid grid-cols-2 gap-3">
+                {(["bs", "usd"] as const).map((m) => {
+                  const valor = m === "usd" ? totalUsd : cab.moneda === "bs" ? totalMoneda : totalUsd * tasaNum;
+                  return (
+                    <div key={m} className={`rounded-lg bg-white px-3 py-2 ${m === monedaPago ? "ring-2 ring-terracotta/50" : "ring-1 ring-marfil"}`}>
+                      <span className="text-xs text-cacao-mute flex items-center gap-1">
+                        {m === "bs" ? "En Bs" : "En $"}
+                        {m === monedaPago && <span className="text-[10px] uppercase tracking-widest text-terracotta">· pago</span>}
+                      </span>
+                      <span className="block font-medium text-cacao tabular-nums">
+                        {m === "bs" && !(tasaNum > 0) && cab.moneda !== "bs" ? "—" : fmtMonto(valor, m)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <span className="mt-1 block text-xs text-cacao-mute">
+                {tasaNum > 0 ? `A Bs ${tasaNum.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} por $ · ${origenTasa}` : "Falta la tasa del día"}
+                {cab.ivaModo === "sin" && ` · incluye IVA ${Number(cab.ivaPorc) || 0}%`}
+              </span>
               <ResumenFactura resumen={leido.resumen} moneda={cab.moneda} cuadra={cuadra} />
             </div>
           )}
