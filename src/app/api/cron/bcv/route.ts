@@ -68,22 +68,8 @@ function todayCaracas(): string {
 
 export async function GET() {
   const inicio = Date.now();
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  // Escribir la tasa con SERVICE-ROLE (clave de servidor, nunca se expone al
-  // navegador). Así podemos bloquear la escritura anónima en RLS y evitar que
-  // alguien fije una tasa falsa con la anon key pública. Fallback a anon si la
-  // service-role aún no está configurada (para no romper el cron/banner antes
-  // de setearla en Vercel). Este endpoint solo escribe la tasa real de
-  // dolarapi, así que llamarlo sin secret es de bajo riesgo.
-  const writeKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ??
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !writeKey) {
-    return NextResponse.json({ error: "Supabase no configurado" }, { status: 500 });
-  }
-
-  const sb = createClient(url, writeKey, { auth: { persistSession: false } });
-
+  // Primero la tasa pública. Hoy la muestra aunque la base no esté configurada
+  // o el guardado falle: si no, la portada se queda sin número.
   const [usdBs, eurBs, paralelaBs] = await Promise.all([
     fetchOficial(),
     fetchEuro(),
@@ -91,39 +77,58 @@ export async function GET() {
   ]);
 
   if (usdBs == null) {
-    await registrarCorrida(sb, "bcv", inicio, {
-      estado: "error",
-      error: "No se pudo obtener la tasa oficial del BCV",
-    });
     return NextResponse.json(
-      { error: "No se pudo obtener tasa oficial BCV" },
+      { error: "No se pudo obtener la tasa oficial del BCV" },
       { status: 502 },
     );
   }
 
   const fecha = todayCaracas();
+  const cuerpo = {
+    ok: true as const,
+    fecha,
+    usdBs,
+    eurBs,
+    paralelaBs,
+    guardado: false,
+    actualizado: new Date().toISOString(),
+  };
 
-  // Upsert por fecha
-  const { error: insErr } = await sb
-    .from("tasa_bcv")
-    .upsert(
-      {
-        fecha,
-        usd_bs: usdBs,
-        eur_bs: eurBs,
-        paralela_bs: paralelaBs,
-        fuente: "ve.dolarapi.com",
-      },
-      { onConflict: "fecha" },
-    );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  // Escribir la tasa con SERVICE-ROLE (clave de servidor, nunca se expone al
+  // navegador). Así podemos bloquear la escritura anónima en RLS y evitar que
+  // alguien fije una tasa falsa con la anon key pública. Fallback a anon si la
+  // service-role aún no está configurada. Este endpoint solo escribe la tasa
+  // real de dolarapi, así que llamarlo sin secret es de bajo riesgo.
+  const writeKey =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !writeKey) {
+    return NextResponse.json(cuerpo);
+  }
+
+  const sb = createClient(url, writeKey, { auth: { persistSession: false } });
+
+  const { error: insErr } = await sb.from("tasa_bcv").upsert(
+    {
+      fecha,
+      usd_bs: usdBs,
+      eur_bs: eurBs,
+      paralela_bs: paralelaBs,
+      fuente: "ve.dolarapi.com",
+    },
+    { onConflict: "fecha" },
+  );
 
   if (insErr) {
     await registrarCorrida(sb, "bcv", inicio, {
       estado: "error",
       error: insErr.message,
     });
+    // 500 para que el cron reintente el guardado, pero con la tasa en el
+    // cuerpo: la portada igual puede mostrarla.
     return NextResponse.json(
-      { error: "DB error", detail: insErr.message },
+      { ...cuerpo, error: "No se pudo guardar la tasa" },
       { status: 500 },
     );
   }
@@ -133,12 +138,5 @@ export async function GET() {
     detalle: { fecha, usdBs, eurBs, paralelaBs },
   });
 
-  return NextResponse.json({
-    ok: true,
-    fecha,
-    usdBs,
-    eurBs,
-    paralelaBs,
-    actualizado: new Date().toISOString(),
-  });
+  return NextResponse.json({ ...cuerpo, guardado: true });
 }

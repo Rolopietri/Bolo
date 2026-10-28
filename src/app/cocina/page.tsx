@@ -2,15 +2,11 @@ import { Header } from "@/components/Header";
 import Link from "next/link";
 import { funcionActiva } from "@/lib/modulos.mjs";
 import { MenuLista, type MenuItem } from "@/components/MenuLista";
-import {
-  BoltIcon,
-  BoxIcon,
-  BookIcon,
-  CartIcon,
-  ChevronIcon,
-} from "@/components/icons";
-import { BcvRateBanner } from "./BcvRateBanner";
-import { PasosCocina } from "./_PasosCocina";
+import { BoltIcon, BoxIcon, BookIcon, CartIcon, ChevronIcon } from "@/components/icons";
+import { Hoy } from "./_Hoy";
+
+// El saludo y la fecha son de hoy (hora de Caracas). No se prerenderiza.
+export const dynamic = "force-dynamic";
 
 const modulos: (MenuItem & {
   /** Identificador interno (no se muestra). */
@@ -52,75 +48,23 @@ export default function CocinaHub() {
     : modulos;
   return (
     <>
-      <Header subtitle="Cocina" />
-      <main className="flex-1 mx-auto w-full max-w-4xl px-5 py-10">
-        <section className="mb-6">
-          <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">
-            Operación gastronómica
-          </p>
-          <h1 className="mt-2 font-cinzel text-2xl sm:text-3xl tracking-[0.12em] uppercase text-cacao">
-            Cocina
-          </h1>
-        </section>
+      <Header subtitle="Hoy" />
+      <main className="mx-auto w-full max-w-4xl flex-1 px-5 py-8 sm:py-10">
+        <Hoy />
 
-        {/* ── Tasa de cambio, arriba del todo ──────────────────────────── */}
-        <BcvRateBanner />
-
-        {/* ── Dos acciones principales, lado a lado ────────────────────── */}
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          {/* Empezar: te lleva al paso 1 (proveedores) */}
-          <Link
-            href="/cocina/proveedores"
-            data-guia="cocina-empezar"
-            className="group flex items-center gap-4 rounded-2xl bg-cacao p-5 text-white transition-colors hover:bg-terracotta"
-          >
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-white/10">
-              <BoltIcon className="size-5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[10px] uppercase tracking-[0.3em] text-white/60">
-                Paso 1
-              </span>
-              <span className="block font-cinzel text-xl leading-tight">Empezar</span>
-              <span className="block text-sm text-white/80">
-                Agrega tus proveedores y sigue el camino.
-              </span>
-            </span>
-            <ChevronIcon className="ml-auto size-5 text-white/70 transition group-hover:translate-x-1" />
-          </Link>
-
-          {/* Crear un plato: para quien ya tiene todo montado */}
-          <Link
-            href="/cocina/plato"
-            data-guia="guia-plato"
-            className="group flex items-center gap-4 rounded-2xl bg-white p-5 text-cacao ring-1 ring-marfil transition-colors hover:ring-terracotta"
-          >
-            <span className="grid size-12 shrink-0 place-items-center rounded-full bg-naranja-soft/60 text-terracotta transition-colors group-hover:bg-terracotta group-hover:text-white">
-              <BoltIcon className="size-5" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-[10px] uppercase tracking-[0.3em] text-terracotta-deep">
-                Rápido
-              </span>
-              <span className="block font-cinzel text-xl leading-tight transition-colors group-hover:text-terracotta">
-                Crear un plato
-              </span>
-              <span className="block text-sm text-cacao-soft">
-                ¿Ya tienes todo? Crea un plato y ve su costo.
-              </span>
-            </span>
-            <ChevronIcon className="ml-auto size-5 text-cacao-mute transition group-hover:translate-x-1 group-hover:text-terracotta" />
-          </Link>
-        </div>
-
-        {/* ── Los 4 pasos en una línea horizontal ──────────────────────── */}
-        <PasosCocina className="mt-7" />
-
-        {/* ── Todos los módulos (referencia) ───────────────────────────── */}
         <section className="mt-10">
-          <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">
-            Módulos
-          </h2>
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">Módulos</h2>
+            <Link
+              href="/cocina/plato"
+              data-guia="guia-plato"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-cacao ring-1 ring-marfil transition-colors hover:text-terracotta hover:ring-terracotta"
+            >
+              <BoltIcon className="size-4 text-terracotta" />
+              Crear un plato
+              <ChevronIcon className="size-4 text-cacao-mute" />
+            </Link>
+          </div>
           <MenuLista items={modulosVisibles} className="mt-2" />
         </section>
       </main>
