@@ -15,6 +15,7 @@ import {
   parecido,
   empaqueDe,
   contenidoDe,
+  tipoResumen,
 } from "../src/lib/facturas/parser.ts";
 
 let fallas = 0;
@@ -273,6 +274,184 @@ igual("IVA no mayor que la base", parseFactura("RIF J-1234567-8\nPOLLO 2 5,00 10
 igual("parecido OCR", parecido("PEPSI LIGHT LATA 355X24 UND", "Pees LIGHT LATA 355X24 UND") >= 0.6, true);
 igual("no parecido", parecido("PEPSI LIGHT LATA 355X24 UND", "AGUA MINALBA 600ML x 24 UNID") < 0.6, true);
 
+// ════════════════════════════════════════════════════════════════
+// FORMATOS DE FACTURACIÓN: un caso por cada tipo de documento.
+// ════════════════════════════════════════════════════════════════
+
+// ── VE · Máquina fiscal con varias alícuotas (G 16 %, R 8 %, E) ──
+const ve1 = parseFactura(`
+SENIAT
+RIF J-30123456-1
+PANADERIA LA ESPIGA C.A.
+FACTURA N°: 00045210
+FECHA: 22/10/2026 HORA: 08:15
+2 x 15,00
+PAN CANILLA (R) 30,00
+1 x 40,00
+QUESO BLANCO KG (G) 40,00
+3 x 5,00
+HUEVOS (E) 15,00
+SUBTTL 85,00
+EXENTO 15,00
+BI G16,00% 40,00
+IVA G16,00% 6,40
+BI R8,00% 30,00
+IVA R8,00% 2,40
+TOTAL 93,80
+MH Z1B0012345
+`);
+igual("ve1 #lineas", ve1.lineas.length, 3);
+igual("ve1 pan alícuota R", ve1.lineas[0]?.alicuota, "R");
+igual("ve1 queso general (sin marca R/A)", ve1.lineas[1]?.alicuota, undefined);
+igual("ve1 huevos exento", ve1.lineas[2]?.exento, true);
+igual("ve1 alícuota R 8%", ve1.alicuotas?.R, 8);
+igual("ve1 IVA general 16%", ve1.ivaPorc, 16);
+igual("ve1 total", ve1.total, 93.8);
+igual("ve1 tipo factura", ve1.tipo, "factura");
+
+// ── VE · Nota de entrega sin precios ──
+const ve2 = parseFactura(`
+DISTRIBUIDORA EL TORO C.A.
+RIF: J-59957472-8
+NOTA DE ENTREGA N° 000781
+FECHA: 20/10/2026
+CANT DESCRIPCION
+24 UND PEPSI ZERO LATA 355ML
+2 CAJAS AGUA MINALBA 600ML x 24
+HARINA PAN 1KG 20 BULTOS
+RECIBIDO CONFORME: ____________
+`);
+igual("ve2 tipo nota de entrega", ve2.tipo, "nota_entrega");
+igual("ve2 numero", ve2.numero, "000781");
+igual("ve2 #lineas", ve2.lineas.length, 3);
+igual("ve2 l1 cant", ve2.lineas[0]?.cantidad, 24);
+igual("ve2 l1 sin precio", ve2.lineas[0]?.sinPrecio, true);
+igual("ve2 l2 desc", ve2.lineas[1]?.descripcion, "AGUA MINALBA 600ML x 24");
+igual("ve2 l2 empaque", ve2.lineas[1]?.porEmpaque, 24);
+igual("ve2 l3 cant", ve2.lineas[2]?.cantidad, 20);
+igual("ve2 l3 desc", ve2.lineas[2]?.descripcion, "HARINA PAN 1KG");
+
+// ── VE · Nota de crédito ──
+igual("nota de crédito", parseFactura("NOTA DE CREDITO N° 0012\nRIF J-1234567-8").tipo, "nota_credito");
+
+// ── EE. UU. · Invoice en inglés, fecha mes/día, Sales Tax ──
+const us = parseFactura(`
+ACME RESTAURANT SUPPLY INC
+EIN 12-3456789
+INVOICE # 10482
+Invoice Date: 09/23/2026
+Due Date: 10/23/2026
+QTY DESCRIPTION UNIT PRICE AMOUNT
+2 Olive Oil 1L 12.50 25.00
+3 Flour 5 lb 4.00 12.00
+Subtotal 37.00
+Sales Tax (8%) 2.96
+Shipping 5.00
+Amount Due $44.96
+`);
+igual("us id fiscal", us.rif, "12-3456789");
+igual("us numero", us.numero, "10482");
+igual("us fecha mes/día", us.fecha, "2026-09-23");
+igual("us moneda", us.moneda, "usd");
+igual("us #lineas", us.lineas.length, 2);
+igual("us l1 cant", us.lineas[0]?.cantidad, 2);
+igual("us l1 total", us.lineas[0]?.total, 25);
+igual("us subtotal", us.subtotal, 37);
+igual("us tax %", us.ivaPorc, 8);
+igual("us flete (shipping)", us.flete, 5);
+igual("us total", us.total, 44.96);
+
+// ── España · IVA 21 %, euros, NIF ──
+const es = parseFactura(`
+ACEITES DEL SUR S.L.
+NIF B12345678
+Factura nº F2026-0153
+Fecha: 15 de octubre de 2026
+Concepto Uds Precio Importe
+Aceite de oliva virgen 5L 2 28,50 57,00
+Vinagre de Jerez 750ml 6 3,20 19,20
+Base imponible 76,20
+IVA 21% 16,00
+Total factura 92,20 €
+`);
+igual("es nif", es.rif, "B12345678");
+igual("es numero", es.numero, "F2026-0153");
+igual("es fecha con mes en letras", es.fecha, "2026-10-15");
+igual("es moneda otra EUR", es.monedaOtra, "EUR");
+igual("es #lineas", es.lineas.length, 2);
+igual("es iva %", es.ivaPorc, 21);
+igual("es total", es.total, 92.2);
+
+// ── México · CFDI: RFC, IVA 16 %, MXN ──
+const mx = parseFactura(`
+ABARROTES LA PROVIDENCIA SA DE CV
+RFC: APR010101AB1
+Folio: A-4521
+Fecha: 2026-10-05
+Cantidad Descripción Valor unitario Importe
+10 Tortilla de maíz kg 22.00 220.00
+5 Frijol negro kg 38.00 190.00
+Subtotal 410.00
+IVA 16% 0.00
+Total 410.00 MXN
+`);
+igual("mx rfc", mx.rif, "APR010101AB1");
+igual("mx folio", mx.numero, "A-4521");
+igual("mx fecha ISO", mx.fecha, "2026-10-05");
+igual("mx moneda otra", mx.monedaOtra, "MXN");
+igual("mx #lineas", mx.lineas.length, 2);
+igual("mx total", mx.total, 410);
+
+// ── Perú · RUC, IGV 18 %, serie-número, S/ ──
+const pe = parseFactura(`
+DISTRIBUIDORA LIMA S.A.C.
+RUC 20123456789
+FACTURA ELECTRÓNICA F001-00012345
+Fecha de emisión: 03/10/2026
+CANT. DESCRIPCIÓN P.UNIT IMPORTE
+4 ARROZ EXTRA 5KG 21.50 86.00
+OP. GRAVADA 86.00
+IGV 18% 15.48
+IMPORTE TOTAL S/ 101.48
+`);
+igual("pe ruc", pe.rif, "20123456789");
+igual("pe serie-número", pe.numero, "F001-00012345");
+igual("pe fecha", pe.fecha, "2026-10-03");
+igual("pe igv %", pe.ivaPorc, 18);
+igual("pe base (op. gravada)", pe.base, 86);
+igual("pe total", pe.total, 101.48);
+igual("pe moneda otra", pe.monedaOtra, "PEN");
+igual("pe #lineas", pe.lineas.length, 1);
+
+// ── Colombia · NIT, IVA 19 %, miles con punto ──
+const co = parseFactura(`
+LACTEOS DEL VALLE S.A.S.
+NIT 900.123.456-7
+Factura de venta No. FE-8812
+Fecha: 12/10/2026
+LECHE ENTERA 1L 12 3.900 46.800
+QUESO CAMPESINO 2 18.500 37.000
+Subtotal 83.800
+IVA 19% 15.922
+Total a pagar COP 99.722
+`);
+igual("co nit", co.rif, "900.123.456-7");
+igual("co numero", co.numero, "FE-8812");
+igual("co #lineas", co.lineas.length, 2);
+igual("co l1 total (miles con punto)", co.lineas[0]?.total, 46800);
+igual("co iva %", co.ivaPorc, 19);
+igual("co total", co.total, 99722);
+
+// ── Fechas en inglés con nombre de mes y miles con apóstrofo ──
+igual("fecha 'Sep 10, 2026'", parseFactura("Invoice Date: Sep 10, 2026").fecha, "2026-09-10");
+igual("fecha '10-SEP-2026'", parseFactura("FECHA: 10-SEP-2026").fecha, "2026-09-10");
+igual("miles con apóstrofo", parseFactura("RIF J-1234567-8\nCARNE 2 1'250.00 2'500.00").lineas[0]?.total, 2500);
+
+// ── Rótulos que no son productos ni fórmula ──
+igual("retención no es total", tipoResumen("RETENCION IVA 75% 12,00"), "otro");
+igual("propina no es producto", parseFactura("RIF J-1234567-8\nPROPINA 10% 5,00").lineas.length, 0);
+igual("producto con BASE en el nombre", parseFactura("RIF J-1234567-8\nBASE PARA PIZZA 2 3,00 6,00").lineas[0]?.descripcion, "BASE PARA PIZZA");
+
 // ── Rótulos del resumen mal leídos por el OCR ──
 const f4 = parseFactura(`
 LA GRANJA C.A.
@@ -339,6 +518,14 @@ const cj = parseFactura("RIF J-1234567-8\n1.- PEPSI ZERO LAT355x24U 1 CJ 24 0.35
 igual("sin '1 CJ' en el nombre", cj[0]?.descripcion, "PEPSI ZERO LAT355x24U");
 igual("empaque se conserva", cj[0]?.porEmpaque, 24);
 igual("30 UND sigue en el empaque", cj[1]?.porEmpaque, 30);
+igual(
+  "zero no es light aunque ambos digan lata",
+  sugerirInsumo("PEPSI ZERO LATA 355ML", [
+    { id: "light", nombre: "PEPSI LIGHT LATA" },
+    { id: "cero", nombre: "PEPSI CERO CAJA" },
+  ])?.id,
+  "cero",
+);
 igual("prefiere el empaque", sugerirInsumo("PEPSI ZERO LAT355x24U", cajas, (i) => i.id === "caja")?.id, "caja");
 
 if (fallas > 0) {

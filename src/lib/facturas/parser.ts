@@ -1,7 +1,14 @@
 // Lector de facturas: convierte el TEXTO de una factura (lo que devuelve el OCR,
-// o lo que se pegue a mano) en campos de compra. Reglas pensadas para facturas
-// venezolanas: RIF, N° de factura, fecha dd/mm/aaaa, montos "1.234,56", IVA y
-// productos exentos marcados con (E).
+// o lo que se pegue a mano) en campos de compra.
+//
+// Cubre los documentos venezolanos (Providencia SNAT/2011/0071): factura en
+// formato libre o preimpreso, ticket de máquina fiscal (alícuotas (G) general,
+// (R) reducida, (A) adicional, (E) exento; BI/IVA por alícuota; IGTF 3 %),
+// factura digital, notas de crédito y débito, y notas de entrega / guías de
+// despacho (con o sin precios), en Bs o con su equivalente en divisas.
+// Y los patrones comunes de otros países: RUC/NIT/RUT/CUIT/RFC/NIF…, IVA, IGV,
+// ITBIS, ITBMS, VAT, Sales tax, "Amount due", fechas con nombre de mes o
+// mes/día, y números "1.234,56", "1,234.56" o "1'234.56".
 //
 // Es a propósito un módulo PURO y sin imports: no toca la base ni el navegador,
 // así se prueba solo con `npm run test:facturas`. Nunca es perfecto: todo lo que
@@ -31,6 +38,10 @@ export type LineaLeida = {
   /** Los demás números del renglón (para corregir comas perdidas con el
    *  resumen de la factura). Uso interno del lector. */
   valores?: number[];
+  /** Alícuota venezolana del producto: (G) general, (R) reducida, (A) adicional. */
+  alicuota?: "G" | "R" | "A";
+  /** Renglón de una nota de entrega sin precios: hay que escribir el monto. */
+  sinPrecio?: boolean;
   /** Unidad de la cantidad cuando la factura la escribe ("1,1895 KG x",
    *  "CARNE DE RES KG", "500 GR"). No confundir con la presentación pegada al
    *  nombre ("HARINA PAN 1KG" es el tamaño del paquete). */
@@ -92,17 +103,25 @@ export type FacturaLeida = {
   total?: number;
   /** Tasa Bs/$ que trae la propia factura ("Tipo de cambio BCV Bs. 827,7371"). */
   tasa?: number;
+  /** Flete / delivery / envío cobrado en la factura (no es un producto). */
+  flete?: number;
+  /** % de cada alícuota leída en el resumen ("IVA R 8%", "IVA A 15%"). */
+  alicuotas?: { G?: number; R?: number; A?: number };
+  /** Qué documento es. */
+  tipo?: "factura" | "nota_entrega" | "nota_credito" | "nota_debito" | "ticket";
+  /** Moneda distinta de Bs o $ (EUR, COP, MXN, PEN…), para avisar. */
+  monedaOtra?: string;
   lineas: LineaLeida[];
 };
 
 /** Minúsculas, sin acentos, sin signos y con un solo espacio. Es la llave con
  *  la que se recuerdan las equivalencias ("Harina P.A.N. 1Kg" = "harina pan 1kg"). */
 export function normalizarDescripcion(s: string): string {
-  // ̀-ͯ: tildes separadas por NFD (con código, no literal: el
+  // \u0300-\u036f: tildes separadas por NFD (con código, no literal: el
   // minificador puede corromper el carácter).
   return s
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9ñ]+/g, " ")
     .replace(/(\d) (kg|g|gr|grs|ml|lt|l|lts|cc|un|und|unid)\b/g, "$1$2")
@@ -192,34 +211,58 @@ export function parseNumero(raw: string): number | null {
 }
 
 const RE_RIF = /\b([JVEGPC])\s*[-.]?\s*(\d{6,9})\s*[-.]?\s*(\d)\b/i;
+// Identificación fiscal de otros países (si no hay RIF venezolano).
+const RE_ID_FISCAL =
+  /\b(?:N\.?I\.?T|R\.?U\.?C|R\.?U\.?T|CUIT|CUIL|RFC|RTN|CNPJ|NIF|CIF|EIN|TIN|VAT\s*(?:No|Reg(?:istration)?)?|Tax\s*ID)\b\.?\s*[:#]?\s*(?:N[°ºo.]*\s*)?([A-Z0-9][A-Z0-9.\-\/]{4,24})/i;
 const RE_FECHA = /\b(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{2,4})\b/;
 // ── La "fórmula" de la factura venezolana ──
 // Renglones de resumen: subtotal, base imponible, IVA, exento, IGTF, descuento
 // y total. Tolerantes a lo que suele confundir el OCR (0↔O, 1↔I↔L, 4↔A):
 // "SUB-T0TAL", "1.V.A", "BI G16,00%", "SUBTTL".
 const RE_RESUMEN = {
-  subtotal: /\bs[uv]b\s*[-.]?\s*t[o0]t(?:[a4][l1i])?\b|\bsubttl\b|\bsub\s*[-.]?\s*ttl\b/i,
-  base: /(?:^|\s)b\.?\s?[i1l]\.?(?=\s|$)|\bbi\s*g\s*\d|\bbase\b|\bimp[o0]nible\b/i,
-  iva: /\b[i1l]\.?\s*v\.?\s*[a4]\b|(?:^|\s)v\.?\s*a\s*\d{1,2}(?:[.,]\d+)?\s*%|\bimpuesto\b|\bal[ií1l]cu[o0]ta\b|%\s*sobre\b/i,
-  exento: /\bexent[o0]s?\b|\bexoner/i,
+  // Cargos que no son productos ni parte de la fórmula: retenciones, propinas.
+  otro: /\bretenci[oó]n\b|\bwithholding\b|\bpropina\b|\btip\b|\bservicio\s*\d{1,2}\s*%|\bservice\s*charge\b|\banticipo\b|\babono\b|\bsaldo\s+anterior\b/i,
+  subtotal:
+    /\bs[uv]b\s*[-.]?\s*t[o0]t(?:[a4][l1i])?\b|\bsubttl\b|\bsub\s*[-.]?\s*ttl\b|\bsuma\b|\btotal\s+parcial\b|\bnet\s*amount\b|\bimporte\s+neto\b|\bvalor\s+neto\b|\bneto\b/i,
   igtf: /\b[i1l]\s*g\s*t\s*f\b/i,
-  descuento: /\bdesc(?:uento|to)?\b|\bdscto\b|\brebaja\b/i,
-  total: /\bt[o0]t[a4][l1i]\b|\ba\s+pagar\b/i,
+  flete: /\bflete\b|\bdelivery\b|\benv[ií]o\b|\bshipping\b|\bfreight\b|\btransporte\b|\bdespacho\s+a\s+domicilio\b/i,
+  base: /(?:^|\s)b\.?\s?[i1l]\.?(?=\s|$)|\bbi\s*[gra]\s*\d|\bbase\b|\bimp[o0]nible\b|\bgravad[oa]\b|\bgravable\b|\btaxable\b|\bafect[oa]\b/i,
+  exento: /\bexent[oa]s?\b|\bexoner|\binafect[oa]\b|\bno\s+gravad|\bno\s+sujet|\btax\s*exempt\b|\bexempt\b|\bzero\s*rated\b/i,
+  iva: /\b[i1l]\.?\s*v\.?\s*[a4]\b|(?:^|\s)v\.?\s*a\s*\d{1,2}(?:[.,]\d+)?\s*%|\bimpuestos?\b|\bal[ií1l]cu[o0]ta\b|%\s*sobre\b|\bigv\b|\bitbis\b|\bitbms\b|\bisv\b|\bvat\b|\b(?:sales\s*)?tax\b|\bgst\b|\bhst\b|\bmwst\b|\btva\b|\bbtw\b/i,
+  descuento: /\bdesc(?:uento|to)?\b|\bdscto\b|\brebaja\b|\bdiscount\b|\bbonificaci[oó]n\b/i,
+  total: /\bt[o0]t[a4][l1i]\b|\ba\s+pagar\b|\bamount\s+due\b|\bbalance\s+due\b|\bgrand\s+total\b|\bimporte\b|\bvalor\s+a\s+pagar\b/i,
 };
+// Un total "fuerte" se reconoce antes que el subtotal: "Total neto más
+// impuestos", "Neto a pagar", "Amount due", "Importe total".
+const RE_TOTAL_FUERTE =
+  /(?<!s[uv]b\s*[-.]?\s*)\bt[o0]t[a4][l1i]\s+(?:a\s+pagar|general|factura|neto|due|amount|usd|bs|eur)\b|\bneto\s+a\s+pagar\b|\bamount\s+due\b|\bbalance\s+due\b|\bgrand\s+total\b|\b(?:importe|monto|valor|gran)\s+total\b|\btotal\s+(?:a\s+)?pagar\b/i;
 // Otros renglones que NO son productos aunque terminen en un número.
 const RE_NO_PRODUCTO =
-  /\b(rif|r\.i\.f|c\.?\s*i\.?|fecha|factura|control|tel[eé]?f?|telf|direcci|domicilio|cliente|raz[oó]n|forma\s*de\s*pago|pago|m[oó]vil|transferencia|cambio|tasa|bcv|ref|son:?|serie|caja|cajer[oa]|vendedor|hora|p[aá]gina|n[°º]|seniat|contribuyente|efectivo|tarjeta|d[eé]bito|cr[eé]dito|punto|divisas?|zelle|vuelto|recibido|items?|art[ií]culos|gracias|firma|contado|vence|vencimiento|condiciones|zona|calle|avenida|av|edif|piso|local|galp[oó]n|sector|urb|aceptamos|billetes|deteriorados|condiciones|plazo|conforme|despach\w*|conductor|placas?|veh[ií]culo|sello|envases|entregados|recibidos|original|copia)\b/i;
+  /\b(rif|r\.i\.f|c\.?\s*i\.?|nit|ruc|rut|cuit|cuil|rfc|rtn|cnpj|cpf|nif|cif|ein|ncf|cufe|cae|uuid|folio|timbre|fecha|date|factura|invoice|bill\s+to|ship\s+to|sold\s+to|customer|control|tel[eé]?f?|telf|phone|e-?mail|www|http|direcci|domicilio|address|cliente|raz[oó]n|forma\s*de\s*pago|pago|payment|m[oó]vil|transferencia|cambio|tasa|bcv|ref|son:?|serie|caja\s*[:#n°º]|cajer[oa]|cashier|vendedor|hora|p[aá]gina|page|n[°º]|seniat|sunat|dian|sat|contribuyente|efectivo|cash|tarjeta|card|d[eé]bito|cr[eé]dito|punto|divisas?|zelle|vuelto|change|recibido|items?|art[ií]culos|gracias|thank|firma|contado|vence|vencimiento|due|condiciones|terms|zona|calle|avenida|av|edif|piso|local|galp[oó]n|sector|urb|aceptamos|billetes|deteriorados|plazo|conforme|despach\w*|conductor|placas?|veh[ií]culo|sello|envases|entregados|recibidos|original|copia|autorizaci[oó]n|resoluci[oó]n|providencia)\b/i;
 
 /** Qué parte de la fórmula es un renglón (o null si no es de resumen). */
 export function tipoResumen(linea: string): keyof typeof RE_RESUMEN | null {
+  if (RE_RESUMEN.otro.test(linea)) return "otro";
+  if (RE_TOTAL_FUERTE.test(linea)) return "total";
   if (RE_RESUMEN.subtotal.test(linea)) return "subtotal";
   if (RE_RESUMEN.igtf.test(linea)) return "igtf";
+  if (RE_RESUMEN.flete.test(linea)) return "flete";
   if (RE_RESUMEN.base.test(linea)) return "base";
   if (RE_RESUMEN.exento.test(linea) && !/\(\s*e\s*\)/i.test(linea)) return "exento";
   if (RE_RESUMEN.iva.test(linea)) return "iva";
   if (RE_RESUMEN.descuento.test(linea)) return "descuento";
   if (RE_RESUMEN.total.test(linea)) return "total";
   return null;
+}
+
+/** ¿El renglón es parte del resumen? El rótulo tiene que estar al inicio y el
+ *  renglón traer pocos montos (o un %), para no descartar productos como
+ *  "BASE PARA PIZZA 2 3,00 6,00". */
+function esRenglonResumen(linea: string): boolean {
+  if (!tipoResumen(linea)) return false;
+  const inicio = linea.replace(/^[^A-Za-z\u00C0-\u017F]+/, "").split(/\s+/).slice(0, 4).join(" ");
+  const montos = (linea.match(/\d[\d.,]*\d|\d/g) ?? []).length;
+  return (tipoResumen(inicio) !== null && montos <= 2) || /%/.test(linea);
 }
 
 // Renglón de cantidad de las máquinas fiscales, encima del producto:
@@ -235,9 +278,13 @@ function fechaISO(d: number, m: number, a: number): string | undefined {
 
 /** Intenta leer una línea de producto. null si no parece un producto. */
 export function parseLineaProducto(linea: string): LineaLeida | null {
-  if (tipoResumen(linea) || RE_NO_PRODUCTO.test(linea)) return null;
+  if (esRenglonResumen(linea) || RE_NO_PRODUCTO.test(linea)) return null;
   const exento = /\(\s*e\s*\)|\s\*?E$/i.test(linea);
+  const marca = linea.match(/\(\s*([gra])\s*\)/i);
+  const alicuota = marca ? (marca[1].toUpperCase() as "G" | "R" | "A") : undefined;
   const limpia = linea
+    // Miles con apóstrofo ("1'234.56", Perú/Suiza).
+    .replace(/(\d)['’](\d{3})/g, "$1$2")
     .replace(/\(\s*e\s*\)/gi, " ")
     // Marcas de alícuota de la máquina fiscal: (G) general, (R) reducida, (A) adicional.
     .replace(/\(\s*[gra]\s*\)/gi, " ")
@@ -398,10 +445,52 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
     exento,
     confianza: finales.length >= 2 ? "alta" : "baja",
     pesable,
+    ...(alicuota && alicuota !== "G" ? { alicuota } : {}),
     valores: finales.slice(0, -1),
     porEmpaque: empaqueDe(nombreCompleto),
     contenido: contenidoDe(nombreCompleto),
     ...(unidadLeida ? { unidadLeida } : {}),
+  };
+}
+
+const UNIDADES_ENTREGA =
+  "(?:und|unds|unid|unidades|uds?|cj|cja|caja|cajas|bto|bulto|bultos|paq|paquetes?|fardos?|sacos?|docenas?|doc|pzas?|piezas?|kg|kgs|kilos?|g|gr|grs|lt|lts|l|litros?|ml|bolsas?|latas?|botellas?|cartones?|carton)";
+
+/** Renglón de una nota de entrega / guía de despacho sin precios:
+ *  "24 UND PEPSI ZERO LATA", "2 CAJAS AGUA MINALBA", "HARINA PAN 1KG 20 BULTOS".
+ *  El monto queda por escribir. */
+export function parseLineaSinPrecio(linea: string): LineaLeida | null {
+  if (esRenglonResumen(linea) || RE_NO_PRODUCTO.test(linea)) return null;
+  const l = linea
+    .replace(/[|“”"'`´‘’\[\]{}!;¡¿—–_]/g, " ")
+    .replace(/^\s*\d{1,3}\s*[.\-)]{1,3}[\s,.]*(?=[A-Za-z\u00C0-\u017F])/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const antes = l.match(new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*(${UNIDADES_ENTREGA})?\\.?\\s+(.+)$`, "i"));
+  const despues = l.match(new RegExp(`^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${UNIDADES_ENTREGA})\\.?$`, "i"));
+  const m = antes
+    ? { cant: antes[1], unidad: antes[2], desc: antes[3] }
+    : despues
+      ? { cant: despues[2], unidad: despues[3], desc: despues[1] }
+      : null;
+  if (!m) return null;
+  const descripcion = m.desc.trim();
+  // La descripción tiene que tener palabras y no terminar en un monto.
+  if (!/[A-Za-z\u00C0-\u017F]{3,}/.test(descripcion) || /\d[.,]\d{2}$/.test(descripcion)) return null;
+  const cantidad = parseCantidad(m.cant);
+  if (!cantidad || !(cantidad > 0) || cantidad > 99999) return null;
+  const u = m.unidad ? unidadDeToken(m.unidad) : undefined;
+  return {
+    descripcion,
+    cantidad,
+    total: 0,
+    exento: false,
+    confianza: "alta",
+    pesable: escritaConDecimales(m.cant),
+    sinPrecio: true,
+    porEmpaque: empaqueDe(descripcion),
+    contenido: contenidoDe(descripcion),
+    ...(u ? { unidadLeida: u } : {}),
   };
 }
 
@@ -424,23 +513,45 @@ export function parseFactura(texto: string): FacturaLeida {
       break;
     }
   }
+  if (!out.rif) {
+    for (let i = 0; i < lineas.length; i++) {
+      const m = lineas[i].match(RE_ID_FISCAL);
+      if (m && /\d{5,}/.test(m[1].replace(/\D/g, ""))) {
+        out.rif = m[1].replace(/[.\s]+$/, "");
+        idxRif = i;
+        break;
+      }
+    }
+  }
   // Nombre: la primera línea con letras de la cabecera que no sea un rótulo.
   const cabecera = lineas.slice(0, Math.max(idxRif + 1, 4));
   for (const l of cabecera) {
     const sinRif = l.replace(RE_RIF, "").replace(/\br\.?\s*i\.?\s*f\.?\s*:?/i, "").trim();
     if (
       /[a-z\u00C0-\u017F]{4,}/i.test(sinRif) &&
-      !/^(seniat|factura|fecha|tel|direc|domicilio|av\.|avenida|calle|zona|sector)/i.test(sinRif)
+      !/^(seniat|factura|invoice|receipt|recibo|ticket|boleta|nota|fecha|date|tel|phone|direc|domicilio|address|av\.|avenida|calle|zona|sector)/i.test(sinRif)
     ) {
       out.proveedorNombre = sinRif.replace(/[,;:\-]+$/, "").trim();
       break;
     }
   }
 
-  // N° de factura (no el "N° de control").
+  // Tipo de documento.
+  const todoTexto = lineas.join(" ");
+  if (/nota\s+de\s+cr[eé]dito|credit\s+note/i.test(todoTexto)) out.tipo = "nota_credito";
+  else if (/nota\s+de\s+d[eé]bito|debit\s+note/i.test(todoTexto)) out.tipo = "nota_debito";
+  else if (/nota\s+de\s+entrega|orden\s+de\s+entrega|gu[ií]a\s+de\s+(despacho|remisi[oó]n)|remito|delivery\s+note|packing\s+(slip|list)/i.test(todoTexto))
+    out.tipo = "nota_entrega";
+  else if (/\bfactura|invoice|boleta|recibo|receipt|ticket|comprobante/i.test(todoTexto)) out.tipo = "factura";
+
+  // N° del documento (no el "N° de control"): factura, invoice, nota de
+  // entrega, guía, boleta, recibo, ticket, folio, NCF (Rep. Dominicana),
+  // serie-número (Perú: F001-00012345).
   for (const l of lineas) {
     if (/control/i.test(l)) continue;
-    const m = l.match(/factura\s*(?:n[°ºo.*]*|nro\.?|num\.?|#|\S{1,2}(?=\s*:))?\s*:?\s*([A-Z]{0,3}-?\d[\d-]{2,})/i);
+    const m = l.match(
+      /(?:factura|invoice|inv\.?|nota\s+de\s+(?:entrega|cr[eé]dito|d[eé]bito)|orden\s+de\s+entrega|gu[ií]a(?:\s+de\s+\w+)?|boleta|recibo|receipt|ticket|comprobante|folio|documento|ncf)\s*(?:electr[oó]nica\s*)?(?:de\s+venta\s*)?(?:n[°ºo.*]*|nro\.?|num\.?|no\.?|#|\S{1,2}(?=\s*:))?\s*:?\s*([A-Z]{0,4}\d{0,3}-?\d[\d-]{2,})/i,
+    );
     if (m) {
       out.numero = m[1].replace(/^-/, "");
       break;
@@ -451,19 +562,47 @@ export function parseFactura(texto: string): FacturaLeida {
   // misma línea pueden venir "Vencimiento: 17/09" y "EMISIÓN: 10/09"). Gana la
   // de emisión; la de vencimiento y la de la imprenta (pie de página) no.
   let mejorFecha: { iso: string; prioridad: number } | null = null;
+  // En facturas en inglés (EE. UU.) la fecha numérica es mes/día.
+  const enIngles = /\b(invoice|receipt|bill\s+to|amount\s+due|qty|quantity|subtotal)\b/i.test(todoTexto) &&
+    !/\b(factura|fecha|cantidad|recibo)\b/i.test(todoTexto);
+  const MESES: Record<string, number> = {
+    ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7,
+    ago: 8, aug: 8, sep: 9, set: 9, oct: 10, nov: 11, dic: 12, dec: 12,
+  };
   for (const l of lineas) {
-    const re = new RegExp(RE_FECHA.source, "g");
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(l))) {
-      const iso = fechaISO(Number(m[1]), Number(m[2]), Number(m[3]));
-      if (!iso) continue;
-      const etiqueta = l.slice(Math.max(0, m.index - 28), m.index).toLowerCase();
+    const candidatas: { iso: string; i: number }[] = [];
+    // dd/mm/aaaa (o mm/dd/aaaa en inglés).
+    for (const m of l.matchAll(new RegExp(RE_FECHA.source, "g"))) {
+      let [d, mes] = [Number(m[1]), Number(m[2])];
+      if (mes > 12 || (enIngles && d <= 12)) [d, mes] = [mes, d];
+      const iso = fechaISO(d, mes, Number(m[3]));
+      if (iso) candidatas.push({ iso, i: m.index! });
+    }
+    // aaaa-mm-dd
+    for (const m of l.matchAll(/\b(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})\b/g)) {
+      const iso = fechaISO(Number(m[3]), Number(m[2]), Number(m[1]));
+      if (iso) candidatas.push({ iso, i: m.index! });
+    }
+    // "10 de septiembre de 2026", "10-SEP-2026", "10 Sep 2026"
+    for (const m of l.matchAll(/\b(\d{1,2})\s*(?:de\s+|[-\/.]\s*)?([a-z]{3})[a-z]*\.?\s*(?:de\s+|del\s+|[-\/.,]\s*)?(\d{4})\b/gi)) {
+      const mes = MESES[m[2].toLowerCase()];
+      const iso = mes ? fechaISO(Number(m[1]), mes, Number(m[3])) : undefined;
+      if (iso) candidatas.push({ iso, i: m.index! });
+    }
+    // "Sep 10, 2026", "September 10 2026"
+    for (const m of l.matchAll(/\b([a-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/gi)) {
+      const mes = MESES[m[1].toLowerCase()];
+      const iso = mes ? fechaISO(Number(m[2]), mes, Number(m[3])) : undefined;
+      if (iso) candidatas.push({ iso, i: m.index! });
+    }
+    for (const { iso, i } of candidatas) {
+      const etiqueta = l.slice(Math.max(0, i - 28), i).toLowerCase();
       const imprenta = /regi[oó]n|providencia|seniat|desde|hasta|imprenta|gr[aá]fica/i.test(l);
-      const prioridad = /emisi[oó]n|emitida/.test(etiqueta)
+      const prioridad = /emisi[oó]n|emitida|issued?|invoice\s*date|expedici[oó]n/.test(etiqueta)
         ? 4
-        : /venc/.test(etiqueta)
+        : /venc|due|vence|expir|pagar\s+antes|hasta/.test(etiqueta)
           ? 0
-          : /fecha/.test(etiqueta) && !imprenta
+          : /fecha|date/.test(etiqueta) && !imprenta
             ? 3
             : imprenta || /res\b|resoluci/.test(etiqueta)
               ? 0.5
@@ -487,9 +626,26 @@ export function parseFactura(texto: string): FacturaLeida {
   else if (RE_BS.test(todo)) out.moneda = "bs";
   else if (new RegExp(RE_USD.source, "i").test(todo)) out.moneda = "usd";
 
+  // Otras monedas: se avisa (Bolo registra en Bs o $).
+  if (!/\bbs\.?s?\b|\bves\b|bol[ií]var/i.test(todo)) {
+    const otras: [RegExp, string][] = [
+      [/€|\beur\b|\beuros?\b/i, "EUR"],
+      [/\bcop\b|\bcol\$/i, "COP"],
+      [/\bmxn\b|\bm\.n\./i, "MXN"],
+      [/\bpen\b|\bs\/\s?\d|\bsoles\b/i, "PEN"],
+      [/\bclp\b/i, "CLP"],
+      [/\bars\b/i, "ARS"],
+      [/\bbrl\b|r\$/i, "BRL"],
+      [/£|\bgbp\b/i, "GBP"],
+      [/\bdop\b|rd\$/i, "DOP"],
+    ];
+    const hallada = otras.find(([re]) => re.test(todo));
+    if (hallada && !/\busd\b|us\$/i.test(todo)) out.monedaOtra = hallada[1];
+  }
+
   // Tasa de la propia factura ("Tipo de cambio BCV Bs. 827,7371", "Tasa: 36,50").
   for (const l of lineas) {
-    const t = l.match(/(?:tipo\s*de\s*cambio|tasa)[^\d]{0,25}(\d{1,4}(?:[.,]\d{1,6}))/i);
+    const t = l.match(/(?:tipo\s*de\s*cambio|tasa|exchange\s*rate)[^\d]{0,25}(\d{1,4}(?:[.,]\d{1,6}))/i);
     const v = t ? parseNumero(t[1]) : null;
     if (v && v > 1) {
       out.tasa = v;
@@ -499,7 +655,17 @@ export function parseFactura(texto: string): FacturaLeida {
 
   // Resumen (la fórmula): subtotal, base, IVA, exento, IGTF, descuento, total.
   const totales: { valor: number; prioridad: number }[] = [];
-  for (const l of lineas) {
+  for (const l0 of lineas) {
+    const l = l0.replace(/(\d)['’](\d{3})/g, "$1$2");
+    // Alícuotas venezolanas por separado: "IVA R 8%", "BI A15,00%".
+    const ali = l.match(/\b(?:iva|bi|base)\s*\(?\s*([gra])\s*\)?\s*(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i);
+    if (ali) {
+      out.alicuotas = { ...out.alicuotas, [ali[1].toUpperCase()]: parseNumero(ali[2]) ?? undefined };
+    } else if (/reducid/i.test(l) && /(\d{1,2})\s*%/.test(l)) {
+      out.alicuotas = { ...out.alicuotas, R: Number(l.match(/(\d{1,2})\s*%/)![1]) };
+    } else if (/adicional|lujo/i.test(l) && /(\d{1,2})\s*%/.test(l)) {
+      out.alicuotas = { ...out.alicuotas, A: Number(l.match(/(\d{1,2})\s*%/)![1]) };
+    }
     // Números del renglón (sin los porcentajes "16%", "16,00 %").
     const nums = [...l.matchAll(/-?\d[\d.,]*\d|\d/g)]
       .filter((m) => !/^\s*%/.test(l.slice(m.index! + m[0].length)))
@@ -516,12 +682,20 @@ export function parseFactura(texto: string): FacturaLeida {
     // % de IVA: "IVA 16%", "BI G16,00%", "ALICUOTA 16,00 %".
     const pct = l.match(/(?:g\s*)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i);
     const porc = pct ? parseNumero(pct[1]) : null;
-    if (tipoResumen(l) && /iva|base|b\.?\s?i|al[ií]cuota/i.test(l) && porc !== null && porc > 0 && out.ivaPorc === undefined)
+    const esAlicuotaNoGeneral = !!ali && ali[1].toUpperCase() !== "G";
+    if (
+      !esAlicuotaNoGeneral &&
+      tipoResumen(l) &&
+      /iva|base|b\.?\s?i|al[ií]cuota|igv|itbis|itbms|isv|vat|tax|gst|impuesto|mwst|tva/i.test(l) &&
+      porc !== null &&
+      porc > 0 &&
+      out.ivaPorc === undefined
+    )
       out.ivaPorc = porc;
-    if (!tipo) continue;
+    if (!tipo || tipo === "otro") continue;
     const n = Math.abs(elegido.v);
     if (tipo === "total") {
-      totales.push({ valor: n, prioridad: /pagar|general|neto|factura/i.test(etiqueta) ? 2 : 1 });
+      totales.push({ valor: n, prioridad: /pagar|general|neto|factura|due|grand|importe|monto\s+total|valor\s+total/i.test(etiqueta) ? 2 : 1 });
     } else if (out[tipo] === undefined) {
       out[tipo] = n;
     }
@@ -562,6 +736,15 @@ export function parseFactura(texto: string): FacturaLeida {
     }
     pendiente = null;
     if (linea) out.lineas.push(linea);
+  }
+
+  // Nota de entrega / guía de despacho sin precios: si no salió ningún
+  // producto con monto, se leen los renglones de cantidad + producto.
+  if (out.lineas.length === 0) {
+    for (let i = idxRif + 1; i < lineas.length; i++) {
+      const linea = parseLineaSinPrecio(lineas[i]);
+      if (linea) out.lineas.push(linea);
+    }
   }
 
   // Comas perdidas en un producto: ningún producto puede costar más que la
@@ -676,6 +859,17 @@ function mismaPalabra(a: string, b: string): boolean {
   return true;
 }
 
+// Palabras de empaque o medida: pesan poco al comparar nombres, porque lo que
+// distingue un producto es su sabor/variante ("zero", "light"), no si dice
+// "lata" o "caja" (la factura y el insumo pueden nombrar distinto el empaque).
+const PALABRAS_EMPAQUE = new Set([
+  "caja", "cajas", "lata", "latas", "botella", "botellas", "bolsa", "bolsas", "paquete", "paq",
+  "bulto", "bultos", "saco", "sacos", "fardo", "fardos", "unidad", "unidades", "und", "unid",
+  "carton", "envase", "frasco", "pote", "galon", "kilo", "kilos", "litro", "litros", "sobre",
+  "rollo", "docena", "pieza", "piezas", "pet", "vidrio", "tetra", "pack",
+]);
+const pesoPalabra = (p: string) => (PALABRAS_EMPAQUE.has(p) ? 0.3 : 1);
+
 /** Sugiere el insumo más parecido a una descripción (por palabras en común,
  *  con tolerancia a errores del OCR y a "cero"/"zero"). Solo sugiere si al
  *  menos la mitad de las palabras del nombre del insumo aparecen. `preferir`
@@ -693,9 +887,12 @@ export function sugerirInsumo<T extends { id: string; nombre: string }>(
   for (const ins of insumos) {
     const delInsumo = palabrasDe(ins.nombre);
     if (delInsumo.length === 0) continue;
-    const comunes = delInsumo.filter((p) => palabras.some((q) => mismaPalabra(p, q))).length;
-    if (comunes === 0 || comunes / delInsumo.length < 0.5) continue;
-    const puntaje = comunes / delInsumo.length + comunes * 0.01 + (preferir?.(ins) ? 0.5 : 0);
+    const coinciden = delInsumo.filter((p) => palabras.some((q) => mismaPalabra(p, q)));
+    const comunes = coinciden.length;
+    const pesoTotal = delInsumo.reduce((s, p) => s + pesoPalabra(p), 0);
+    const cobertura = coinciden.reduce((s, p) => s + pesoPalabra(p), 0) / pesoTotal;
+    if (comunes === 0 || cobertura < 0.5) continue;
+    const puntaje = cobertura + comunes * 0.01 + (preferir?.(ins) ? 0.5 : 0);
     if (puntaje > mejorPuntaje) {
       mejor = ins;
       mejorPuntaje = puntaje;
