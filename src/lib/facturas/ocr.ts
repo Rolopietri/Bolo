@@ -2,7 +2,7 @@
 // NUNCA sale del teléfono: se limpia y se lee aquí, y a Bolo solo llegan los
 // datos que la persona confirma en el preview. Sin APIs ni cobros.
 //
-// La primera vez el navegador descarga el motor y el idioma español (unos MB)
+// La primera vez el navegador descarga el motor y los idiomas español e inglés (unos MB)
 // y los guarda; las siguientes lecturas arrancan directo.
 
 import type { Worker } from "tesseract.js";
@@ -15,7 +15,7 @@ let alProgresar: Progreso | null = null;
 const ETAPAS: Record<string, string> = {
   "loading tesseract core": "Preparando el lector",
   "initializing tesseract": "Preparando el lector",
-  "loading language traineddata": "Descargando el idioma (solo la primera vez)",
+  "loading language traineddata": "Descargando los idiomas (solo la primera vez)",
   "initializing api": "Preparando el lector",
   "recognizing text": "Leyendo la factura",
 };
@@ -24,7 +24,8 @@ function obtenerWorker(): Promise<Worker> {
   if (!workerPromesa) {
     workerPromesa = (async () => {
       const { createWorker } = await import("tesseract.js");
-      return createWorker("spa", 1, {
+      // Español e inglés: las facturas de importadores y cadenas vienen en ambos.
+      return createWorker(["spa", "eng"], 1, {
         logger: (m: { status: string; progress: number }) => {
           alProgresar?.(ETAPAS[m.status] ?? "Preparando el lector", Math.round((m.progress ?? 0) * 100));
         },

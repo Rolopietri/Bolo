@@ -62,6 +62,10 @@ type Producto = {
   /** Monto en la moneda de la factura. */
   monto: string;
   exento: boolean;
+  /** Alícuota venezolana: (R) reducida u (A) adicional. Sin marca, la general. */
+  alicuota?: "G" | "R" | "A";
+  /** Viene de una nota de entrega sin precios: el monto lo escribe la persona. */
+  sinPrecio?: boolean;
   /** La factura traía la cantidad con decimales: es peso o volumen. */
   pesable: boolean;
   /** Unidad que la factura escribe junto a la cantidad, si la escribe. */
@@ -88,7 +92,14 @@ type Cabecera = {
 
 /** Lo leído de la factura que no va en el formulario: sirve para reconocer
  *  al proveedor y para cuadrar contra la fórmula impresa. */
-type Leido = { nombre: string; rif: string; resumen: Pick<FacturaLeida, "subtotal" | "base" | "iva" | "exento" | "igtf" | "descuento" | "total" | "ivaPorc"> };
+type Leido = {
+  nombre: string;
+  rif: string;
+  resumen: Pick<FacturaLeida, "subtotal" | "base" | "iva" | "exento" | "igtf" | "descuento" | "total" | "ivaPorc">;
+  alicuotas?: FacturaLeida["alicuotas"];
+  tipo?: FacturaLeida["tipo"];
+  monedaOtra?: string;
+};
 
 const cabeceraVacia: Cabecera = {
   proveedorId: "",
@@ -195,12 +206,16 @@ function proveedorPorNombre(proveedores: Proveedor[], nombre: string): Proveedor
  *  → 1 caja; si es por lata → 24. "HARINA PAN 1KG" × 20: si el insumo es
  *  "Bulto 20 kg" → 1 bulto. null si la factura no dice empaque ni contenido. */
 function cantidadPorEmpaque(p: Producto, ins: Insumo): { cantidad: string; unidad: string } | null {
-  if (!p.porEmpaque && !p.contenido) return null;
   const dimIns = dimension(ins.unidadBase);
+  // "24 UND": la cantidad ya está en unidades sueltas (no en empaques).
+  const enUnidades = p.unidadLeida === "unidad" && dimIns === "conteo";
+  if (!p.porEmpaque && !p.contenido && !enUnidades) return null;
   const opciones = opcionesCantidad(ins);
   const cpc = ins.cantidadPorCompra ?? 0;
   let total = 0; // en la unidad base del insumo
-  if (p.contenido && dimIns !== "conteo" && dimension(p.contenido.unidad) === dimIns) {
+  if (enUnidades) {
+    total = p.cantidadFactura;
+  } else if (p.contenido && dimIns !== "conteo" && dimension(p.contenido.unidad) === dimIns) {
     total =
       (p.cantidadFactura * (p.porEmpaque ?? 1) * cantidadEnBase(p.contenido.valor, p.contenido.unidad)) /
       cantidadEnBase(1, ins.unidadBase);
@@ -439,6 +454,9 @@ export function EscanearFactura({
       nombre: f.proveedorNombre ?? "",
       rif: f.rif ?? "",
       resumen: { subtotal: f.subtotal, base: f.base, iva: f.iva, exento: f.exento, igtf: f.igtf, descuento: f.descuento, total: f.total, ivaPorc: f.ivaPorc },
+      alicuotas: f.alicuotas,
+      tipo: f.tipo,
+      monedaOtra: f.monedaOtra,
     });
     setCab({
       ...cabeceraVacia,
@@ -451,6 +469,13 @@ export function EscanearFactura({
       ivaPorc: String(f.ivaPorc ?? 16),
       numeroFactura: f.numero ?? "",
       tasa: f.tasa ? String(f.tasa) : "",
+      // El flete del formulario va en $: si la factura es en Bs se pasa con su tasa.
+      fleteUsd:
+        f.flete && moneda === "usd"
+          ? String(f.flete)
+          : f.flete && f.tasa
+            ? String(Number((f.flete / f.tasa).toFixed(2)))
+            : "",
     });
     setTasaFactura(f.tasa ?? null);
     // Si no se reconoce, el proveedor queda en blanco (el nombre leído solo se
@@ -468,7 +493,9 @@ export function EscanearFactura({
         insumoId: "",
         cantidad: fmtQty(l.cantidad),
         unidad: "",
-        monto: String(Number(l.total.toFixed(2))),
+        monto: l.sinPrecio ? "" : String(Number(l.total.toFixed(2))),
+        alicuota: l.alicuota,
+        sinPrecio: l.sinPrecio,
         exento: l.exento,
         pesable: l.pesable,
         porEmpaque: l.porEmpaque,
@@ -567,10 +594,18 @@ export function EscanearFactura({
       ? `${cab.modalidadPago === "bcv_euro" ? "BCV €" : cab.modalidadPago === "paralela" ? "paralela" : "BCV"} del ${fmtFecha(cab.fecha)}`
       : "tasa puesta a mano";
 
+  /** IVA del producto: la general, o la reducida / adicional si la factura lo
+   *  marca con (R) / (A) (Venezuela: 8 % y 16 % + 15 %). */
+  function ivaDe(p: Producto): number {
+    if (p.alicuota === "R") return (leido.alicuotas?.R ?? 8) / 100;
+    if (p.alicuota === "A") return (leido.alicuotas?.A ?? 31) / 100;
+    return iva;
+  }
+
   /** Lo que realmente se pagó por un producto, con IVA si corresponde. */
   function costo(p: Producto): { usd: number; bs?: number; enMoneda: number } {
     const m = Number(p.monto) || 0;
-    const enMoneda = cab.ivaModo === "sin" && !p.exento ? m * (1 + iva) : m;
+    const enMoneda = cab.ivaModo === "sin" && !p.exento ? m * (1 + ivaDe(p)) : m;
     if (cab.moneda === "bs") return { usd: tasaNum > 0 ? enMoneda / tasaNum : 0, bs: enMoneda, enMoneda };
     return { usd: enMoneda, bs: tasaNum > 0 ? enMoneda * tasaNum : undefined, enMoneda };
   }
@@ -622,6 +657,10 @@ export function EscanearFactura({
       setError("Elige el insumo de cada producto, o quítalo con el botón de la papelera.");
       return;
     }
+    if (productos.some((p) => p.sinPrecio && !(Number(p.monto) > 0))) {
+      setError("La nota de entrega no trae precios: escribe el monto de cada producto.");
+      return;
+    }
     if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra > 0))) {
       setError("Cada producto necesita una cantidad y un monto mayores que cero.");
       return;
@@ -632,6 +671,8 @@ export function EscanearFactura({
     }
     if (!confirmado) {
       const a: string[] = [];
+      if (leido.tipo === "nota_credito")
+        a.push("Este documento es una NOTA DE CRÉDITO (una devolución o un descuento del proveedor), no una compra: si lo registras, sumará stock.");
       if (facturaLock) a.push(`La factura ${cab.numeroFactura} de este proveedor ya tiene compras registradas (${fmtFecha(facturaLock.fecha)}).`);
       if (cuadra === false && esperado !== undefined)
         a.push(
@@ -706,7 +747,13 @@ export function EscanearFactura({
     <div className="mb-5 rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3">
       <div className="flex items-start justify-between gap-3">
         <h2 className="font-display text-sm tracking-[0.2em] uppercase text-cacao">
-          {paso === "formulario" ? "Nueva compra" : "Escanear factura"}
+          {paso !== "formulario"
+            ? "Escanear factura"
+            : leido.tipo === "nota_entrega"
+              ? "Nueva compra · nota de entrega"
+              : leido.tipo === "nota_credito"
+                ? "Nota de crédito"
+                : "Nueva compra"}
         </h2>
         <button type="button" onClick={onCancelar} className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao">
           Cerrar
@@ -800,6 +847,15 @@ export function EscanearFactura({
           </div>
           <p className="text-xs text-cacao-soft">En teléfonos más viejos puede tardar hasta medio minuto.</p>
         </div>
+      )}
+
+      {paso === "formulario" && (leido.monedaOtra || leido.tipo === "nota_credito") && (
+        <p className="flex items-start gap-2 rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-sm text-cacao">
+          <WarningIcon className="mt-0.5 size-4 shrink-0 text-amber-700" />
+          {leido.monedaOtra
+            ? `La factura está en ${leido.monedaOtra}. Bolo registra en Bs o en $: pasa los montos a una de esas monedas${leido.monedaOtra === "EUR" ? " (o elige la forma de pago «Bs · BCV €»)" : ""}.`
+            : "Este documento es una nota de crédito (devolución o descuento del proveedor), no una compra. Revisa antes de registrar."}
+        </p>
       )}
 
       {paso === "formulario" && fotoUrl && (
@@ -1120,6 +1176,12 @@ export function EscanearFactura({
                       {p.descripcion && <>«{p.descripcion}» · </>}
                       {p.origen === "memoria" && <span className="text-oliva">recordado</span>}
                       {p.origen === "sugerido" && <span className="text-terracotta">sugerido, confírmalo</span>}
+                      {p.sinPrecio && !(Number(p.monto) > 0) && (
+                        <span className="text-terracotta"> · sin precio en la nota: escribe el monto</span>
+                      )}
+                      {cab.ivaModo === "sin" && !p.exento && p.alicuota && (
+                        <span> · IVA {Math.round(ivaDe(p) * 100)}%</span>
+                      )}
                       {ins && conv.enBase > 0 && (
                         <>
                           {p.origen ? " · " : ""}entran <b>{displayCantidad(conv.enBase, ins.unidadBase)}</b>
