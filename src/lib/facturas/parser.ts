@@ -16,6 +16,10 @@ export type LineaLeida = {
   total: number;
   /** Producto exento de IVA (marcado con "(E)" en la factura). */
   exento: boolean;
+  /** "alta" si la línea trae varios números que cuadran (cantidad × precio =
+   *  total); "baja" si solo trae un monto suelto: puede ser un renglón que no
+   *  es producto (dirección, teléfono mal leído…). */
+  confianza: "alta" | "baja";
 };
 
 export type FacturaLeida = {
@@ -190,7 +194,7 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
     precioUnit = cantidad > 0 ? total / cantidad : undefined;
   }
   if (!(cantidad > 0)) cantidad = 1;
-  return { descripcion, cantidad, precioUnit, total, exento };
+  return { descripcion, cantidad, precioUnit, total, exento, confianza: finales.length >= 2 ? "alta" : "baja" };
 }
 
 /** Lee la factura completa a partir de su texto. */

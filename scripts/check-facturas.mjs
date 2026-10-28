@@ -74,6 +74,8 @@ igual("f1 l2 cant", f1.lineas[1]?.cantidad, 6);
 igual("f1 l2 precio", f1.lineas[1]?.precioUnit, 120.5);
 igual("f1 l3 exento", f1.lineas[2]?.exento, true);
 igual("f1 l1 exento", f1.lineas[0]?.exento, false);
+igual("f1 l1 confianza", f1.lineas[0]?.confianza, "alta");
+igual("baja confianza", parseFactura("RIF J-1234567-8\nCALLE 5 LOCAL NRO 12,50").lineas[0]?.confianza, "baja");
 
 // ── Cantidad al inicio, montos en $ ──
 const f2 = parseFactura(`
