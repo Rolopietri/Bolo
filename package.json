@@ -10,6 +10,7 @@
     "test:unidades": "node scripts/check-unidades.mjs",
     "test:pce": "node scripts/check-pce.mjs",
     "test:modulos": "node scripts/check-modulos.mjs",
+    "test:facturas": "node --no-warnings scripts/check-facturas.mjs",
     "seed:cocina-demo": "node scripts/seed-cocina-demo.mjs"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "tesseract.js": "^6.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
