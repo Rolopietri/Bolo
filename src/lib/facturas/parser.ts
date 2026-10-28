@@ -203,6 +203,11 @@ export function parseNumero(raw: string): number | null {
   } else if (ultPunto >= 0) {
     const partes = s.split(".");
     const dec = partes[partes.length - 1];
+    // Algunas impresoras usan el punto para todo: "3.712.24" = 3712,24.
+    if (partes.length > 2 && dec.length === 2) {
+      const n = Number(partes.slice(0, -1).join("") + "." + dec);
+      return Number.isFinite(n) ? n : null;
+    }
     // Convención venezolana: "1.500" son mil quinientos; "12.50" es decimal.
     s = partes.length > 2 || (dec.length === 3 && partes[0] !== "0") ? partes.join("") : s;
   }
@@ -228,7 +233,7 @@ const RE_RESUMEN = {
   flete: /\bflete\b|\bdelivery\b|\benv[ií]o\b|\bshipping\b|\bfreight\b|\btransporte\b|\bdespacho\s+a\s+domicilio\b/i,
   base: /(?:^|\s)b\.?\s?[i1l]\.?(?=\s|$)|\bbi\s*[gra]\s*\d|\bbase\b|\bimp[o0]nible\b|\bgravad[oa]\b|\bgravable\b|\btaxable\b|\bafect[oa]\b/i,
   exento: /\bexent[oa]s?\b|\bexoner|\binafect[oa]\b|\bno\s+gravad|\bno\s+sujet|\btax\s*exempt\b|\bexempt\b|\bzero\s*rated\b/i,
-  iva: /\b[i1l]\.?\s*v\.?\s*[a4]\b|(?:^|\s)v\.?\s*a\s*\d{1,2}(?:[.,]\d+)?\s*%|\bimpuestos?\b|\bal[ií1l]cu[o0]ta\b|%\s*sobre\b|\bigv\b|\bitbis\b|\bitbms\b|\bisv\b|\bvat\b|\b(?:sales\s*)?tax\b|\bgst\b|\bhst\b|\bmwst\b|\btva\b|\bbtw\b/i,
+  iva: /\b[i1l]\.?\s*v\.?\s*[a4](?:\b|[gra]\s*\()|(?:^|\s)v\.?\s*a\s*\d{1,2}(?:[.,]\d+)?\s*%|\bimpuestos?\b|\bal[ií1l]cu[o0]ta\b|%\s*sobre\b|\bigv\b|\bitbis\b|\bitbms\b|\bisv\b|\bvat\b|\b(?:sales\s*)?tax\b|\bgst\b|\bhst\b|\bmwst\b|\btva\b|\bbtw\b/i,
   descuento: /\bdesc(?:uento|to)?\b|\bdscto\b|\brebaja\b|\bdiscount\b|\bbonificaci[oó]n\b/i,
   total: /\bt[o0]t[a4][l1i]\b|\ba\s+pagar\b|\bamount\s+due\b|\bbalance\s+due\b|\bgrand\s+total\b|\bimporte\b|\bvalor\s+a\s+pagar\b/i,
 };
@@ -255,6 +260,20 @@ export function tipoResumen(linea: string): keyof typeof RE_RESUMEN | null {
   return null;
 }
 
+/** La etiqueta de un número es el texto entre el número anterior y él (si
+ *  ese tramo no trae etiqueta, la del tramo de antes): en "BI G16% Bs 3.391,88
+ *  IVA G16% Bs 542,70" el 542,70 es IVA; en "Exento IVA 0,00 0,00" los dos
+ *  son exentos; en "Base imponible 74.521,17 | 90,03" los dos son base. */
+function tipoCercano(etiqueta: string): keyof typeof RE_RESUMEN | null {
+  // Se corta solo en montos con decimales (no en "1.V.A" ni en "16%").
+  const tramos = etiqueta.split(/\d+[.,]\d+(?:[.,]\d+)*(?![\d.,]*\s*%)/);
+  for (let i = tramos.length - 1; i >= 0; i--) {
+    const t = tipoResumen(tramos[i]);
+    if (t) return t;
+  }
+  return null;
+}
+
 /** ¿El renglón es parte del resumen? El rótulo tiene que estar al inicio y el
  *  renglón traer pocos montos (o un %), para no descartar productos como
  *  "BASE PARA PIZZA 2 3,00 6,00". */
@@ -277,8 +296,12 @@ function fechaISO(d: number, m: number, a: number): string | undefined {
 }
 
 /** Intenta leer una línea de producto. null si no parece un producto. */
-export function parseLineaProducto(linea: string): LineaLeida | null {
+export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
+  let linea = lineaOriginal;
   if (esRenglonResumen(linea) || RE_NO_PRODUCTO.test(linea)) return null;
+  linea = linea
+    .replace(/[(\[{]\s*[68b]\s*[)\]}]/gi, "(G)")
+    .replace(/(?:^|\s)[ct(\[]\s*e\s*[)\]](?=\s|$)/gi, " (E)");
   const exento = /\(\s*e\s*\)|\s\*?E$/i.test(linea);
   const marca = linea.match(/\(\s*([gra])\s*\)/i);
   const alicuota = marca ? (marca[1].toUpperCase() as "G" | "R" | "A") : undefined;
@@ -494,6 +517,29 @@ export function parseLineaSinPrecio(linea: string): LineaLeida | null {
   };
 }
 
+/** Descripción de un producto cuyo monto está en otro renglón: limpia el
+ *  texto y lee marcas de alícuota, empaque y contenido. */
+function parseLineaSinMonto(linea: string): Omit<LineaLeida, "cantidad" | "total" | "confianza" | "pesable"> {
+  const l = linea
+    .replace(/[(\[{]\s*[68b]\s*[)\]}]/gi, "(G)")
+    .replace(/(?:^|\s)[ct(\[]\s*e\s*[)\]](?=\s|$)/gi, " (E)");
+  const exento = /\(\s*e\s*\)/i.test(l);
+  const marca = l.match(/\(\s*([ra])\s*\)/i);
+  const descripcion = l
+    .replace(/\(\s*[egra]\s*\)/gi, " ")
+    .replace(/[|“”"'`´‘’\[\]{}!;¡¿—–_<>]/g, " ")
+    .replace(/^\W+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return {
+    descripcion,
+    exento,
+    ...(marca ? { alicuota: marca[1].toUpperCase() as "R" | "A" } : {}),
+    porEmpaque: empaqueDe(descripcion),
+    contenido: contenidoDe(descripcion),
+  };
+}
+
 /** Lee la factura completa a partir de su texto. */
 export function parseFactura(texto: string): FacturaLeida {
   const lineas = texto
@@ -655,8 +701,28 @@ export function parseFactura(texto: string): FacturaLeida {
 
   // Resumen (la fórmula): subtotal, base, IVA, exento, IGTF, descuento, total.
   const totales: { valor: number; prioridad: number }[] = [];
-  for (const l0 of lineas) {
-    const l = l0.replace(/(\d)['’](\d{3})/g, "$1$2");
+  // Montos de los medios de pago (efectivo, pago móvil, punto…): en un ticket
+  // suelen repetir el total aunque la palabra TOTAL no se haya leído.
+  const pagos: number[] = [];
+  let vioIva = false;
+  for (let li = 0; li < lineas.length; li++) {
+    const l = lineas[li].replace(/(\d)['’](\d{3})/g, "$1$2");
+    if (/\b(efectivo|pago\s*m[oó]vil|punto|tarjeta|d[eé]bito|transferencia|zelle|cash|card)\b/i.test(l)) {
+      const m = l.match(/(\d[\d.,]*\d)\s*$/);
+      const v = m ? parseNumero(m[1]) : null;
+      if (v && v > 0) pagos.push(v);
+    }
+    // TOTAL sin monto en su renglón: el monto quedó en el renglón vecino.
+    if (/^\W*t[o0]t[a4][l1i]\b/i.test(l) && !/\d[.,]\d{2}/.test(l)) {
+      for (const vecino of [lineas[li + 1], lineas[li - 1]]) {
+        const m = vecino?.match(/^\W*(?:bs\.?\s*|\$\s*)?(\d[\d.,]*\d)\W*$/i);
+        const v = m ? parseNumero(m[1]) : null;
+        if (v && v > 0) {
+          totales.push({ valor: v, prioridad: 2 });
+          break;
+        }
+      }
+    }
     // Alícuotas venezolanas por separado: "IVA R 8%", "BI A15,00%".
     const ali = l.match(/\b(?:iva|bi|base)\s*\(?\s*([gra])\s*\)?\s*(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i);
     if (ali) {
@@ -678,7 +744,7 @@ export function parseFactura(texto: string): FacturaLeida {
     // La etiqueta es lo que está justo antes del número (en una misma fila
     // pueden juntarse dos columnas: "…causará IGTF 3%… Total neto 104,43").
     const etiqueta = l.slice(Math.max(0, elegido.i - 45), elegido.i);
-    const tipo = tipoResumen(etiqueta) ?? (nums.length === 1 ? tipoResumen(l) : null);
+    const tipo = tipoCercano(etiqueta) ?? (nums.length === 1 ? tipoResumen(l) : null);
     // % de IVA: "IVA 16%", "BI G16,00%", "ALICUOTA 16,00 %".
     const pct = l.match(/(?:g\s*)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i);
     const porc = pct ? parseNumero(pct[1]) : null;
@@ -692,8 +758,14 @@ export function parseFactura(texto: string): FacturaLeida {
       out.ivaPorc === undefined
     )
       out.ivaPorc = porc;
+    if (tipo === "iva") vioIva = true;
     if (!tipo || tipo === "otro") continue;
     const n = Math.abs(elegido.v);
+    // "Neto" después del IVA es el total a pagar (D'limón: Sub-total, IVA, Neto).
+    if (tipo === "subtotal" && vioIva && /\bneto\b/i.test(etiqueta)) {
+      totales.push({ valor: n, prioridad: 2 });
+      continue;
+    }
     if (tipo === "total") {
       totales.push({ valor: n, prioridad: /pagar|general|neto|factura|due|grand|importe|monto\s+total|valor\s+total/i.test(etiqueta) ? 2 : 1 });
     } else if (out[tipo] === undefined) {
@@ -710,10 +782,60 @@ export function parseFactura(texto: string): FacturaLeida {
     const max = Math.max(...totales.map((t) => t.prioridad));
     out.total = totales.filter((t) => t.prioridad === max).pop()!.valor;
   }
+  // Sin TOTAL legible: lo dice la fórmula (subtotal + IVA + IGTF) o, si no,
+  // el monto que se pagó (efectivo, pago móvil…).
+  const calculado =
+    (out.subtotal ?? (out.base !== undefined ? out.base + (out.exento ?? 0) : undefined)) !== undefined && out.iva !== undefined
+      ? (out.subtotal ?? out.base! + (out.exento ?? 0)) + out.iva + (out.igtf ?? 0)
+      : undefined;
+  const casiIgual = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.05, b * 0.01);
+  if (out.total === undefined) {
+    if (calculado !== undefined) out.total = Number(calculado.toFixed(2));
+    else if (pagos.length > 0) out.total = Math.max(...pagos);
+  } else if (calculado !== undefined && !casiIgual(out.total, calculado)) {
+    // Un total leído que no cuadra con la fórmula pero sí con un pago o con la
+    // fórmula corriendo la coma: se corrige ("1267418" era 12.674,18).
+    const conPago = pagos.find((p) => casiIgual(p, calculado));
+    if (conPago !== undefined) out.total = conPago;
+    else for (const k of [2, 1, 3]) if (casiIgual(out.total / 10 ** k, calculado)) out.total = Number((out.total / 10 ** k).toFixed(2));
+  }
 
   // Productos (la cabecera del proveedor, hasta su RIF, nunca es un producto).
+  // Renglón "cantidad x precio … monto" con la descripción en el renglón de
+  // arriba (Inside Market) o en el de abajo (Cold 2024).
+  const RE_CXP_MONTO =
+    /^\W*(\d+(?:[.,]\d+)?)\s*[x×*%]\s*(?:bs\.?\s*|b5\s*|8s\s*|\$\s*)?(\d[\d.,]*)\s*(\([egra68b]\)|[ct]e\))?\s*(?:\S{0,3}\s+)?(?:bs\.?|8s|b5|re|\$)?\s*(\d[\d.,]*\d)\W*$/i;
+  const soloDescripcion = (l: string | undefined) =>
+    !!l && /[A-Za-z\u00C0-\u017F]{3,}/.test(l) && !/\d[.,]\d{2}\W*$/.test(l) && !RE_NO_PRODUCTO.test(l) && !esRenglonResumen(l);
+  const usadas = new Set<number>();
+  for (let i = idxRif + 1; i < lineas.length; i++) {
+    const m = lineas[i].match(RE_CXP_MONTO);
+    if (!m) continue;
+    const marcaEnCant = !!m[3];
+    // Si la marca (E)/(G) va con la cantidad, la descripción está arriba; si no, abajo.
+    const candidatos = marcaEnCant ? [i - 1, i + 1] : [i + 1, i - 1];
+    const j = candidatos.find((k) => k > idxRif && !usadas.has(k) && soloDescripcion(lineas[k]));
+    if (j === undefined) continue;
+    const cantidad = parseCantidad(m[1]);
+    const precio = parseNumero(m[2]);
+    const total = parseNumero(m[4]);
+    if (!cantidad || !precio || !total) continue;
+    const aj = ajustarCantidad(cantidad, precio, total, escritaConDecimales(m[1]));
+    const desc = parseLineaSinMonto(lineas[j] + (m[3] ? " " + m[3] : ""));
+    usadas.add(i);
+    usadas.add(j);
+    out.lineas.push({
+      ...desc,
+      cantidad: aj.cantidad,
+      precioUnit: aj.precio,
+      total,
+      confianza: "alta",
+      pesable: escritaConDecimales(m[1]),
+    });
+  }
   let pendiente: { cantidad: number; precio: number; pesable: boolean; unidad?: UnidadLeida } | null = null;
   for (let i = idxRif + 1; i < lineas.length; i++) {
+    if (usadas.has(i)) continue;
     const cx = lineas[i].match(RE_CANT_X_PRECIO);
     if (cx) {
       const cantidad = parseCantidad(cx[1]);

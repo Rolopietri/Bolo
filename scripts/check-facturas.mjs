@@ -452,6 +452,95 @@ igual("retención no es total", tipoResumen("RETENCION IVA 75% 12,00"), "otro");
 igual("propina no es producto", parseFactura("RIF J-1234567-8\nPROPINA 10% 5,00").lineas.length, 0);
 igual("producto con BASE en el nombre", parseFactura("RIF J-1234567-8\nBASE PARA PIZZA 2 3,00 6,00").lineas[0]?.descripcion, "BASE PARA PIZZA");
 
+// ════════════════════════════════════════════════════════════════
+// TEXTOS REALES DEL BANCO DE FOTOS (lo que devolvió el OCR), sin datos del
+// cliente. Cada uno falló en la primera medición.
+// ════════════════════════════════════════════════════════════════
+
+// Tu Mayor al Detal: la impresora usa el punto también como decimal.
+const b23 = parseFactura(`SENIAT
+J-50674849-5
+TU MAYOR AL DETAL. C.A.
+FACTURA $: 00020157
+FECHA: 07/03/2026 HORA: 12:20 |
+FLOR DE JAMAICA 1 KILO (E) Bs 3.712.24 '
+EXENTO Bs 3.712.24
+TOTAL Bs 3.712.24`);
+igual("b23 total 3.712.24", b23.total, 3712.24);
+igual("b23 producto", b23.lineas[0]?.total, 3712.24);
+igual("b23 numero", b23.numero, "00020157");
+
+// Alimentos 777: se perdió la palabra TOTAL; (6) es (G); el total sale de la
+// fórmula y del EFECTIVO.
+const b17 = parseFactura(`J-50570
+00000376
+FACTURA
+VIVERES (E) (E) Bs 2189,32
+VIVERES (E) Bs 4870,12
+VIVERES (6) gs 1348,10
+PERFUMERIA (6) Bs 1926.72
+BE 6016, 000) Bs 3274,83
+1VAG(16, 00%) Bs 523,97
+SUBTTL Bs 10334,27
+EFECTIVO Bs 10858,24
+- Be 10858,24`);
+igual("b17 total sin la palabra TOTAL", b17.total, 10858.24);
+igual("b17 #lineas", b17.lineas.length, 4);
+igual("b17 (6) es G, no exento", b17.lineas[2]?.exento, false);
+
+// Inside Market: descripción arriba, "cant X precio (E) monto" abajo.
+const b10 = parseFactura(`RIF J-401583806
+FACTURA: 00005066
+FECHA: 21-03-2026 HORA: 11:01
+IPULPA DE PARCHITA MANGUANGUA 500G!
+2 X 1.974,59 (E) Bs 3.949,18
+.FILETES DE ANCHOAS VISCIANO 80 GR!
+2 X 3.439,98 (G) Bs 6.879,96
+IBOLSA DE SUPERMERCADO RIO!
+1 X 22,85 (E) Bs 22,85
+EXENTO Bs 3.972,03
+BI G16,00% Bs 6.879,96 IVA G16,00% Bs 1.100,79
+SUBTTL Bs 10.851,99 IVA Bs 1.100,79
+TOTAL
+Bs 11.952,78`);
+igual("b10 #lineas (dos renglones)", b10.lineas.length, 3);
+igual("b10 l1 desc", b10.lineas[0]?.descripcion, "IPULPA DE PARCHITA MANGUANGUA 500G");
+igual("b10 l1 cant", b10.lineas[0]?.cantidad, 2);
+igual("b10 l1 exento", b10.lineas[0]?.exento, true);
+igual("b10 l2 total", b10.lineas[1]?.total, 6879.96);
+igual("b10 l2 gravado", b10.lineas[1]?.exento, false);
+igual("b10 total en el renglón de abajo", b10.total, 11952.78);
+
+// Cold 2024: "cant x precio … monto" arriba, descripción abajo.
+const b18 = parseFactura(`RIF J-505366220
+FACTURA: 00083075
+FECHA: 16-03-2026
+0,55xBs 3.033,77 Bs 1.668,57
+AGUACATE INJERTO KG (E)
+2x Bs 1.210,83 Bs 2.421,66
+ALBAHACA PARADIS 50 GR (E)
+0,225xBs 15.075,03 Bs 3.391,88
+TOCINETA OSCAR MAYER REBANADA (G)
+SUBTTL Bs 7.482,11
+EXENTO Bs 4.090,23
+BI G16,00% Bs 3.391,88 IVA G16,00% Bs 542,70
+Bs 8.024,81`);
+igual("b18 #lineas", b18.lineas.length, 3);
+igual("b18 aguacate", b18.lineas[0]?.descripcion, "AGUACATE INJERTO KG");
+igual("b18 aguacate kg", b18.lineas[0]?.cantidad, 0.55);
+igual("b18 tocineta gravada", b18.lineas[2]?.exento, false);
+igual("b18 total por fórmula", b18.total, 8024.81);
+
+// D'limón: "Neto" después del IVA es el total; el OCR perdió la coma.
+const b11 = parseFactura(`COMERCIALIZADORA 222 ARA, CA RIF.. J-40145547-6
+FACTURA N° 25065
+| 10001 | JUGO PURO DE LIMON 1LT | 2.00 UNID | 5,463.00 | 10,926.00
+Sub-Total: 10,926.00
+I.V.A.: 16.00% 1,748.16
+Neto: 1267416)`);
+igual("b11 neto después del IVA = total", b11.total, 12674.16);
+igual("b11 subtotal", b11.subtotal, 10926);
+
 // ── Rótulos del resumen mal leídos por el OCR ──
 const f4 = parseFactura(`
 LA GRANJA C.A.

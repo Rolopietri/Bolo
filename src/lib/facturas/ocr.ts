@@ -295,10 +295,25 @@ function rotar(origen: HTMLCanvasElement, grados: number, maxLado = Infinity): H
 
 /** Qué tan "legible" salió un texto: confianza del OCR por la cantidad de
  *  palabras y números reales. Una foto de lado da basura con pocas palabras. */
+const VOCABULARIO = new Set([
+  "factura", "total", "subtotal", "subttl", "fecha", "hora", "rif", "iva", "exento", "seniat", "base",
+  "imponible", "cantidad", "precio", "descripcion", "efectivo", "pago", "cliente", "nota", "entrega",
+  "control", "monto", "neto", "contado", "caracas", "invoice", "date", "qty", "amount", "tax", "due",
+]);
 function puntaje(texto: string, confianza: number): number {
   const tokens = texto.split(/\s+/).filter(Boolean);
   const buenos = tokens.filter((t) => /^[A-Za-z\u00C0-\u017F]{3,}[.,:]?$/.test(t) || /^\d[\d.,]*$/.test(t)).length;
-  return (confianza / 100) * buenos;
+  // Las palabras típicas de una factura casi nunca salen de una foto mal girada.
+  const deFactura = tokens.filter((t) =>
+    VOCABULARIO.has(
+      t
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/[^a-z]/g, ""),
+    ),
+  ).length;
+  return (confianza / 100) * buenos + 6 * deFactura;
 }
 
 /** Lee una foto de factura y devuelve su texto y cuánto hubo que girarla.
@@ -312,6 +327,9 @@ export async function leerFactura(
   alProgresar = onProgreso ?? null;
   try {
     onProgreso?.("Limpiando la foto", 0);
+    // (Un recorte automático de la hoja por zonas claras se probó con el banco
+    // de fotos reales y empeoró la lectura: cortaba texto en sombra. Queda
+    // pendiente hacerlo con detección de bordes.)
     const canvas = await limpiarFoto(archivo);
     const worker = await obtenerWorker();
 
@@ -322,16 +340,16 @@ export async function leerFactura(
     // y así se nota que hay que girarla (el modo automático lee algo igual).
     await worker.setParameters({ tessedit_pageseg_mode: "6" as never });
     const prueba = async (grados: number) => {
-      const { data } = await worker.recognize(rotar(canvas, grados, 1000));
+      const { data } = await worker.recognize(rotar(canvas, grados, 1400));
       return puntaje(data.text ?? "", data.confidence ?? 0);
     };
     let giro = 0;
     let mejor = await prueba(0);
     // Derecha y bien leída: no hace falta probar más.
-    if (mejor < 12) {
+    if (mejor < 30) {
       for (const g of [90, 270, 180]) {
         const p = await prueba(g);
-        if (p > mejor * 1.3) {
+        if (p > mejor * 1.3 + 3) {
           mejor = p;
           giro = g;
         }
