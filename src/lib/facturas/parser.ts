@@ -20,10 +20,27 @@ export type LineaLeida = {
    *  total); "baja" si solo trae un monto suelto: puede ser un renglón que no
    *  es producto (dirección, teléfono mal leído…). */
   confianza: "alta" | "baja";
-  /** La cantidad venía escrita con decimales ("1,1895", "10,000"): en las
-   *  facturas venezolanas eso es PESO (kg). Entera ("2") son unidades. */
+  /** La cantidad venía escrita con decimales ("1,1895", "10,000"): es una
+   *  medida (peso o volumen), no unidades sueltas. */
   pesable: boolean;
+  /** Unidad de la cantidad cuando la factura la escribe ("1,1895 KG x",
+   *  "CARNE DE RES KG", "500 GR"). No confundir con la presentación pegada al
+   *  nombre ("HARINA PAN 1KG" es el tamaño del paquete). */
+  unidadLeida?: UnidadLeida;
 };
+
+export type UnidadLeida = "kg" | "g" | "L" | "ml" | "unidad";
+
+/** Reconoce una palabra suelta de unidad ("KG", "Kgs", "GR", "LTS", "UND"). */
+export function unidadDeToken(token: string): UnidadLeida | undefined {
+  const t = token.toLowerCase().replace(/[.:]/g, "");
+  if (/^(kg|kgs|kilo|kilos|kilogramos?)$/.test(t)) return "kg";
+  if (/^(g|gr|grs|gramos?)$/.test(t)) return "g";
+  if (/^(l|lt|lts|litros?)$/.test(t)) return "L";
+  if (/^(ml|cc|mililitros?)$/.test(t)) return "ml";
+  if (/^(und|unds|unid|unidad|unidades|un|pza|pzas|pieza|piezas)$/.test(t)) return "unidad";
+  return undefined;
+}
 
 export type FacturaLeida = {
   proveedorNombre?: string;
@@ -142,7 +159,8 @@ export function tipoResumen(linea: string): keyof typeof RE_RESUMEN | null {
 
 // Renglón de cantidad de las máquinas fiscales, encima del producto:
 // "10 x 5.000,00" o "1,1895 X Bs 61.700,00".
-const RE_CANT_X_PRECIO = /^(\d+(?:[.,]\d+)?)\s*[x×*]\s*(?:bs\.?\s*|\$\s*)?(\d[\d.,]*)$/i;
+const RE_CANT_X_PRECIO =
+  /^(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|grs?|g|lts?|l|ml|cc|unds?|unid|un|pzas?)?\.?\s*[x×*]\s*(?:bs\.?\s*|\$\s*)?(\d[\d.,]*)$/i;
 
 function fechaISO(d: number, m: number, a: number): string | undefined {
   const anio = a < 100 ? 2000 + a : a;
@@ -206,6 +224,14 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
       tokens.shift();
     }
   }
+  // Unidad escrita suelta en el renglón ("CARNE DE RES KG", "1,250 KG POLLO",
+  // "QUESO X KG"). La pegada a un número ("1KG") es la presentación: no cuenta.
+  let unidadLeida: UnidadLeida | undefined;
+  for (const t of tokens) {
+    // Una "G" o "L" suelta es ambigua (la G es también la marca de IVA general).
+    const u = t.replace(/[.:]/g, "").length > 1 ? unidadDeToken(t) : undefined;
+    if (u) unidadLeida = u;
+  }
   const descripcion = tokens.join(" ").replace(/\s+/g, " ").trim();
   if ((descripcion.match(/[a-zñ]/gi) ?? []).length < 3) return null;
 
@@ -255,7 +281,16 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
   if (!(cantidad > 0)) cantidad = 1;
   // Sin cantidad al inicio, una cantidad no entera también delata un peso.
   if (cantInicial === null && !Number.isInteger(cantidad)) pesable = true;
-  return { descripcion, cantidad, precioUnit, total, exento, confianza: finales.length >= 2 ? "alta" : "baja", pesable };
+  return {
+    descripcion,
+    cantidad,
+    precioUnit,
+    total,
+    exento,
+    confianza: finales.length >= 2 ? "alta" : "baja",
+    pesable,
+    ...(unidadLeida ? { unidadLeida } : {}),
+  };
 }
 
 /** Lee la factura completa a partir de su texto. */
@@ -341,13 +376,16 @@ export function parseFactura(texto: string): FacturaLeida {
   }
 
   // Productos (la cabecera del proveedor, hasta su RIF, nunca es un producto).
-  let pendiente: { cantidad: number; precio: number; pesable: boolean } | null = null;
+  let pendiente: { cantidad: number; precio: number; pesable: boolean; unidad?: UnidadLeida } | null = null;
   for (let i = idxRif + 1; i < lineas.length; i++) {
     const cx = lineas[i].match(RE_CANT_X_PRECIO);
     if (cx) {
       const cantidad = parseCantidad(cx[1]);
-      const precio = parseNumero(cx[2]);
-      pendiente = cantidad && precio ? { cantidad, precio, pesable: escritaConDecimales(cx[1]) } : null;
+      const precio = parseNumero(cx[3]);
+      pendiente =
+        cantidad && precio
+          ? { cantidad, precio, pesable: escritaConDecimales(cx[1]), unidad: cx[2] ? unidadDeToken(cx[2]) : undefined }
+          : null;
       continue;
     }
     const linea = parseLineaProducto(lineas[i]);
@@ -357,6 +395,7 @@ export function parseFactura(texto: string): FacturaLeida {
       linea.precioUnit = pendiente.precio;
       linea.confianza = "alta";
       linea.pesable = pendiente.pesable;
+      if (pendiente.unidad) linea.unidadLeida = pendiente.unidad;
     }
     pendiente = null;
     if (linea) out.lineas.push(linea);

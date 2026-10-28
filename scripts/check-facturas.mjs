@@ -162,6 +162,24 @@ igual("f6 huevos cant", f6.lineas[3]?.cantidad, 2);
 igual("f6 huevos no pesable", f6.lineas[3]?.pesable, false);
 igual("cant al inicio con decimales", parseFactura("RIF J-1234567-8\n0,750 QUESO BLANCO 6,00 4,50").lineas[0]?.cantidad, 0.75);
 
+// ── Unidad escrita en la factura ──
+const f7 = parseFactura(`
+EL TORO C.A.
+RIF J-59957472-8
+1,1895 KG x 61.700,00
+CARNE DE RES (G) 73.392,22
+500 GR X 10,00
+QUESO PARMESANO (G) 5.000,00
+CREMA DE LECHE LT 2 3,50 7,00
+HARINA PAN 1KG 20 45,00 900,00
+`);
+igual("f7 carne kg", f7.lineas[0]?.unidadLeida, "kg");
+igual("f7 queso g", f7.lineas[1]?.unidadLeida, "g");
+igual("f7 queso cant", f7.lineas[1]?.cantidad, 500);
+igual("f7 crema L", f7.lineas[2]?.unidadLeida, "L");
+igual("G suelta no es gramos", parseFactura("RIF J-1234567-8\n3 X 4,00\nPAN CANILLA G 12,00").lineas[0]?.unidadLeida, undefined);
+igual("f7 harina sin unidad (1KG es presentación)", f7.lineas[3]?.unidadLeida, undefined);
+
 // ── Rótulos del resumen mal leídos por el OCR ──
 const f4 = parseFactura(`
 LA GRANJA C.A.

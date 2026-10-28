@@ -23,7 +23,14 @@ import {
   setProveedorRif,
   type Equivalencia,
 } from "@/lib/data/facturas";
-import { normalizarDescripcion, parseFactura, sugerirInsumo, totalProductos, type FacturaLeida } from "@/lib/facturas/parser";
+import {
+  normalizarDescripcion,
+  parseFactura,
+  sugerirInsumo,
+  totalProductos,
+  type FacturaLeida,
+  type UnidadLeida,
+} from "@/lib/facturas/parser";
 import { leerFactura } from "@/lib/facturas/ocr";
 import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon, WarningIcon } from "@/components/icons";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
@@ -53,8 +60,10 @@ type Producto = {
   /** Monto en la moneda de la factura. */
   monto: string;
   exento: boolean;
-  /** La factura traía la cantidad con decimales: es peso (kg). */
+  /** La factura traía la cantidad con decimales: es peso o volumen. */
   pesable: boolean;
+  /** Unidad que la factura escribe junto a la cantidad, si la escribe. */
+  unidadLeida?: UnidadLeida;
   origen: Origen;
 };
 
@@ -180,18 +189,34 @@ function proveedorPorNombre(proveedores: Proveedor[], nombre: string): Proveedor
  *  la cantidad se escribe en la unidad que se tenga a mano y se guarda en
  *  unidades de compra).
  *
- *  Si nadie eligió la unidad y no hay memoria, se sigue la costumbre de las
- *  facturas venezolanas: una cantidad escrita con decimales ("1,1895") es peso
- *  en kg (o L); una entera ("2") son unidades de la presentación del insumo. */
-function conversion(p: Producto, ins: Insumo | undefined) {
+ *  Si nadie eligió la unidad y no hay memoria del proveedor, se deduce de la
+ *  factura, en este orden:
+ *   1. La unidad que la factura escribe ("1,1895 KG", "500 GR", "2 LT").
+ *   2. Cantidad con decimales sin unidad escrita: es peso o volumen; entre kg y
+ *      g (o L y ml) gana la que deja el precio más parecido al actual del
+ *      insumo (`usd` = lo pagado por ese producto).
+ *   3. Cantidad entera: unidades de la presentación del insumo. */
+function conversion(p: Producto, ins: Insumo | undefined, usd = 0) {
   if (!ins) return { opciones: [], unidad: "", enBase: 0, enCompra: Number(p.cantidad) || 0 };
   const opciones = opcionesCantidad(ins);
   const cpc = ins.cantidadPorCompra ?? 0;
   let unidad = opciones.some((o) => o.key === p.unidad)
     ? p.unidad
     : (opciones.find((o) => Math.abs(o.factor - cpc) < 1e-9)?.key ?? opciones[0]?.key ?? "");
-  if (p.unidad === "" && p.origen !== "memoria" && p.pesable) {
-    unidad = opciones.find((o) => o.key === "kg" || o.key === "L")?.key ?? unidad;
+  if (p.unidad === "" && p.origen !== "memoria") {
+    const medidas = opciones.filter((o) => ["kg", "g", "L", "ml"].includes(o.key));
+    if (p.unidadLeida && p.unidadLeida !== "unidad" && medidas.some((o) => o.key === p.unidadLeida)) {
+      unidad = p.unidadLeida;
+    } else if (p.pesable && medidas.length > 0) {
+      const cant = Number(p.cantidad) || 0;
+      const actual = ins.precioBaseUsd ?? 0;
+      if (usd > 0 && cant > 0 && actual > 0) {
+        const distancia = (factor: number) => Math.abs(Math.log(usd / (cant * factor) / actual));
+        unidad = medidas.reduce((mejor, o) => (distancia(o.factor) < distancia(mejor.factor) ? o : mejor)).key;
+      } else {
+        unidad = (medidas.find((o) => o.key === "kg" || o.key === "L") ?? medidas[0]).key;
+      }
+    }
   }
   const enBase = (Number(p.cantidad) || 0) * factorDe(opciones, unidad);
   const enCompra = cpc > 0 ? enBase / cpc : Number(p.cantidad) || 0;
@@ -376,6 +401,7 @@ export function EscanearFactura({
         monto: String(Number(l.total.toFixed(2))),
         exento: l.exento,
         pesable: l.pesable,
+        unidadLeida: l.unidadLeida,
         origen: "",
       };
     });
@@ -485,8 +511,8 @@ export function EscanearFactura({
   /** Precio por unidad que deja el producto, frente al actual del insumo. */
   function precioInfo(p: Producto) {
     const ins = insumoPorId.get(p.insumoId);
-    const { enBase } = conversion(p, ins);
     const usd = costo(p).usd;
+    const { enBase } = conversion(p, ins, usd);
     if (!ins || !(enBase > 0) || !(usd > 0)) return null;
     const nuevo = usd / enBase;
     const actual = ins.precioBaseUsd ?? null;
@@ -509,7 +535,7 @@ export function EscanearFactura({
       setError("Elige el insumo de cada producto, o quítalo con el botón de la papelera.");
       return;
     }
-    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId)).enCompra > 0))) {
+    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra > 0))) {
       setError("Cada producto necesita una cantidad y un monto mayores que cero.");
       return;
     }
@@ -544,7 +570,7 @@ export function EscanearFactura({
       const flete = Number(cab.fleteUsd) > 0 ? Number(cab.fleteUsd) : undefined;
       const inputs: CompraInput[] = productos.map((p, i) => {
         const c = costo(p);
-        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId));
+        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId), c.usd);
         return {
           insumoId: p.insumoId,
           proveedorId: cab.proveedorId || undefined,
@@ -568,7 +594,7 @@ export function EscanearFactura({
           productos.map((p) => ({
             descripcion: p.descripcion,
             insumoId: p.insumoId,
-            factorCantidad: conversion(p, insumoPorId.get(p.insumoId)).enCompra / (p.cantidadFactura || 1),
+            factorCantidad: conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra / (p.cantidadFactura || 1),
           })),
           memoria,
         );
@@ -913,7 +939,7 @@ export function EscanearFactura({
             <ul className="mt-1 divide-y divide-marfil">
               {productos.map((p) => {
                 const ins = insumoPorId.get(p.insumoId);
-                const conv = conversion(p, ins);
+                const conv = conversion(p, ins, costo(p).usd);
                 const info = precioInfo(p);
                 return (
                   <li key={p.key} className="py-3 space-y-1.5">
