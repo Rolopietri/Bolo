@@ -29,7 +29,7 @@ const SUBMODULOS: MenuItem[] = [
     href: "/cocina/pedido",
     label: "Pedido sugerido",
     Icon: ClipboardIcon,
-    desc: "Lista de compras a partir de tus raciones objetivo. Guarda pedidos.",
+    desc: "Qué comprar según el stock y el mínimo. Lo revisas y lo registras como compra. También por raciones.",
   },
 ];
 

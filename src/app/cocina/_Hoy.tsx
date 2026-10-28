@@ -43,7 +43,7 @@ const ACCIONES: { href: string; titulo: string; detalle: string; Icon: Icono }[]
   {
     href: "/cocina/pedido",
     titulo: "Pedido sugerido",
-    detalle: "Arma la compra con lo que está bajo el mínimo.",
+    detalle: "Lo que está bajo el mínimo. Lo revisas y lo pasas a compra.",
     Icon: CartIcon,
   },
   {
@@ -272,7 +272,12 @@ export function Hoy() {
       <section aria-label="Acciones rápidas">
         <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">Para hoy</h2>
         <ul className="mt-3 grid gap-3 sm:grid-cols-3">
-          {ACCIONES.map((a) => (
+          {ACCIONES.map((a) => {
+            const detalle =
+              a.href === "/cocina/pedido" && faltantes > 0
+                ? `${faltantes.toLocaleString("es-VE")} ${faltantes === 1 ? "insumo para reponer" : "insumos para reponer"}. Revísalos y regístralos como compra.`
+                : a.detalle;
+            return (
             <li key={a.href}>
               <Link
                 href={a.href}
@@ -293,11 +298,12 @@ export function Hoy() {
                   <span className="block font-cinzel text-lg leading-tight text-cacao transition-colors group-hover:text-terracotta">
                     {a.titulo}
                   </span>
-                  <span className="mt-1 block text-sm leading-snug text-cacao-soft">{a.detalle}</span>
+                  <span className="mt-1 block text-sm leading-snug text-cacao-soft">{detalle}</span>
                 </span>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </section>
 
@@ -433,12 +439,22 @@ function AlertasStock({
     <section aria-label="Alertas de stock">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">Alertas de stock</h2>
-        <Link
-          href="/cocina/insumos?vista=alertas"
-          className="text-xs font-semibold uppercase tracking-widest text-cacao-soft hover:text-terracotta"
-        >
-          Ver alertas
-        </Link>
+        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+          {!cargando && !error && agotados + bajos > 0 && (
+            <Link
+              href="/cocina/pedido"
+              className="text-xs font-semibold uppercase tracking-widest text-terracotta hover:underline"
+            >
+              Armar pedido
+            </Link>
+          )}
+          <Link
+            href="/cocina/insumos?vista=alertas"
+            className="text-xs font-semibold uppercase tracking-widest text-cacao-soft hover:text-terracotta"
+          >
+            Ver alertas
+          </Link>
+        </span>
       </div>
 
       {cargando ? (

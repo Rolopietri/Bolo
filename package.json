@@ -11,6 +11,7 @@
     "test:pce": "node scripts/check-pce.mjs",
     "test:modulos": "node scripts/check-modulos.mjs",
     "test:facturas": "node --no-warnings scripts/check-facturas.mjs",
+    "test:reposicion": "node --no-warnings scripts/check-reposicion.mjs",
     "seed:cocina-demo": "node scripts/seed-cocina-demo.mjs"
   },
   "dependencies": {
