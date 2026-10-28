@@ -102,8 +102,9 @@ async function abrirImagen(archivo: Blob): Promise<{ img: CanvasImageSource; w: 
  *  contraste (papel más blanco, tinta más negra). */
 export async function limpiarFoto(archivo: Blob): Promise<HTMLCanvasElement> {
   const { img: imagen, w: anchoImg, h: altoImg, liberar } = await abrirImagen(archivo);
-  // ~2000 px en el lado largo: suficiente detalle sin hacer lento al teléfono.
-  const objetivo = 2000;
+  // ~3200 px en el lado largo: las facturas en tabla traen letra pequeña y con
+  // menos detalle el OCR no la lee; más grande ya solo hace lento al teléfono.
+  const objetivo = 3200;
   const escala = Math.min(2, objetivo / Math.max(anchoImg, altoImg));
   const w = Math.round(anchoImg * escala);
   const h = Math.round(altoImg * escala);
@@ -141,6 +142,137 @@ export async function limpiarFoto(archivo: Blob): Promise<HTMLCanvasElement> {
   }
   ctx.putImageData(img, 0, 0);
   return canvas;
+}
+
+/** Prepara la foto para leer tablas: blanco y negro por zonas (umbral
+ *  adaptativo de Bradley, para que el papel de color, las sombras y los
+ *  encabezados con fondo no confundan al OCR) y sin los bordes de la tabla
+ *  (líneas largas horizontales y verticales, que el OCR lee como basura). */
+function paraLeer(origen: HTMLCanvasElement): HTMLCanvasElement {
+  const W = origen.width;
+  const H = origen.height;
+  const c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return origen;
+  ctx.drawImage(origen, 0, 0);
+  const im = ctx.getImageData(0, 0, W, H);
+  const px = im.data;
+  // Imagen integral de grises (Uint32 alcanza: 255 × 6 M px < 4.300 M).
+  const I = new Uint32Array((W + 1) * (H + 1));
+  for (let y = 1; y <= H; y++) {
+    let fila = 0;
+    for (let x = 1; x <= W; x++) {
+      fila += px[((y - 1) * W + x - 1) * 4];
+      I[y * (W + 1) + x] = I[(y - 1) * (W + 1) + x] + fila;
+    }
+  }
+  const r = Math.max(8, Math.round(Math.max(W, H) / 80));
+  const tinta = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) {
+    const y0 = Math.max(0, y - r);
+    const y1 = Math.min(H - 1, y + r);
+    for (let x = 0; x < W; x++) {
+      const x0 = Math.max(0, x - r);
+      const x1 = Math.min(W - 1, x + r);
+      const n = (x1 - x0 + 1) * (y1 - y0 + 1);
+      const suma = I[(y1 + 1) * (W + 1) + x1 + 1] - I[y0 * (W + 1) + x1 + 1] - I[(y1 + 1) * (W + 1) + x0] + I[y0 * (W + 1) + x0];
+      // Más oscuro que el 85 % del promedio de su zona = tinta.
+      tinta[y * W + x] = px[(y * W + x) * 4] * n < suma * 0.85 ? 1 : 0;
+    }
+  }
+  // Alto de letra de ESTA foto: los tramos verticales de tinta más largos que
+  // se repiten (los palos de las letras). Las líneas de tabla son pocas.
+  const tramos: number[] = [];
+  for (let x = 0; x < W; x += 3) {
+    let ini = -1;
+    for (let y = 0; y <= H; y++) {
+      const on = y < H && tinta[y * W + x] === 1;
+      if (on && ini < 0) ini = y;
+      if (!on && ini >= 0) {
+        if (y - ini >= 3) tramos.push(y - ini);
+        ini = -1;
+      }
+    }
+  }
+  tramos.sort((a, b) => a - b);
+  const altoLetra = Math.max(8, tramos.length ? tramos[Math.floor(tramos.length * 0.9)] : 20);
+  // Borrar líneas: tramos de tinta varias veces más largos que una letra. Los
+  // bordes de una tabla cruzan varias filas o todo el ancho; un trazo de
+  // letra, sea la letra chica o grande, nunca llega.
+  const limpio = tinta.slice();
+  const largoH = Math.round(altoLetra * 6);
+  const largoV = Math.round(altoLetra * 3.5);
+  for (let y = 0; y < H; y++) {
+    let ini = -1;
+    for (let x = 0; x <= W; x++) {
+      const on = x < W && tinta[y * W + x] === 1;
+      if (on && ini < 0) ini = x;
+      if (!on && ini >= 0) {
+        if (x - ini >= largoH) for (let k = ini; k < x; k++) limpio[y * W + k] = 0;
+        ini = -1;
+      }
+    }
+  }
+  for (let x = 0; x < W; x++) {
+    let ini = -1;
+    for (let y = 0; y <= H; y++) {
+      const on = y < H && tinta[y * W + x] === 1;
+      if (on && ini < 0) ini = y;
+      if (!on && ini >= 0) {
+        if (y - ini >= largoV) for (let k = ini; k < y; k++) limpio[k * W + x] = 0;
+        ini = -1;
+      }
+    }
+  }
+  for (let i = 0; i < limpio.length; i++) {
+    const v = limpio[i] ? 0 : 255;
+    px[i * 4] = px[i * 4 + 1] = px[i * 4 + 2] = v;
+    px[i * 4 + 3] = 255;
+  }
+  ctx.putImageData(im, 0, 0);
+  return c;
+}
+
+type Caja = { x0: number; y0: number; x1: number; y1: number };
+type Palabra = { text: string; bbox: Caja };
+/** Un trozo de línea que el OCR ya leyó junto (una celda, una frase). */
+type Trozo = { texto: string; x0: number; x1: number; yIzq: number; yDer: number };
+
+const centro = (b: Caja) => (b.y0 + b.y1) / 2;
+
+/** Arma las filas de la factura a partir de los trozos de texto y su posición:
+ *  los que están a la misma altura son una fila, de izquierda a derecha. Así
+ *  una tabla (descripción, cantidad, precio, subtotal en columnas) se lee como
+ *  renglones, sea cual sea su diseño.
+ *
+ *  La foto casi nunca está perfectamente derecha: cada trozo se compara con el
+ *  FINAL de la fila (el trozo más cercano a su izquierda), así la fila "sigue"
+ *  la inclinación aunque la hoja sea ancha. */
+function filasDeTrozos(trozos: Trozo[], alto: number): string[] {
+  const ts = [...trozos].sort((a, b) => a.x0 - b.x0);
+  const filas: { yIni: number; yFin: number; xFin: number; ts: Trozo[] }[] = [];
+  for (const t of ts) {
+    let mejor: (typeof filas)[number] | null = null;
+    let dist = Infinity;
+    for (const f of filas) {
+      if (f.xFin > t.x0 + alto) continue; // ya tiene algo encima de este trozo
+      // Cuanto más lejos a la izquierda termina la fila, más inclinación se tolera.
+      const tolerancia = alto * 0.5 + (t.x0 - f.xFin) * 0.03;
+      const d = Math.abs(f.yFin - t.yIzq);
+      if (d < tolerancia && d < dist) {
+        mejor = f;
+        dist = d;
+      }
+    }
+    if (mejor) {
+      mejor.ts.push(t);
+      mejor.yFin = t.yDer;
+      mejor.xFin = t.x1;
+    } else filas.push({ yIni: t.yIzq, yFin: t.yDer, xFin: t.x1, ts: [t] });
+  }
+  return filas.sort((a, b) => a.yIni - b.yIni).map((f) => f.ts.map((t) => t.texto).join(" "));
 }
 
 /** Gira un canvas 90, 180 o 270 grados (sentido horario). */
@@ -185,6 +317,9 @@ export async function leerFactura(
     // Lectura rápida para saber si la foto está derecha.
     const etapaGiro: Progreso = (_e, p) => onProgreso?.("Buscando cómo está girada la foto", p);
     alProgresar = etapaGiro;
+    // Modo 6 (un bloque de texto): con la foto de lado da basura a propósito,
+    // y así se nota que hay que girarla (el modo automático lee algo igual).
+    await worker.setParameters({ tessedit_pageseg_mode: "6" as never });
     const prueba = async (grados: number) => {
       const { data } = await worker.recognize(rotar(canvas, grados, 1000));
       return puntaje(data.text ?? "", data.confidence ?? 0);
@@ -202,9 +337,32 @@ export async function leerFactura(
       }
     }
 
-    alProgresar = onProgreso ?? null;
-    const { data } = await worker.recognize(giro ? rotar(canvas, giro) : canvas, { rotateAuto: true });
-    return { texto: data.text ?? "", giro };
+    // Lectura completa: foto derecha, en blanco y negro y sin bordes de tabla;
+    // el OCR busca texto suelto por toda la hoja (modo 11, sirve para tablas y
+    // tickets) y las filas se arman por la posición de cada palabra.
+    alProgresar = (_e, p) => onProgreso?.("Leyendo la factura", p);
+    await worker.setParameters({ tessedit_pageseg_mode: "11" as never });
+    const lista = paraLeer(giro ? rotar(canvas, giro) : canvas);
+    const { data } = await worker.recognize(lista, {}, { blocks: true, text: true });
+    const trozos: Trozo[] = [];
+    const alturas: number[] = [];
+    for (const b of data.blocks ?? [])
+      for (const p of b.paragraphs)
+        for (const l of p.lines) {
+          const ws: Palabra[] = l.words.filter((w) => w.text.trim());
+          if (ws.length === 0) continue;
+          for (const w of ws) alturas.push(w.bbox.y1 - w.bbox.y0);
+          trozos.push({
+            texto: ws.map((w) => w.text).join(" "),
+            x0: ws[0].bbox.x0,
+            x1: ws[ws.length - 1].bbox.x1,
+            yIzq: centro(ws[0].bbox),
+            yDer: centro(ws[ws.length - 1].bbox),
+          });
+        }
+    alturas.sort((a, b) => a - b);
+    const filas = filasDeTrozos(trozos, alturas[Math.floor(alturas.length / 2)] || 20);
+    return { texto: filas.length > 0 ? filas.join("\n") : (data.text ?? ""), giro };
   } finally {
     alProgresar = null;
   }
