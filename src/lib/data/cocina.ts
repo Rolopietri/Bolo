@@ -26,7 +26,7 @@ type ProveedorRow = {
   acepta_usd_divisa: boolean;
   notas: string | null;
   activo: boolean;
-  /** Solo existe tras cocina-factura-equivalencias.sql. */
+  /** Solo existe tras usabolo1.0.sql. */
   rif?: string | null;
 };
 
