@@ -143,17 +143,83 @@ export async function limpiarFoto(archivo: Blob): Promise<HTMLCanvasElement> {
   return canvas;
 }
 
-/** Lee una foto de factura y devuelve su texto. `rotateAuto` endereza las fotos
- *  tomadas un poco torcidas. */
-export async function leerFactura(archivo: Blob, onProgreso?: Progreso): Promise<string> {
+/** Gira un canvas 90, 180 o 270 grados (sentido horario). */
+function rotar(origen: HTMLCanvasElement, grados: number, maxLado = Infinity): HTMLCanvasElement {
+  const escala = Math.min(1, maxLado / Math.max(origen.width, origen.height));
+  const w = Math.round(origen.width * escala);
+  const h = Math.round(origen.height * escala);
+  const deLado = grados === 90 || grados === 270;
+  const c = document.createElement("canvas");
+  c.width = deLado ? h : w;
+  c.height = deLado ? w : h;
+  const ctx = c.getContext("2d");
+  if (!ctx) return origen;
+  ctx.translate(c.width / 2, c.height / 2);
+  ctx.rotate((grados * Math.PI) / 180);
+  ctx.drawImage(origen, -w / 2, -h / 2, w, h);
+  return c;
+}
+
+/** Qué tan "legible" salió un texto: confianza del OCR por la cantidad de
+ *  palabras y números reales. Una foto de lado da basura con pocas palabras. */
+function puntaje(texto: string, confianza: number): number {
+  const tokens = texto.split(/\s+/).filter(Boolean);
+  const buenos = tokens.filter((t) => /^[A-Za-z\u00C0-\u017F]{3,}[.,:]?$/.test(t) || /^\d[\d.,]*$/.test(t)).length;
+  return (confianza / 100) * buenos;
+}
+
+/** Lee una foto de factura y devuelve su texto y cuánto hubo que girarla.
+ *  Sirve sin importar cómo se tomó la foto: si la primera lectura (rápida, con
+ *  la foto reducida) sale mal, prueba girada 90°, 270° y 180° y se queda con la
+ *  que mejor se lee. `rotateAuto` además corrige las fotos un poco torcidas. */
+export async function leerFactura(
+  archivo: Blob,
+  onProgreso?: Progreso,
+): Promise<{ texto: string; giro: number }> {
   alProgresar = onProgreso ?? null;
   try {
     onProgreso?.("Limpiando la foto", 0);
     const canvas = await limpiarFoto(archivo);
     const worker = await obtenerWorker();
-    const { data } = await worker.recognize(canvas, { rotateAuto: true });
-    return data.text ?? "";
+
+    // Lectura rápida para saber si la foto está derecha.
+    const etapaGiro: Progreso = (_e, p) => onProgreso?.("Buscando cómo está girada la foto", p);
+    alProgresar = etapaGiro;
+    const prueba = async (grados: number) => {
+      const { data } = await worker.recognize(rotar(canvas, grados, 1000));
+      return puntaje(data.text ?? "", data.confidence ?? 0);
+    };
+    let giro = 0;
+    let mejor = await prueba(0);
+    // Derecha y bien leída: no hace falta probar más.
+    if (mejor < 12) {
+      for (const g of [90, 270, 180]) {
+        const p = await prueba(g);
+        if (p > mejor * 1.3) {
+          mejor = p;
+          giro = g;
+        }
+      }
+    }
+
+    alProgresar = onProgreso ?? null;
+    const { data } = await worker.recognize(giro ? rotar(canvas, giro) : canvas, { rotateAuto: true });
+    return { texto: data.text ?? "", giro };
   } finally {
     alProgresar = null;
   }
+}
+
+/** La misma foto girada (en color), para mostrarla derecha junto al
+ *  formulario. Devuelve la original si no hace falta girarla. */
+export async function fotoDerecha(archivo: Blob, giro: number): Promise<Blob> {
+  if (!giro) return archivo;
+  const { img, w, h, liberar } = await abrirImagen(archivo);
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  c.getContext("2d")?.drawImage(img, 0, 0);
+  liberar();
+  const girada = rotar(c, giro, 2000);
+  return new Promise((ok) => girada.toBlob((b) => ok(b ?? archivo), "image/jpeg", 0.85));
 }

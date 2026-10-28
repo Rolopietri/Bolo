@@ -32,7 +32,7 @@ import {
   type FacturaLeida,
   type UnidadLeida,
 } from "@/lib/facturas/parser";
-import { FotoIlegible, leerFactura, prepararFoto } from "@/lib/facturas/ocr";
+import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto } from "@/lib/facturas/ocr";
 import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon, WarningIcon } from "@/components/icons";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
@@ -420,8 +420,9 @@ export function EscanearFactura({
     try {
       // HEIC (iPhone) se convierte a JPG aquí; sirve para leer y para mostrar.
       const foto = await prepararFoto(archivo);
-      setFotoUrl(URL.createObjectURL(foto));
-      const t = await leerFactura(foto, (etapa, pct) => setProgreso({ etapa, pct }));
+      const { texto: t, giro } = await leerFactura(foto, (etapa, pct) => setProgreso({ etapa, pct }));
+      // La foto se muestra derecha aunque se haya tomado de lado o al revés.
+      setFotoUrl(URL.createObjectURL(await fotoDerecha(foto, giro).catch(() => foto)));
       setTexto(t);
       if (!t.trim()) {
         setError("No se pudo leer texto en la foto. Prueba con más luz, la factura plana y completa.");
