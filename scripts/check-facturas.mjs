@@ -12,6 +12,7 @@ import {
   normalizarDescripcion,
   sugerirInsumo,
   totalProductos,
+  parecido,
 } from "../src/lib/facturas/parser.ts";
 
 let fallas = 0;
@@ -191,6 +192,84 @@ igual("coma perdida precio", coma("11895")?.precioUnit, 6170.25);
 igual("precio sin coma", parseFactura("EL TORO C.A.\nRIF J-59957472-8\n11,895 x 617025\nCARNE (E) 73.395,12\n").lineas[0]?.precioUnit, 6170.25);
 igual("1.000 unidades no se achica", parseFactura("RIF J-1234567-8\n1.000 x 2,50\nSERVILLETAS (G) 2.500,00").lineas[0]?.cantidad, 1000);
 igual("inline coma perdida", parseFactura("RIF J-1234567-8\nCARNE 11895 6.170,25 73.395,12").lineas[0]?.cantidad, 11.895);
+
+// ── Factura en tabla, precios en USD (Distribuidora Ervaigle / Polar) ──
+// Texto real del OCR (filas reconstruidas), sin los datos del cliente.
+const f8 = parseFactura(`
+DISTRIBUIDORA ER
+(VAIGLE, C.A.
+J-002992158 ““ 048298
+N* de Control 00 >
+| Calle 5, Edif Capri 1V, Piso 2,A FORMA LIBRE
+Caracas (Petare) Miranda, ZP Avila, SERIE C
+1073/ Telf. (0424) 287.31.99
+FACTURA
+| Condición de pago: CREDITO FACTURA 4: 005865 ORO
+Plazo de pago: 7 días sin DPP SERIE: [A
+Vencimiento: 17/09/2026 EMISIÓN: 10/09/2026|12:36:18
+Día de vencimiento: Jueves
+[Penco a no — ercial MORE ¿Cani a Unidades tiros Mota O USD LA a e TT USDA
+|| |1-| PEPSI ZERO LATI55x24U 0.355 8527 [1] 18,9741 | 16,00| 0.00 18,97
+10 24 1
+2.- , AGUA MINALBA 600ML x 24 UNID 30 72 0.600 “43.20, [1] | 17,3621 | 16,00 ' 0.00 52,09 |
+3.- |PEPSI LIGHT LATA 355X24 UND | 10) 2 0.355 ; 8.52| [y 18,9741 16,00 0.00 18,97
+CONDICIONES DE CRÉDITO: "Concepto Bs. ' USD; |
+1.- El pago en Bs debe realizarlo tomando en cuenta el tipo de cambio BCV del día. Exento IVA 0,00 0,00 |
+2.- Esta factura debe ser pagada antes o en su fecha de vencimiento. “Base imponible 74.521,17 | 90,03 ' |
+3.- No aceptamos billetes deteriorados, rotos, falsos o defectuosos. “IVA 16% sobre:74.521,17 — 11.923,39. 14,40:
+4.- Esta factura causará IGTF 3% en caso de ser pagada en divisas. Total neto más impuestos 86.444,56! 104,43
+5.- Tipo de cambio BCV Bs. 827,7371 Res 10/09/2026 del BCV Total — _86.44456 104,43
+a pagar |
+Tipo de cambio BCV Bs. 827,7371 Según Res 10/09/2026 del BCV
+Ñ Nombre del conductor [a] Placas Tipo de vehiculo RECIBO CONFORME
+| Graficas Artisan, c.a. RIF: J-00310398-8 —
+Telf.: 571 .94.24 | SENIAT 01/00898 del 12/06/2008 Hasta el N* 82 '00 FORMA LIBRE
+| -, ESTE DOCUMENTO VA SIN ENMENDADURAS Hasta el N* 00 0a8700 | FECHA: 01/07/2026 |
+`);
+igual("f8 rif", f8.rif, "J-00299215-8");
+igual("f8 numero (# leído como 4)", f8.numero, "005865");
+igual("f8 fecha de emisión", f8.fecha, "2026-09-10");
+igual("f8 moneda usd", f8.moneda, "usd");
+igual("f8 tasa de la factura", f8.tasa, 827.7371);
+igual("f8 #lineas", f8.lineas.length, 3);
+igual("f8 l1 desc", f8.lineas[0]?.descripcion, "PEPSI ZERO LATI55x24U");
+igual("f8 l1 cant", f8.lineas[0]?.cantidad, 1);
+igual("f8 l1 precio", f8.lineas[0]?.precioUnit, 18.9741);
+igual("f8 l1 total", f8.lineas[0]?.total, 18.97);
+igual("f8 l2 desc", f8.lineas[1]?.descripcion, "AGUA MINALBA 600ML x 24 UNID");
+igual("f8 l2 cant (3 CJ leído como 30)", f8.lineas[1]?.cantidad, 3);
+igual("f8 l2 total", f8.lineas[1]?.total, 52.09);
+igual("f8 l3 cant", f8.lineas[2]?.cantidad, 1);
+igual("f8 l3 total", f8.lineas[2]?.total, 18.97);
+igual("f8 base", f8.base, 90.03);
+igual("f8 iva", f8.iva, 14.4);
+igual("f8 iva%", f8.ivaPorc, 16);
+igual("f8 exento", f8.exento, 0);
+igual("f8 igtf (la fila con IGTF es otra columna)", f8.igtf, undefined);
+igual("f8 total", f8.total, 104.43);
+
+// La misma factura en otra lectura del OCR: la fila de la Pepsi Light perdió
+// todas las comas ("189741", "1897)") y el resto está bien.
+const f9 = parseFactura(`
+DISTRIBUIDORA ERVAIGLE, C.A.
+J-002992158
+[1] PEPSI ZERO LAT355x24U 10 2 0.355. 8521 [1] | 18,9741 | 16,00' “0.00 18,97.
+2 AGUAMINALBA 600ML x 24 UNID 30) 72 0.600 43.20, [1] | 17,3621 | 16,00 ' 0.00 52,09
+| | 3. | PEPSI UGHT LATA 35524 UND 10 2 0.355 ; 8.52| o 189741 | 1600 0.00 1897)
+CONDICIONES DE CRÉDITO: "Concepto Bs. ' USD | |
+1.- El pago en Bs debe realizarlo tomando en cuenta el tipo de cambio BCV del día. Exento IVA 0,00 0,00 |
+2.- Esta factura debe ser pagada antes o en su fecha de vencimiento. “Base imponible 74.521,17 | 90,03 ' |
+`);
+igual("f9 #lineas", f9.lineas.length, 3);
+igual("f9 l3 desc", f9.lineas[2]?.descripcion, "PEPSI UGHT LATA 35524 UND");
+igual("f9 l3 total (1897 → 18,97)", f9.lineas[2]?.total, 18.97);
+igual("f9 l3 cant", f9.lineas[2]?.cantidad, 1);
+igual("f9 l3 precio", f9.lineas[2]?.precioUnit, 18.9741);
+igual("f9 moneda usd", f9.moneda, "usd");
+igual("ruido al inicio", parseFactura("RIF J-1234567-8\nES 1 PEPSI ZERO LAT355x24U 1 18,9741 18,97").lineas[0]?.descripcion, "PEPSI ZERO LAT355x24U");
+igual("IVA no mayor que la base", parseFactura("RIF J-1234567-8\nPOLLO 2 5,00 10,00\nBase imponible 10,00\nIVA 16% sobre:74.521,17").iva, 1.6);
+igual("parecido OCR", parecido("PEPSI LIGHT LATA 355X24 UND", "Pees LIGHT LATA 355X24 UND") >= 0.6, true);
+igual("no parecido", parecido("PEPSI LIGHT LATA 355X24 UND", "AGUA MINALBA 600ML x 24 UNID") < 0.6, true);
 
 // ── Rótulos del resumen mal leídos por el OCR ──
 const f4 = parseFactura(`

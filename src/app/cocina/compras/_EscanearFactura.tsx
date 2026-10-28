@@ -26,6 +26,7 @@ import {
 } from "@/lib/data/facturas";
 import {
   normalizarDescripcion,
+  parecido,
   parseFactura,
   sugerirInsumo,
   totalProductos,
@@ -256,6 +257,8 @@ export function EscanearFactura({
   const [otras, setOtras] = useState<Producto[]>([]);
   const [memoria, setMemoria] = useState<Map<string, Equivalencia>>(new Map());
   const [tasaDia, setTasaDia] = useState<TasaBcv | null>(null);
+  /** Tasa que trae impresa la factura ("Tipo de cambio BCV Bs. 827,7371"). */
+  const [tasaFactura, setTasaFactura] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [avisos, setAvisos] = useState<string[] | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -283,6 +286,8 @@ export function EscanearFactura({
       if (cancel || !t) return;
       setTasaDia(t);
       setCab((c) => {
+        // Si la factura trae su propia tasa, manda esa (es con la que se facturó).
+        if (tasaFactura && c.modalidadPago !== "bcv_euro" && c.modalidadPago !== "paralela") return c;
         const sug = c.modalidadPago === "bcv_euro" ? t.eurBs : c.modalidadPago === "paralela" ? t.paralelaBs : t.usdBs;
         return Number(sug) > 0 ? { ...c, tasa: String(sug) } : c;
       });
@@ -290,7 +295,7 @@ export function EscanearFactura({
     return () => {
       cancel = true;
     };
-  }, [paso, cab.fecha]);
+  }, [paso, cab.fecha, tasaFactura]);
 
   const tasaSugerida = !tasaDia
     ? null
@@ -303,7 +308,8 @@ export function EscanearFactura({
   function setModalidad(m: ModalidadPago) {
     setCab((c) => {
       let tasa = c.tasa;
-      if (tasaDia) {
+      if (tasaFactura && m !== "bcv_euro" && m !== "paralela") tasa = String(tasaFactura);
+      else if (tasaDia) {
         const sug = m === "bcv_euro" ? tasaDia.eurBs : m === "paralela" ? tasaDia.paralelaBs : tasaDia.usdBs;
         if (Number(sug) > 0) tasa = String(sug);
       }
@@ -316,7 +322,18 @@ export function EscanearFactura({
   function asignar(lista: Producto[], mem: Map<string, Equivalencia>): Producto[] {
     return lista.map((p) => {
       if (p.origen === "" && p.insumoId) return p; // elegido a mano
-      const eq = mem.get(normalizarDescripcion(p.descripcion));
+      // Primero igual; si no, la más parecida (el OCR no lee igual cada vez).
+      let eq = mem.get(normalizarDescripcion(p.descripcion));
+      if (!eq) {
+        let mejor = 0.6;
+        for (const e of mem.values()) {
+          const sim = parecido(e.descripcionNorm, p.descripcion);
+          if (sim >= mejor) {
+            mejor = sim;
+            eq = e;
+          }
+        }
+      }
       if (eq && insumoPorId.has(eq.insumoId)) {
         return { ...p, insumoId: eq.insumoId, cantidad: fmtQty(p.cantidadFactura * eq.factorCantidad), unidad: "", origen: "memoria" };
       }
@@ -383,7 +400,9 @@ export function EscanearFactura({
       ivaModo: f.iva !== undefined || f.base !== undefined || f.ivaPorc !== undefined ? "sin" : "con",
       ivaPorc: String(f.ivaPorc ?? 16),
       numeroFactura: f.numero ?? "",
+      tasa: f.tasa ? String(f.tasa) : "",
     });
+    setTasaFactura(f.tasa ?? null);
     // Si no se reconoce, el proveedor queda en blanco (el nombre leído solo se
     // propone si la persona elige "+ Nuevo proveedor…").
     setCreandoProveedor(false);
@@ -490,7 +509,9 @@ export function EscanearFactura({
   const monedaPago: "bs" | "usd" = pagaEnBs ? "bs" : "usd";
   /** De dónde sale la tasa, para mostrarla junto al total. */
   const origenTasa =
-    tasaSugerida !== null && Math.abs(tasaNum - Number(tasaSugerida)) <= 0.009
+    tasaFactura !== null && Math.abs(tasaNum - tasaFactura) <= 0.00001
+      ? "tasa impresa en la factura"
+      : tasaSugerida !== null && Math.abs(tasaNum - Number(tasaSugerida)) <= 0.009
       ? `${cab.modalidadPago === "bcv_euro" ? "BCV €" : cab.modalidadPago === "paralela" ? "paralela" : "BCV"} del ${fmtFecha(cab.fecha)}`
       : "tasa puesta a mano";
 
