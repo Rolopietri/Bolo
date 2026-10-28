@@ -1,5 +1,6 @@
 "use client";
 
+import { limpiarDecimal } from "@/lib/decimal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -862,11 +863,10 @@ export function EscanearFactura({
                 <label className="flex items-center gap-1.5 text-xs text-cacao-mute">
                   IVA
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={cab.ivaPorc}
-                    onChange={(e) => setCab({ ...cab, ivaPorc: e.target.value })}
+                    onChange={(e) => setCab({ ...cab, ivaPorc: limpiarDecimal(e.target.value) })}
                     className="w-16 rounded-lg ring-1 ring-marfil px-2 py-1.5 text-sm text-cacao"
                   />
                   %
@@ -895,12 +895,10 @@ export function EscanearFactura({
           <label className="text-sm text-cacao block">
             Tasa del día (Bs por $)
             <input
-              type="number"
-              step="0.0001"
-              min="0"
+              type="text"
               inputMode="decimal"
               value={cab.tasa}
-              onChange={(e) => setCab({ ...cab, tasa: e.target.value })}
+              onChange={(e) => setCab({ ...cab, tasa: limpiarDecimal(e.target.value) })}
               className={campo}
             />
             {tasaSugerida !== null && (
@@ -931,11 +929,10 @@ export function EscanearFactura({
             <label className="text-sm text-cacao block">
               Flete / delivery ($) <span className="text-cacao-soft font-normal">(opcional)</span>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={cab.fleteUsd}
-                onChange={(e) => setCab({ ...cab, fleteUsd: e.target.value })}
+                onChange={(e) => setCab({ ...cab, fleteUsd: limpiarDecimal(e.target.value) })}
                 placeholder="0.00"
                 className={campo}
               />
@@ -1002,12 +999,10 @@ export function EscanearFactura({
                           }`}
                         >
                           <input
-                            type="number"
-                            step="0.01"
-                            min="0"
+                            type="text"
                             inputMode="decimal"
                             value={p.monto}
-                            onChange={(e) => setProducto(p.key, { monto: e.target.value })}
+                            onChange={(e) => setProducto(p.key, { monto: limpiarDecimal(e.target.value) })}
                             aria-label="Monto"
                             className="min-w-0 flex-1 rounded-l-lg bg-transparent px-3 py-2 outline-none"
                           />

@@ -1,5 +1,6 @@
 "use client";
 
+import { limpiarDecimal } from "@/lib/decimal";
 import type { OpcionCantidad } from "@/lib/units";
 
 /**
@@ -28,12 +29,10 @@ export function CantidadUnidad({
   return (
     <div className="mt-1 flex rounded-lg ring-1 ring-marfil bg-white focus-within:ring-terracotta/60">
       <input
-        type="number"
-        step="any"
-        min="0"
+        type="text"
         inputMode="decimal"
         value={valor}
-        onChange={(e) => onChange(e.target.value, unidad)}
+        onChange={(e) => onChange(limpiarDecimal(e.target.value), unidad)}
         required={required}
         autoFocus={autoFocus}
         placeholder={placeholder}

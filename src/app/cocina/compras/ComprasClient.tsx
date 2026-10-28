@@ -1,5 +1,6 @@
 "use client";
 
+import { limpiarDecimal } from "@/lib/decimal";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -950,7 +951,8 @@ export function ComprasClient() {
               />
             ) : (
               <input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 disabled
                 placeholder="Elige primero el insumo"
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-marfil-soft"
@@ -1013,12 +1015,11 @@ export function ComprasClient() {
                 <label className="flex items-center gap-1.5 text-xs text-cacao-mute">
                   IVA
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
+                    type="text"
+                    inputMode="decimal"
                     value={form.ivaPorc}
                     onChange={(e) =>
-                      setForm({ ...form, ivaPorc: e.target.value })
+                      setForm({ ...form, ivaPorc: limpiarDecimal(e.target.value) })
                     }
                     className="w-16 rounded-lg ring-1 ring-marfil px-2 py-1.5 text-sm text-cacao"
                   />
@@ -1051,13 +1052,11 @@ export function ComprasClient() {
                   )}
                 </span>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
                   inputMode="decimal"
                   placeholder="0"
                   value={form.precioTotalBs}
-                  onChange={(e) => onMontoBs(e.target.value)}
+                  onChange={(e) => onMontoBs(limpiarDecimal(e.target.value))}
                   className={`mt-1 w-full rounded-lg px-3 py-2 ${pagaEnBs ? "ring-2 ring-terracotta/50" : "ring-1 ring-marfil"}`}
                 />
               </label>
@@ -1071,13 +1070,11 @@ export function ComprasClient() {
                   )}
                 </span>
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
                   inputMode="decimal"
                   placeholder="0"
                   value={form.precioTotalUsd}
-                  onChange={(e) => onMontoUsd(e.target.value)}
+                  onChange={(e) => onMontoUsd(limpiarDecimal(e.target.value))}
                   className={`mt-1 w-full rounded-lg px-3 py-2 ${!pagaEnBs ? "ring-2 ring-terracotta/50" : "ring-1 ring-marfil"}`}
                 />
               </label>
@@ -1085,12 +1082,10 @@ export function ComprasClient() {
             <label className="block mt-3 text-sm text-cacao">
               Tasa del día (Bs por $)
               <input
-                type="number"
-                step="0.0001"
-                min="0"
+                type="text"
                 inputMode="decimal"
                 value={form.tasaBcvUsada}
-                onChange={(e) => onTasa(e.target.value)}
+                onChange={(e) => onTasa(limpiarDecimal(e.target.value))}
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
               />
               {tasaSugerida !== null && (
@@ -1174,11 +1169,10 @@ export function ComprasClient() {
               Flete / delivery ($){" "}
               <span className="text-cacao-soft font-normal">(opcional)</span>
               <input
-                type="number"
-                step="0.01"
-                min="0"
+                type="text"
+                inputMode="decimal"
                 value={form.fleteUsd}
-                onChange={(e) => setForm({ ...form, fleteUsd: e.target.value })}
+                onChange={(e) => setForm({ ...form, fleteUsd: limpiarDecimal(e.target.value) })}
                 placeholder="0.00"
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
               />
