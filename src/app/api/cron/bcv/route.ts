@@ -1,5 +1,9 @@
 /**
- * Cron diario: trae la tasa oficial BCV (USD y EUR) y la guarda en `tasa_bcv`.
+ * Cron diario: trae dólar oficial, euro oficial y paralelo (ve.dolarapi)
+ * y los guarda en `tasa_bcv`.
+ *
+ * USDT no está en esa fuente ni en la tabla. Hoy no inventa ese número:
+ * la portada deja la fila en «Sin dato» y no calcula la brecha $/USDT.
  *
  * Cron config en vercel.json. También se puede llamar manualmente desde el navegador
  * cuando estés logueado (auth via cookie) o desde otro proceso con CRON_SECRET.
@@ -90,6 +94,8 @@ export async function GET() {
     usdBs,
     eurBs,
     paralelaBs,
+    // El paralelo de dolarapi es el promedio que muestra Hoy. USDT no viene.
+    usdtBs: null,
     guardado: false,
     actualizado: new Date().toISOString(),
   };
