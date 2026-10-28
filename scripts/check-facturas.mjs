@@ -180,6 +180,18 @@ igual("f7 crema L", f7.lineas[2]?.unidadLeida, "L");
 igual("G suelta no es gramos", parseFactura("RIF J-1234567-8\n3 X 4,00\nPAN CANILLA G 12,00").lineas[0]?.unidadLeida, undefined);
 igual("f7 harina sin unidad (1KG es presentación)", f7.lineas[3]?.unidadLeida, undefined);
 
+// ── La coma de la cantidad mal leída por el OCR (tickets térmicos) ──
+const coma = (q) => parseFactura(`EL TORO C.A.\nRIF J-59957472-8\n${q} x 6.170,25\nCARNE (E) 73.395,12\n`).lineas[0];
+igual("coma bien", coma("11,895")?.cantidad, 11.895);
+igual("coma leída como punto", coma("11.895")?.cantidad, 11.895);
+igual("coma leída como espacio", coma("11 895")?.cantidad, 11.895);
+igual("coma perdida", coma("11895")?.cantidad, 11.895);
+igual("coma perdida es peso", coma("11895")?.pesable, true);
+igual("coma perdida precio", coma("11895")?.precioUnit, 6170.25);
+igual("precio sin coma", parseFactura("EL TORO C.A.\nRIF J-59957472-8\n11,895 x 617025\nCARNE (E) 73.395,12\n").lineas[0]?.precioUnit, 6170.25);
+igual("1.000 unidades no se achica", parseFactura("RIF J-1234567-8\n1.000 x 2,50\nSERVILLETAS (G) 2.500,00").lineas[0]?.cantidad, 1000);
+igual("inline coma perdida", parseFactura("RIF J-1234567-8\nCARNE 11895 6.170,25 73.395,12").lineas[0]?.cantidad, 11.895);
+
 // ── Rótulos del resumen mal leídos por el OCR ──
 const f4 = parseFactura(`
 LA GRANJA C.A.

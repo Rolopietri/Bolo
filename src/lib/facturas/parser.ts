@@ -85,13 +85,47 @@ export function normalizarDescripcion(s: string): string {
  *  mil doscientos cincuenta. */
 export function parseCantidad(raw: string): number | null {
   const s = raw.trim();
-  if (/^\d+,\d+$/.test(s)) return Number(s.replace(",", "."));
+  // Un solo separador es decimal, sea coma, punto o espacio: el OCR de los
+  // tickets térmicos suele leer la coma de "11,895" como punto o espacio.
+  if (/^\d+[.,\s]\d+$/.test(s)) return Number(s.replace(/[.,\s]/, "."));
   return parseNumero(s);
+}
+
+/** Corrige una coma perdida o mal leída usando la propia factura: cantidad ×
+ *  precio tiene que dar el monto del renglón. Si no da, prueba correr la coma
+ *  de la cantidad (y, si hace falta, la del precio) hasta que cuadre. */
+export function ajustarCantidad(
+  cantidad: number,
+  precio: number,
+  total: number,
+  /** La cantidad ya venía con su separador decimal: solo se corrige el precio. */
+  cantidadConfiable = false,
+): { cantidad: number; precio: number } {
+  const cuadra = (c: number, p: number) => Math.abs(c * p - total) <= Math.max(0.02, total * 0.005);
+  if (!(cantidad > 0) || !(precio > 0) || !(total > 0) || cuadra(cantidad, precio)) return { cantidad, precio };
+  let mejor = null as { cantidad: number; precio: number; pasos: number } | null;
+  // Si la cantidad trae su coma, primero se intenta corregir solo el precio;
+  // si así no cuadra, se prueba también con la cantidad ("1.000" = mil).
+  const rangos = cantidadConfiable ? [[0, 0], [-4, 3]] : [[-4, 3]];
+  for (const [desde, hasta] of rangos) {
+    for (let kc = desde; kc <= hasta; kc++) {
+      for (let kp = -2; kp <= 0; kp++) {
+        const c = cantidad * 10 ** kc;
+        const p = precio * 10 ** kp;
+        const pasos = Math.abs(kc) + Math.abs(kp);
+        if (cuadra(c, p) && (!mejor || pasos < mejor.pasos)) mejor = { cantidad: c, precio: p, pasos };
+      }
+    }
+    if (mejor) break;
+  }
+  return mejor
+    ? { cantidad: Number(mejor.cantidad.toFixed(6)), precio: Number(mejor.precio.toFixed(6)) }
+    : { cantidad, precio };
 }
 
 /** true si la cantidad está escrita con decimales (es un peso). */
 function escritaConDecimales(raw: string): boolean {
-  return /^\d+[.,]\d+$/.test(raw.trim()) && !/^\d{1,3}\.\d{3}$/.test(raw.trim());
+  return /^\d+[.,\s]\d+$/.test(raw.trim());
 }
 
 /** RIF canónico: letra + dígitos + dígito verificador, sin guiones (J123456789). */
@@ -160,7 +194,7 @@ export function tipoResumen(linea: string): keyof typeof RE_RESUMEN | null {
 // Renglón de cantidad de las máquinas fiscales, encima del producto:
 // "10 x 5.000,00" o "1,1895 X Bs 61.700,00".
 const RE_CANT_X_PRECIO =
-  /^(\d+(?:[.,]\d+)?)\s*(kgs?|kilos?|grs?|g|lts?|l|ml|cc|unds?|unid|un|pzas?)?\.?\s*[x×*]\s*(?:bs\.?\s*|\$\s*)?(\d[\d.,]*)$/i;
+  /^(\d+(?:[.,]\d+|\s\d{3,4})?)\s*(kgs?|kilos?|grs?|g|lts?|l|ml|cc|unds?|unid|un|pzas?)?\.?\s*[x×*]\s*(?:bs\.?\s*|\$\s*)?(\d[\d.,]*)$/i;
 
 function fechaISO(d: number, m: number, a: number): string | undefined {
   const anio = a < 100 ? 2000 + a : a;
@@ -259,6 +293,16 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
         }
       }
     }
+    if (!hallado && previos.length >= 2) {
+      // Puede que el OCR haya perdido la coma de la cantidad o del precio.
+      const aj = ajustarCantidad(previos[0], previos[1], total);
+      if (Math.abs(aj.cantidad * aj.precio - total) <= Math.max(0.02, total * 0.005)) {
+        cantidad = aj.cantidad;
+        precioUnit = aj.precio;
+        hallado = true;
+        if (!Number.isInteger(cantidad)) pesable = true;
+      }
+    }
     if (!hallado) {
       cantidad = cantInicial ?? previos[0];
       precioUnit = cantidad > 0 ? total / cantidad : undefined;
@@ -266,7 +310,10 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
   } else if (finales.length === 2) {
     const [a] = finales;
     if (cantInicial !== null) {
-      precioUnit = a;
+      const aj = ajustarCantidad(cantInicial, a, total);
+      cantidad = aj.cantidad;
+      precioUnit = aj.precio;
+      if (!Number.isInteger(cantidad)) pesable = true;
     } else if (cerca(a * (total / a), total) && a > 0 && a <= 999 && Number.isInteger(a) && a < total) {
       // "HARINA PAN 20 900,00": el primero es la cantidad.
       cantidad = a;
@@ -391,10 +438,11 @@ export function parseFactura(texto: string): FacturaLeida {
     const linea = parseLineaProducto(lineas[i]);
     if (linea && pendiente) {
       // La máquina fiscal pone "cantidad x precio" en el renglón de arriba.
-      linea.cantidad = pendiente.cantidad;
-      linea.precioUnit = pendiente.precio;
+      const aj = ajustarCantidad(pendiente.cantidad, pendiente.precio, linea.total, pendiente.pesable);
+      linea.cantidad = aj.cantidad;
+      linea.precioUnit = aj.precio;
       linea.confianza = "alta";
-      linea.pesable = pendiente.pesable;
+      linea.pesable = pendiente.pesable || !Number.isInteger(aj.cantidad);
       if (pendiente.unidad) linea.unidadLeida = pendiente.unidad;
     }
     pendiente = null;
