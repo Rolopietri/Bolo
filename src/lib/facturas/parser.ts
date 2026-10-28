@@ -23,6 +23,11 @@ export type LineaLeida = {
   /** La cantidad venía escrita con decimales ("1,1895", "10,000"): es una
    *  medida (peso o volumen), no unidades sueltas. */
   pesable: boolean;
+  /** Unidades que trae cada empaque, si el nombre lo dice ("LAT355x24U",
+   *  "600ML x 24 UNID", "CARTON 30 UND" → 24, 24, 30). */
+  porEmpaque?: number;
+  /** Contenido de cada unidad, si el nombre lo dice ("600ML", "1KG"). */
+  contenido?: { valor: number; unidad: string };
   /** Los demás números del renglón (para corregir comas perdidas con el
    *  resumen de la factura). Uso interno del lector. */
   valores?: number[];
@@ -33,6 +38,27 @@ export type LineaLeida = {
 };
 
 export type UnidadLeida = "kg" | "g" | "L" | "ml" | "unidad";
+
+const MEDIDA = "(?:kg|kgs|g|gr|grs|ml|cc|l|lt|lts|oz)";
+
+/** Unidades por empaque escritas en el nombre: "x24", "355X24 UND", "24U",
+ *  "x 24 UNID", "CARTON 30 UND". No confunde la presentación ("x 1 KG"). */
+export function empaqueDe(descripcion: string): number | undefined {
+  const d = descripcion.toLowerCase();
+  const porX = d.match(new RegExp(`x\\s*(\\d{1,3})(?!\\d)(?!\\s*${MEDIDA}\\b)`));
+  const porU = d.match(/(\d{1,3})\s*(?:u|und|unds|unid|unidades|uds?|pz|pzas|pcs)\b/);
+  const n = Number(porX?.[1] ?? porU?.[1]);
+  return n >= 2 ? n : undefined;
+}
+
+/** Contenido de cada unidad escrito en el nombre ("600ML", "1KG", "1,5 L"). */
+export function contenidoDe(descripcion: string): { valor: number; unidad: string } | undefined {
+  const m = descripcion.toLowerCase().match(new RegExp(`(\\d+(?:[.,]\\d+)?)\\s*(${MEDIDA})\\b`));
+  if (!m) return undefined;
+  const valor = Number(m[1].replace(",", "."));
+  const unidad = { kgs: "kg", gr: "g", grs: "g", cc: "ml", lt: "L", lts: "L", l: "L" }[m[2]] ?? m[2];
+  return valor > 0 ? { valor, unidad } : undefined;
+}
 
 /** Reconoce una palabra suelta de unidad ("KG", "Kgs", "GR", "LTS", "UND"). */
 export function unidadDeToken(token: string): UnidadLeida | undefined {
@@ -271,9 +297,16 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
   // Ni empieza con ruido: letras o números sueltos antes de la primera palabra
   // ("ES 1 PEPSI…", "3 Pees LIGHT…").
   while (tokens.length > 1 && (tokens[0].length <= 2 || /^[\d.,]+$/.test(tokens[0]))) tokens.shift();
-  // La descripción no termina en números sueltos ni en ruido de una letra
-  // (son columnas que el OCR no pudo leer bien: "… UND 10 2 0.355 8.52 o").
-  while (tokens.length > 1 && (/^[\d.,]+$/.test(tokens[tokens.length - 1]) || tokens[tokens.length - 1].length <= 1))
+  // El empaque y el contenido se leen del nombre completo, antes de limpiarlo.
+  const nombreCompleto = tokens.join(" ");
+  // La descripción no termina en números sueltos, en ruido de una letra ni en
+  // la columna "1 CJ" (son columnas que el OCR juntó con el nombre).
+  while (
+    tokens.length > 1 &&
+    (/^[\d.,]+$/.test(tokens[tokens.length - 1]) ||
+      tokens[tokens.length - 1].length <= 1 ||
+      /^(cj|cja|caja|cajas|bto|bulto|bultos|paq|fardo|fardos|saco|sacos)$/i.test(tokens[tokens.length - 1]))
+  )
     tokens.pop();
   const descripcion = tokens.join(" ").replace(/\s+/g, " ").trim();
   if ((descripcion.match(/[a-zñ]/gi) ?? []).length < 3) return null;
@@ -366,6 +399,8 @@ export function parseLineaProducto(linea: string): LineaLeida | null {
     confianza: finales.length >= 2 ? "alta" : "baja",
     pesable,
     valores: finales.slice(0, -1),
+    porEmpaque: empaqueDe(nombreCompleto),
+    contenido: contenidoDe(nombreCompleto),
     ...(unidadLeida ? { unidadLeida } : {}),
   };
 }
@@ -623,32 +658,48 @@ export function parecido(a: string, b: string): number {
   return comunes / Math.max(pa.size, pb.size);
 }
 
-/** Sugiere el insumo más parecido a una descripción (por palabras en común).
- *  Solo devuelve una sugerencia si al menos la mitad de las palabras del nombre
- *  del insumo aparecen en la descripción. */
+/** Palabras de solo letras (3 o más), sin los números pegados:
+ *  "LAT355x24U" → "lat". */
+function palabrasDe(s: string): string[] {
+  return normalizarDescripcion(s)
+    .split(/[^a-zñ]+/)
+    .filter((p) => p.length >= 3 && !["del", "con", "para", "los", "las"].includes(p));
+}
+
+/** Dos palabras cuentan como la misma si son iguales, si una empieza con la
+ *  otra ("lat" / "lata") o si difieren en una sola letra ("cero" / "zero"). */
+function mismaPalabra(a: string, b: string): boolean {
+  if (a === b || a.startsWith(b) || b.startsWith(a)) return true;
+  if (a.length < 4 || a.length !== b.length) return false;
+  let distintas = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && ++distintas > 1) return false;
+  return true;
+}
+
+/** Sugiere el insumo más parecido a una descripción (por palabras en común,
+ *  con tolerancia a errores del OCR y a "cero"/"zero"). Solo sugiere si al
+ *  menos la mitad de las palabras del nombre del insumo aparecen. `preferir`
+ *  da un empujón a un insumo (por ejemplo, el que coincide con el empaque de
+ *  la factura) para desempatar entre parecidos. */
 export function sugerirInsumo<T extends { id: string; nombre: string }>(
   descripcion: string,
   insumos: T[],
+  preferir?: (ins: T) => boolean,
 ): T | null {
-  const palabras = new Set(
-    normalizarDescripcion(descripcion)
-      .split(" ")
-      .filter((p) => p.length >= 3 && !/^\d/.test(p)),
-  );
-  if (palabras.size === 0) return null;
+  const palabras = palabrasDe(descripcion);
+  if (palabras.length === 0) return null;
   let mejor: T | null = null;
   let mejorPuntaje = 0;
   for (const ins of insumos) {
-    const delInsumo = normalizarDescripcion(ins.nombre)
-      .split(" ")
-      .filter((p) => p.length >= 3 && !/^\d/.test(p) && !["de", "del", "con", "para"].includes(p));
+    const delInsumo = palabrasDe(ins.nombre);
     if (delInsumo.length === 0) continue;
-    const comunes = delInsumo.filter((p) => palabras.has(p) || [...palabras].some((q) => q.startsWith(p) || p.startsWith(q))).length;
-    const puntaje = comunes / delInsumo.length + comunes * 0.01;
-    if (comunes > 0 && puntaje > mejorPuntaje) {
+    const comunes = delInsumo.filter((p) => palabras.some((q) => mismaPalabra(p, q))).length;
+    if (comunes === 0 || comunes / delInsumo.length < 0.5) continue;
+    const puntaje = comunes / delInsumo.length + comunes * 0.01 + (preferir?.(ins) ? 0.5 : 0);
+    if (puntaje > mejorPuntaje) {
       mejor = ins;
       mejorPuntaje = puntaje;
     }
   }
-  return mejorPuntaje >= 0.5 ? mejor : null;
+  return mejor;
 }

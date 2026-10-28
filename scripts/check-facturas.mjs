@@ -13,6 +13,8 @@ import {
   sugerirInsumo,
   totalProductos,
   parecido,
+  empaqueDe,
+  contenidoDe,
 } from "../src/lib/facturas/parser.ts";
 
 let fallas = 0;
@@ -310,6 +312,34 @@ const insumos = [
 igual("sug azucar", sugerirInsumo("AZUCAR REFINADA 1KG", insumos)?.id, "c");
 igual("sug aceite", sugerirInsumo("ACEITE VATEL 1LT", insumos)?.id, "b");
 igual("sug nada", sugerirInsumo("SERVILLETAS", insumos), null);
+
+// ── Empaque y contenido escritos en el nombre ──
+igual("empaque 355x24U", empaqueDe("PEPSI ZERO LAT355x24U"), 24);
+igual("empaque x 24 UNID", empaqueDe("AGUA MINALBA 600ML x 24 UNID"), 24);
+igual("empaque 355X24 UND", empaqueDe("PEPSI LIGHT LATA 355X24 UND"), 24);
+igual("empaque CARTON 30 UND", empaqueDe("HUEVOS CARTON 30 UND"), 30);
+igual("sin empaque (1KG es presentación)", empaqueDe("HARINA PAN 1KG"), undefined);
+igual("sin empaque (x 1 KG)", empaqueDe("HARINA x 1 KG"), undefined);
+igual("contenido 600ML", contenidoDe("AGUA MINALBA 600ML x 24 UNID")?.valor, 600);
+igual("contenido 1KG", contenidoDe("HARINA PAN 1KG")?.unidad, "kg");
+igual("contenido 1,5 L", contenidoDe("REFRESCO 1,5 L")?.valor, 1.5);
+
+// ── Nombres con tolerancia: "cero"/"zero", "lata"/"LAT355" ──
+const pepsis = [
+  { id: "light", nombre: "PEPSI LIGHT LATA" },
+  { id: "cero", nombre: "PEPSI CERO LATA" },
+];
+igual("sug PEPSI CERO LATA", sugerirInsumo("PEPSI ZERO LAT355x24U", pepsis)?.id, "cero");
+igual("sug light (OCR Pees)", sugerirInsumo("Pees LIGHT LATA 355X24 UND", pepsis)?.id, "light");
+const cajas = [
+  { id: "suelta", nombre: "PEPSI ZERO LATA" },
+  { id: "caja", nombre: "PEPSI ZERO CAJA" },
+];
+const cj = parseFactura("RIF J-1234567-8\n1.- PEPSI ZERO LAT355x24U 1 CJ 24 0.355 8.52 0 18,9741 16.00 0.00 18,97\nHUEVOS CARTON 30 UND 2 5,25 10,50").lineas;
+igual("sin '1 CJ' en el nombre", cj[0]?.descripcion, "PEPSI ZERO LAT355x24U");
+igual("empaque se conserva", cj[0]?.porEmpaque, 24);
+igual("30 UND sigue en el empaque", cj[1]?.porEmpaque, 30);
+igual("prefiere el empaque", sugerirInsumo("PEPSI ZERO LAT355x24U", cajas, (i) => i.id === "caja")?.id, "caja");
 
 if (fallas > 0) {
   console.error(`\n${fallas} prueba(s) del lector de facturas fallaron.`);

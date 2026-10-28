@@ -36,7 +36,7 @@ import {
 import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto } from "@/lib/facturas/ocr";
 import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon, WarningIcon } from "@/components/icons";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
-import { displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
+import { cantidadEnBase, dimension, displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { hoyISO } from "@/lib/ui";
@@ -66,6 +66,9 @@ type Producto = {
   pesable: boolean;
   /** Unidad que la factura escribe junto a la cantidad, si la escribe. */
   unidadLeida?: UnidadLeida;
+  /** Unidades por empaque y contenido de cada una, si el nombre lo dice. */
+  porEmpaque?: number;
+  contenido?: { valor: number; unidad: string };
   origen: Origen;
 };
 
@@ -185,6 +188,46 @@ function proveedorPorNombre(proveedores: Proveedor[], nombre: string): Proveedor
     const q = normalizarDescripcion(p.nombre).replace(quitar, "").trim();
     return q.length >= 3 && (q === n || n.includes(q) || q.includes(n));
   });
+}
+
+/** Cantidad según el empaque que dice la factura y la presentación del
+ *  insumo. "PEPSI ZERO LAT355x24U" × 1: si el insumo es "Caja 24 unidades"
+ *  → 1 caja; si es por lata → 24. "HARINA PAN 1KG" × 20: si el insumo es
+ *  "Bulto 20 kg" → 1 bulto. null si la factura no dice empaque ni contenido. */
+function cantidadPorEmpaque(p: Producto, ins: Insumo): { cantidad: string; unidad: string } | null {
+  if (!p.porEmpaque && !p.contenido) return null;
+  const dimIns = dimension(ins.unidadBase);
+  const opciones = opcionesCantidad(ins);
+  const cpc = ins.cantidadPorCompra ?? 0;
+  let total = 0; // en la unidad base del insumo
+  if (p.contenido && dimIns !== "conteo" && dimension(p.contenido.unidad) === dimIns) {
+    total =
+      (p.cantidadFactura * (p.porEmpaque ?? 1) * cantidadEnBase(p.contenido.valor, p.contenido.unidad)) /
+      cantidadEnBase(1, ins.unidadBase);
+  } else if (dimIns === "conteo" && p.porEmpaque) {
+    total = p.cantidadFactura * p.porEmpaque;
+  }
+  if (!(total > 0)) return null;
+  // Presentaciones enteras del insumo: lo más natural ("1 caja", "1 bulto").
+  if (cpc > 0) {
+    const pres = total / cpc;
+    const clave = opciones.find((o) => Math.abs(o.factor - cpc) < 1e-9)?.key;
+    if (clave && Math.round(pres) >= 1 && Math.abs(pres - Math.round(pres)) < 0.01)
+      return { cantidad: fmtQty(Math.round(pres)), unidad: clave };
+  }
+  // Si no, en la unidad estándar: kg, L o unidades.
+  const estandar = dimIns === "peso" ? "kg" : dimIns === "volumen" ? "L" : "unidad";
+  const op = opciones.find((o) => o.key === estandar) ?? opciones.find((o) => o.factor === 1);
+  return op ? { cantidad: fmtQty(total / op.factor), unidad: op.key } : null;
+}
+
+/** ¿El insumo coincide con el empaque de la factura? (para preferirlo entre
+ *  parecidos: "Pepsi Zero caja 24" antes que "Pepsi Zero lata"). */
+function coincideEmpaque(p: Producto, ins: Insumo): boolean {
+  if (!p.porEmpaque) return false;
+  const n = p.porEmpaque;
+  if (dimension(ins.unidadBase) === "conteo" && ins.cantidadPorCompra === n) return true;
+  return new RegExp(`(^|\\D)${n}(\\D|$)`).test(`${ins.nombre} ${ins.unidadCompra ?? ""}`);
 }
 
 /** Unidad efectiva y conversión de un producto (igual que el formulario manual:
@@ -338,9 +381,16 @@ export function EscanearFactura({
         return { ...p, insumoId: eq.insumoId, cantidad: fmtQty(p.cantidadFactura * eq.factorCantidad), unidad: "", origen: "memoria" };
       }
       if (p.origen === "memoria" || !p.insumoId) {
-        const sug = sugerirInsumo(p.descripcion, insumos);
+        const sug = sugerirInsumo(p.descripcion, insumos, (ins) => coincideEmpaque(p, ins));
+        const porEmpaque = sug ? cantidadPorEmpaque(p, sug) : null;
         return sug
-          ? { ...p, insumoId: sug.id, cantidad: fmtQty(p.cantidadFactura), unidad: "", origen: "sugerido" }
+          ? {
+              ...p,
+              insumoId: sug.id,
+              cantidad: porEmpaque?.cantidad ?? fmtQty(p.cantidadFactura),
+              unidad: porEmpaque?.unidad ?? "",
+              origen: "sugerido",
+            }
           : { ...p, insumoId: "", origen: "" };
       }
       return p;
@@ -421,6 +471,8 @@ export function EscanearFactura({
         monto: String(Number(l.total.toFixed(2))),
         exento: l.exento,
         pesable: l.pesable,
+        porEmpaque: l.porEmpaque,
+        contenido: l.contenido,
         unidadLeida: l.unidadLeida,
         origen: "",
       };
@@ -977,7 +1029,18 @@ export function EscanearFactura({
                     <div className="flex items-center gap-2">
                       <select
                         value={p.insumoId}
-                        onChange={(e) => setProducto(p.key, { insumoId: e.target.value, unidad: "", origen: "" })}
+                        onChange={(e) => {
+                          // Al elegir el insumo a mano, la cantidad se ajusta a su
+                          // presentación si la factura dice el empaque.
+                          const elegido = insumoPorId.get(e.target.value);
+                          const porEmpaque = elegido ? cantidadPorEmpaque(p, elegido) : null;
+                          setProducto(p.key, {
+                            insumoId: e.target.value,
+                            origen: "",
+                            cantidad: porEmpaque?.cantidad ?? (p.descripcion ? fmtQty(p.cantidadFactura) : p.cantidad),
+                            unidad: porEmpaque?.unidad ?? "",
+                          });
+                        }}
                         aria-label="Insumo"
                         className="min-w-0 flex-1 rounded-lg ring-1 ring-marfil px-3 py-2 bg-white text-sm"
                       >
