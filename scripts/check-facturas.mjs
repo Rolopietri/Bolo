@@ -11,6 +11,7 @@ import {
   parseNumero,
   normalizarDescripcion,
   sugerirInsumo,
+  totalProductos,
 } from "../src/lib/facturas/parser.ts";
 
 let fallas = 0;
@@ -75,7 +76,8 @@ igual("f1 l2 precio", f1.lineas[1]?.precioUnit, 120.5);
 igual("f1 l3 exento", f1.lineas[2]?.exento, true);
 igual("f1 l1 exento", f1.lineas[0]?.exento, false);
 igual("f1 l1 confianza", f1.lineas[0]?.confianza, "alta");
-igual("baja confianza", parseFactura("RIF J-1234567-8\nCALLE 5 LOCAL NRO 12,50").lineas[0]?.confianza, "baja");
+igual("baja confianza", parseFactura("RIF J-1234567-8\nHIELO EN BOLSA 12,50").lineas[0]?.confianza, "baja");
+igual("direccion no es producto", parseFactura("RIF J-1234567-8\nCALLE 5 LOCAL NRO 12,50").lineas.length, 0);
 
 // ── Cantidad al inicio, montos en $ ──
 const f2 = parseFactura(`
@@ -96,6 +98,73 @@ igual("f2 l1 cant", f2.lineas[0]?.cantidad, 2);
 igual("f2 l1 desc", f2.lineas[0]?.descripcion, "POLLO ENTERO KG");
 igual("f2 l2 cant", f2.lineas[1]?.cantidad, 12);
 igual("f2 l2 total", f2.lineas[1]?.total, 63);
+
+// ── Máquina fiscal: "cant x precio" arriba, alícuota (G)/(E), BI, IGTF ──
+const f3 = parseFactura(`
+INDUSTRIAS ALIMENTICIAS EL TORO C.A.
+RIF J-59957472-8
+CALLE 3 GALPON 12 ZONA INDUSTRIAL
+FACTURA: 00013574
+FECHA: 08-04-2026 HORA: 10:32
+RIF/C.I.: J-50000000-1
+10 x 5.000,00
+CARNE MOLIDA (G) 50.000,00
+2 X Bs 1.000,00
+HUEVOS (E) 2.000,00
+SUBTTL 52.000,00
+EXENTO 2.000,00
+BI G16,00% 50.000,00
+IVA G16,00% 8.000,00
+TOTAL 60.000,00
+IGTF 3,00% 1.800,00
+TOTAL A PAGAR 61.800,00
+EFECTIVO 61.800,00
+`);
+igual("f3 rif", f3.rif, "J-59957472-8");
+igual("f3 numero", f3.numero, "00013574");
+igual("f3 fecha", f3.fecha, "2026-04-08");
+igual("f3 #lineas", f3.lineas.length, 2);
+igual("f3 l1 desc", f3.lineas[0]?.descripcion, "CARNE MOLIDA");
+igual("f3 l1 cant", f3.lineas[0]?.cantidad, 10);
+igual("f3 l1 total", f3.lineas[0]?.total, 50000);
+igual("f3 l1 confianza", f3.lineas[0]?.confianza, "alta");
+igual("f3 l2 cant", f3.lineas[1]?.cantidad, 2);
+igual("f3 l2 exento", f3.lineas[1]?.exento, true);
+igual("f3 subtotal", f3.subtotal, 52000);
+igual("f3 base", f3.base, 50000);
+igual("f3 iva%", f3.ivaPorc, 16);
+igual("f3 iva", f3.iva, 8000);
+igual("f3 exento", f3.exento, 2000);
+igual("f3 igtf", f3.igtf, 1800);
+igual("f3 total", f3.total, 61800);
+igual("f3 a cuadrar", totalProductos(f3), 60000);
+
+// ── Rótulos del resumen mal leídos por el OCR ──
+const f4 = parseFactura(`
+LA GRANJA C.A.
+RIF J-31234567-0
+POLLO ENTERO 3 4,00 12,00
+QUESO BLANCO 2 5,00 10,00
+SUB-T0TAL 22,00
+1.V.A 16% 3,52
+T0TAL $ 25,52
+MONT0 EN DIVISAS 25,52
+`);
+igual("f4 #lineas", f4.lineas.length, 2);
+igual("f4 subtotal", f4.subtotal, 22);
+igual("f4 iva", f4.iva, 3.52);
+igual("f4 total", f4.total, 25.52);
+
+// ── Un renglón sin rótulo claro con el monto del subtotal no es producto ──
+const f5 = parseFactura(`
+LA GRANJA C.A.
+RIF J-31234567-0
+POLLO ENTERO 3 4,00 12,00
+QUESO BLANCO 2 5,00 10,00
+SUMA 22,00
+SUBTOTAL 22,00
+`);
+igual("f5 #lineas", f5.lineas.length, 2);
 
 // ── Errores típicos del OCR: "N°" leído como "N*" ──
 igual("ocr N*", parseFactura("FACTURA N* 00012345").numero, "00012345");
