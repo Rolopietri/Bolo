@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalculatorIcon } from "@/components/icons";
+import { CalculatorIcon, ChevronIcon } from "@/components/icons";
 import { getTasaBcvActual } from "@/lib/data/cocina";
 import { extractError } from "@/lib/data/error";
 import type { TasaBcv } from "@/lib/types";
@@ -90,6 +90,7 @@ export function BcvRateBanner() {
   const [preferida, setPreferida] = useState<IdTasa>("bcv");
   const [customTexto, setCustomTexto] = useState("");
   const [prefsListas, setPrefsListas] = useState(false);
+  const [listaAbierta, setListaAbierta] = useState(false);
 
   async function cargar(forzar: boolean) {
     let guardada: TasaBcv | null = null;
@@ -205,31 +206,46 @@ export function BcvRateBanner() {
   const meta = META_TASA[activa];
 
   return (
-    <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-      <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5" aria-label="Tasas del día">
+    <div className="grid items-start gap-3 md:grid-cols-2">
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5" aria-label="Tasa de cambio">
         <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="font-display text-[11px] tracking-[0.3em] text-cacao-mute">Tasas</p>
-            <p className="mt-1 text-sm text-cacao-soft">
-              {cotizacion ? fechaTasaLegible(cotizacion.fecha) : "Elige la que usa la calculadora."}
-            </p>
+          <p className="font-display text-[11px] tracking-[0.3em] text-cacao-mute">Tasa de cambio</p>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              aria-expanded={listaAbierta}
+              onClick={() => setListaAbierta((v) => !v)}
+              className="inline-flex items-center gap-1 rounded-full bg-naranja-soft/80 px-3 py-1 text-xs font-semibold uppercase tracking-widest text-terracotta hover:bg-naranja-soft"
+            >
+              Tasas
+              <ChevronIcon className={`size-4 transition ${listaAbierta ? "-rotate-90" : "rotate-90"}`} />
+            </button>
+            <button
+              type="button"
+              onClick={reintentar}
+              disabled={estado === "cargando"}
+              className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao disabled:opacity-50"
+            >
+              {estado === "cargando" ? "Actualizando…" : "Actualizar"}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={reintentar}
-            disabled={estado === "cargando"}
-            className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao disabled:opacity-50"
-          >
-            {estado === "cargando" ? "Actualizando…" : "Actualizar"}
-          </button>
         </div>
 
-        {estado === "cargando" && !cotizacion ? (
-          <p className="mt-4 text-sm text-cacao-soft">Buscando las tasas…</p>
-        ) : null}
-
-        {estado === "error" && !cotizacion ? (
-          <div className="mt-4">
+        {valor != null && valor > 0 ? (
+          <div className="mt-2">
+            <p className="font-cinzel text-3xl leading-none text-cacao">
+              Bs {formatoTasa(valor)}
+              <span className="ml-2 font-sans text-sm font-semibold text-cacao-soft">/ {meta.unidad}</span>
+            </p>
+            <p className="mt-2 text-sm text-cacao-soft">
+              {meta.nombre} · En calculadora
+              {cotizacion ? ` · ${fechaTasaLegible(cotizacion.fecha)}` : ""}
+            </p>
+          </div>
+        ) : estado === "cargando" ? (
+          <p className="mt-3 text-sm text-cacao-soft">Buscando las tasas…</p>
+        ) : estado === "error" && !cotizacion ? (
+          <div className="mt-3">
             <p className="text-sm text-[#7A2419]">
               No se pudieron consultar las tasas.{" "}
               <button type="button" onClick={reintentar} className="underline hover:text-cacao">
@@ -240,9 +256,16 @@ export function BcvRateBanner() {
               <p className="mt-1 text-xs text-cacao-mute break-words">{detalleTasa(error)}</p>
             ) : null}
           </div>
-        ) : null}
+        ) : (
+          <p className="mt-3 text-sm text-cacao">
+            {activa === "personalizada"
+              ? "Escribe tu tasa en Tasas."
+              : "Todavía no hay una tasa para mostrar."}
+          </p>
+        )}
 
-        <ul className="mt-3 space-y-2">
+        {listaAbierta ? (
+          <ul className="mt-4 space-y-2">
           <FilaTasa
             nombre="Dólar BCV"
             nota="Oficial"
@@ -296,11 +319,14 @@ export function BcvRateBanner() {
               />
             </label>
           </li>
-        </ul>
+          </ul>
+        ) : null}
 
-        <p className="mt-3 text-xs text-cacao-mute">
-          La brecha con USDT no se calcula: esa tasa no está en la consulta del BCV ni del paralelo.
-        </p>
+        {listaAbierta ? (
+          <p className="mt-3 text-xs text-cacao-mute">
+            La brecha con USDT no se calcula: esa tasa no está en la consulta del BCV ni del paralelo.
+          </p>
+        ) : null}
         {nota ? <p className="mt-2 text-xs text-cacao-soft">{nota}</p> : null}
       </section>
 
