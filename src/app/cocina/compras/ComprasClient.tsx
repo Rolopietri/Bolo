@@ -27,7 +27,7 @@ import {
   getTasaBcvPorFecha,
 } from "@/lib/data/cocina";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { CalendarIcon, ChevronIcon, WarningIcon } from "@/components/icons";
+import { CalendarIcon, CameraIcon, ChevronIcon, WarningIcon } from "@/components/icons";
 import { displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { hoyISO } from "@/lib/ui";
@@ -35,6 +35,7 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
+import { EscanearFactura } from "./_EscanearFactura";
 
 type FormState = {
   insumoId: string;
@@ -136,6 +137,8 @@ export function ComprasClient() {
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
   const [adding, setAdding] = useState(false);
+  // Escáner de facturas (la forma principal de registrar compras).
+  const [escaneando, setEscaneando] = useState(false);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
   // Edición de una compra existente (null = alta nueva).
@@ -269,6 +272,7 @@ export function ComprasClient() {
   // en USD (que es el canónico ya con IVA) con ivaModo="con", así al guardar
   // queda igual salvo lo que cambies.
   function startEdit(c: Compra) {
+    setEscaneando(false);
     setEditingId(c.id);
     setAdding(true);
     setError(null);
@@ -691,6 +695,17 @@ export function ComprasClient() {
     }
   }
 
+  // Abre el formulario manual. Prefijamos la tasa BCV $ del día (modalidad
+  // default: USD divisa) para que el convertidor Bs↔$ funcione desde el inicio.
+  function abrirManual() {
+    setForm({
+      ...emptyForm,
+      fecha: todayISO(),
+      tasaBcvUsada: tasa ? String(tasa.usdBs) : "",
+    });
+    setAdding(true);
+  }
+
   // Auto-rellenar la tasa del día cuando cambia la modalidad. Todas las
   // modalidades reciben una tasa sugerida (las de USD usan la BCV $) para que el
   // convertidor Bs↔$ funcione siempre. Recalcula el monto derivado con la tasa
@@ -712,22 +727,45 @@ export function ComprasClient() {
     <div>
       {error && <ErrorBanner className="mb-4">{error}</ErrorBanner>}
 
-      {!adding && (
-        <button
-          onClick={() => {
-            // Prefijamos la tasa BCV $ del día (modalidad default: USD divisa)
-            // para que el convertidor Bs↔$ funcione desde el inicio.
-            setForm({
-              ...emptyForm,
-              fecha: todayISO(),
-              tasaBcvUsada: tasa ? String(tasa.usdBs) : "",
-            });
-            setAdding(true);
+      {escaneando && (
+        <EscanearFactura
+          insumos={insumos}
+          proveedores={proveedores}
+          compras={compras}
+          onProveedorCreado={(p) =>
+            setProveedores((prev) => [...prev, p].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+          }
+          onGuardado={async (nuevas) => {
+            setCompras((prev) => [...nuevas, ...prev]);
+            setEscaneando(false);
+            // Recargar insumos para reflejar el stock y precio actualizados.
+            setInsumos(await listInsumos());
           }}
-          className="w-full mb-5 rounded-xl bg-cacao text-white py-3 font-medium hover:bg-terracotta transition-colors"
-        >
-          + Registrar nueva compra
-        </button>
+          onCancelar={() => setEscaneando(false)}
+          onManual={() => {
+            setEscaneando(false);
+            abrirManual();
+          }}
+        />
+      )}
+
+      {!adding && !escaneando && (
+        <div className="mb-5">
+          <button
+            onClick={() => setEscaneando(true)}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-cacao text-white py-3 font-medium hover:bg-terracotta transition-colors"
+          >
+            <CameraIcon className="size-5" />
+            Escanear factura
+          </button>
+          {/* Contingencia: el registro manual de siempre, línea por línea. */}
+          <button
+            onClick={abrirManual}
+            className="mt-2 w-full text-center text-xs text-cacao-soft underline hover:text-cacao"
+          >
+            o registrar una compra a mano
+          </button>
+        </div>
       )}
 
       {adding && (

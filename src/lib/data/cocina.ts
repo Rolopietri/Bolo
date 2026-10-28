@@ -26,6 +26,8 @@ type ProveedorRow = {
   acepta_usd_divisa: boolean;
   notas: string | null;
   activo: boolean;
+  /** Solo existe tras cocina-factura-equivalencias.sql. */
+  rif?: string | null;
 };
 
 function rowToProveedor(r: ProveedorRow): Proveedor {
@@ -42,6 +44,7 @@ function rowToProveedor(r: ProveedorRow): Proveedor {
     aceptaUsdDivisa: r.acepta_usd_divisa,
     notas: r.notas ?? undefined,
     activo: r.activo,
+    rif: r.rif ?? undefined,
   };
 }
 
@@ -503,6 +506,37 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
     .single();
   if (error) throw error;
   return rowToCompra(data as CompraRow);
+}
+
+/** Registra TODAS las líneas de una factura en un solo insert: o entran todas o
+ *  ninguna (no queda una factura a medias). Cada fila dispara los mismos triggers
+ *  de stock y precio que una compra hecha a mano. */
+export async function createComprasLote(inputs: CompraInput[]): Promise<Compra[]> {
+  if (inputs.length === 0) return [];
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb
+    .from("compras")
+    .insert(
+      inputs.map((input) => ({
+        insumo_id: input.insumoId,
+        proveedor_id: input.proveedorId ?? null,
+        fecha: input.fecha,
+        cantidad: input.cantidad,
+        precio_total_usd: input.precioTotalUsd,
+        precio_total_bs: input.precioTotalBs ?? null,
+        tasa_bcv_usada: input.tasaBcvUsada ?? null,
+        modalidad_pago: input.modalidadPago ?? null,
+        notas: input.notas ?? null,
+        numero_factura: input.numeroFactura?.trim() || null,
+        flete_usd: input.fleteUsd ?? null,
+        pagada: input.pagada ?? true,
+        fecha_pago:
+          input.pagada === false ? null : (input.fechaPago ?? input.fecha),
+      })),
+    )
+    .select("*");
+  if (error) throw error;
+  return ((data ?? []) as CompraRow[]).map(rowToCompra);
 }
 
 /**

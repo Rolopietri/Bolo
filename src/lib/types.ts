@@ -419,6 +419,9 @@ export type Proveedor = {
   aceptaUsdDivisa: boolean;
   notas?: string;
   activo: boolean;
+  /** RIF fiscal (J-12345678-9). Lo usa el lector de facturas para reconocer
+   *  al proveedor solo. */
+  rif?: string;
 };
 
 export type Insumo = {
