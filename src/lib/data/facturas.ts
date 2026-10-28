@@ -98,5 +98,17 @@ export function proveedorPorRif<T extends { rif?: string }>(
 ): T | undefined {
   if (!rif) return undefined;
   const buscado = normalizarRif(rif);
-  return proveedores.find((p) => p.rif && normalizarRif(p.rif) === buscado);
+  const exacto = proveedores.find((p) => p.rif && normalizarRif(p.rif) === buscado);
+  if (exacto) return exacto;
+  // El OCR suele confundir UN dígito (3↔8, 1↔7): se acepta si solo hay un
+  // proveedor a esa distancia, para no confundir dos parecidos.
+  const cercanos = proveedores.filter((p) => {
+    if (!p.rif) return false;
+    const r = normalizarRif(p.rif);
+    if (r.length !== buscado.length || r[0] !== buscado[0]) return false;
+    let distintos = 0;
+    for (let i = 0; i < r.length; i++) if (r[i] !== buscado[i]) distintos++;
+    return distintos === 1;
+  });
+  return cercanos.length === 1 ? cercanos[0] : undefined;
 }

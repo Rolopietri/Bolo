@@ -23,9 +23,9 @@ import {
   setProveedorRif,
   type Equivalencia,
 } from "@/lib/data/facturas";
-import { normalizarDescripcion, parseFactura, sugerirInsumo } from "@/lib/facturas/parser";
+import { normalizarDescripcion, parseFactura, sugerirInsumo, totalProductos, type FacturaLeida } from "@/lib/facturas/parser";
 import { leerFactura } from "@/lib/facturas/ocr";
-import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, TrashIcon, WarningIcon } from "@/components/icons";
+import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon, WarningIcon } from "@/components/icons";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -70,7 +70,9 @@ type Cabecera = {
   pagarDespues: boolean;
 };
 
-type Leido = { nombre: string; rif: string; total?: number };
+/** Lo leído de la factura que no va en el formulario: sirve para reconocer
+ *  al proveedor y para cuadrar contra la fórmula impresa. */
+type Leido = { nombre: string; rif: string; resumen: Pick<FacturaLeida, "subtotal" | "base" | "iva" | "exento" | "igtf" | "descuento" | "total" | "ivaPorc"> };
 
 const cabeceraVacia: Cabecera = {
   proveedorId: "",
@@ -105,6 +107,51 @@ function fmtMonto(n: number, moneda: "bs" | "usd"): string {
   return moneda === "bs" ? `Bs ${s}` : `$${s}`;
 }
 
+/** La fórmula impresa en la factura (subtotal, base, IVA, exento, IGTF, total),
+ *  solo de lectura, para comparar con lo que se va a guardar. */
+function ResumenFactura({
+  resumen,
+  moneda,
+  cuadra,
+}: {
+  resumen: Leido["resumen"];
+  moneda: "bs" | "usd";
+  cuadra: boolean | null;
+}) {
+  const partes: [string, number | undefined][] = [
+    ["Subtotal", resumen.subtotal],
+    ["Descuento", resumen.descuento],
+    ["Exento", resumen.exento],
+    ["Base imponible", resumen.base],
+    [`IVA${resumen.ivaPorc ? ` ${resumen.ivaPorc}%` : ""}`, resumen.iva],
+    ["IGTF", resumen.igtf],
+    ["Total", resumen.total],
+  ];
+  const visibles = partes.filter((x): x is [string, number] => x[1] !== undefined);
+  if (visibles.length === 0) return null;
+  return (
+    <div className="mt-2 border-t border-marfil pt-2 text-xs">
+      <span className="text-cacao-mute">Según la factura:</span>
+      <dl className="mt-1 grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-cacao-soft">
+        {visibles.map(([nombre, valor]) => (
+          <div key={nombre} className="contents">
+            <dt>{nombre}</dt>
+            <dd className="text-right tabular-nums">{fmtMonto(valor, moneda)}</dd>
+          </div>
+        ))}
+      </dl>
+      {cuadra !== null && (
+        <span className={`mt-1 block ${cuadra ? "text-oliva" : "text-terracotta font-medium"}`}>
+          {!cuadra && <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />}
+          {cuadra
+            ? "Los productos cuadran con la factura."
+            : `Los productos no cuadran con la factura${resumen.igtf ? " (sin contar el IGTF)" : ""}: revisa montos o si falta alguno.`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function modalidadesQueAcepta(p: Proveedor): ModalidadPago[] {
   const acepta: Record<ModalidadPago, boolean> = {
     bcv_dolar: p.aceptaBsBcvDolar,
@@ -129,14 +176,25 @@ function proveedorPorNombre(proveedores: Proveedor[], nombre: string): Proveedor
 
 /** Unidad efectiva y conversión de un producto (igual que el formulario manual:
  *  la cantidad se escribe en la unidad que se tenga a mano y se guarda en
- *  unidades de compra). */
-function conversion(p: Producto, ins: Insumo | undefined) {
+ *  unidades de compra).
+ *
+ *  Si nadie eligió la unidad y no hay memoria, se adivina: la factura puede
+ *  decir "10" en kilos y el insumo comprarse por bolsa de 10 kg. Se toma la
+ *  unidad con la que el precio queda más parecido al precio actual del insumo
+ *  (`usd` = lo que se pagó por ese producto). */
+function conversion(p: Producto, ins: Insumo | undefined, usd = 0) {
   if (!ins) return { opciones: [], unidad: "", enBase: 0, enCompra: Number(p.cantidad) || 0 };
   const opciones = opcionesCantidad(ins);
   const cpc = ins.cantidadPorCompra ?? 0;
-  const unidad = opciones.some((o) => o.key === p.unidad)
+  const cant = Number(p.cantidad) || 0;
+  let unidad = opciones.some((o) => o.key === p.unidad)
     ? p.unidad
     : (opciones.find((o) => Math.abs(o.factor - cpc) < 1e-9)?.key ?? opciones[0]?.key ?? "");
+  const actual = ins.precioBaseUsd ?? 0;
+  if (p.unidad === "" && p.origen !== "memoria" && usd > 0 && cant > 0 && actual > 0 && opciones.length > 1) {
+    const distancia = (factor: number) => Math.abs(Math.log(usd / (cant * factor) / actual));
+    unidad = opciones.reduce((mejor, o) => (distancia(o.factor) < distancia(factorDe(opciones, mejor)) ? o.key : mejor), unidad);
+  }
   const enBase = (Number(p.cantidad) || 0) * factorDe(opciones, unidad);
   const enCompra = cpc > 0 ? enBase / cpc : Number(p.cantidad) || 0;
   return { opciones, unidad, enBase, enCompra };
@@ -164,7 +222,11 @@ export function EscanearFactura({
   const [progreso, setProgreso] = useState<{ etapa: string; pct: number }>({ etapa: "", pct: 0 });
   const [texto, setTexto] = useState("");
   const [cab, setCab] = useState<Cabecera>(cabeceraVacia);
-  const [leido, setLeido] = useState<Leido>({ nombre: "", rif: "" });
+  const [leido, setLeido] = useState<Leido>({ nombre: "", rif: "", resumen: {} });
+  /** La foto, solo en la memoria del teléfono (nunca se sube). */
+  const [fotoUrl, setFotoUrl] = useState<string | null>(null);
+  const [verFoto, setVerFoto] = useState(false);
+  const [zoom, setZoom] = useState(false);
   const [productos, setProductos] = useState<Producto[]>([]);
   /** Renglones leídos que no parecen productos: se pueden rescatar. */
   const [otras, setOtras] = useState<Producto[]>([]);
@@ -180,6 +242,13 @@ export function EscanearFactura({
   const galeriaRef = useRef<HTMLInputElement>(null);
 
   const insumoPorId = useMemo(() => new Map(insumos.map((i) => [i.id, i])), [insumos]);
+
+  // Liberar la foto de la memoria al cambiarla o al cerrar.
+  useEffect(() => {
+    return () => {
+      if (fotoUrl) URL.revokeObjectURL(fotoUrl);
+    };
+  }, [fotoUrl]);
 
   // La tasa sigue la FECHA de la factura (como el formulario manual).
   useEffect(() => {
@@ -275,7 +344,11 @@ export function EscanearFactura({
     const prov =
       proveedorPorRif(proveedores, f.rif) ?? (f.proveedorNombre ? proveedorPorNombre(proveedores, f.proveedorNombre) : undefined);
     const moneda = f.moneda ?? "bs";
-    setLeido({ nombre: f.proveedorNombre ?? "", rif: f.rif ?? "", total: f.total });
+    setLeido({
+      nombre: f.proveedorNombre ?? "",
+      rif: f.rif ?? "",
+      resumen: { subtotal: f.subtotal, base: f.base, iva: f.iva, exento: f.exento, igtf: f.igtf, descuento: f.descuento, total: f.total, ivaPorc: f.ivaPorc },
+    });
     setCab({
       ...cabeceraVacia,
       fecha: f.fecha ?? hoyISO(),
@@ -283,12 +356,14 @@ export function EscanearFactura({
       modalidadPago: moneda === "bs" ? "bcv_dolar" : "divisa",
       // Si la factura muestra el IVA aparte, los montos de los productos son
       // la base: "Sin IVA" (el sistema lo suma). Si no, ya lo traen.
-      ivaModo: f.iva !== undefined || f.ivaPorc !== undefined ? "sin" : "con",
+      ivaModo: f.iva !== undefined || f.base !== undefined || f.ivaPorc !== undefined ? "sin" : "con",
       ivaPorc: String(f.ivaPorc ?? 16),
       numeroFactura: f.numero ?? "",
     });
-    setCreandoProveedor(!prov && !!f.proveedorNombre);
-    setNuevoProveedor(prov ? "" : (f.proveedorNombre ?? ""));
+    // Si no se reconoce, el proveedor queda en blanco (el nombre leído solo se
+    // propone si la persona elige "+ Nuevo proveedor…").
+    setCreandoProveedor(false);
+    setNuevoProveedor("");
     const confianza = new Map<string, "alta" | "baja">();
     const base: Producto[] = f.lineas.map((l) => {
       const key = nuevaKey();
@@ -314,6 +389,7 @@ export function EscanearFactura({
   async function leerFoto(archivo: File | undefined) {
     if (!archivo) return;
     setError(null);
+    setFotoUrl(URL.createObjectURL(archivo));
     setPaso("leyendo");
     setProgreso({ etapa: "Limpiando la foto", pct: 0 });
     try {
@@ -337,7 +413,10 @@ export function EscanearFactura({
   function elegirOrigen(origen: string) {
     if (origen === "foto") fotoRef.current?.click();
     else if (origen === "galeria") galeriaRef.current?.click();
-    else setPaso("pegar");
+    else {
+      setFotoUrl(null); // el texto pegado no trae foto
+      setPaso("pegar");
+    }
   }
 
   function setProducto(key: string, patch: Partial<Producto>) {
@@ -386,10 +465,9 @@ export function EscanearFactura({
 
   const totalMoneda = productos.reduce((s, p) => s + costo(p).enMoneda, 0);
   const totalUsd = productos.reduce((s, p) => s + costo(p).usd, 0);
+  const esperado = totalProductos(leido.resumen);
   const cuadra =
-    leido.total === undefined || !(leido.total > 0)
-      ? null
-      : Math.abs(totalMoneda - leido.total) <= Math.max(0.05, leido.total * 0.01);
+    esperado === undefined ? null : Math.abs(totalMoneda - esperado) <= Math.max(0.05, esperado * 0.01);
 
   // Una factura se paga completa: si ya existe, los productos heredan su estado.
   const facturaLock = useMemo(() => {
@@ -408,8 +486,8 @@ export function EscanearFactura({
   /** Precio por unidad que deja el producto, frente al actual del insumo. */
   function precioInfo(p: Producto) {
     const ins = insumoPorId.get(p.insumoId);
-    const { enBase } = conversion(p, ins);
     const usd = costo(p).usd;
+    const { enBase } = conversion(p, ins, usd);
     if (!ins || !(enBase > 0) || !(usd > 0)) return null;
     const nuevo = usd / enBase;
     const actual = ins.precioBaseUsd ?? null;
@@ -432,7 +510,7 @@ export function EscanearFactura({
       setError("Elige el insumo de cada producto, o quítalo con el botón de la papelera.");
       return;
     }
-    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId)).enCompra > 0))) {
+    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra > 0))) {
       setError("Cada producto necesita una cantidad y un monto mayores que cero.");
       return;
     }
@@ -443,9 +521,9 @@ export function EscanearFactura({
     if (!confirmado) {
       const a: string[] = [];
       if (facturaLock) a.push(`La factura ${cab.numeroFactura} de este proveedor ya tiene compras registradas (${fmtFecha(facturaLock.fecha)}).`);
-      if (cuadra === false && leido.total)
+      if (cuadra === false && esperado !== undefined)
         a.push(
-          `La suma (${fmtMonto(totalMoneda, cab.moneda)}) no coincide con el total impreso en la factura (${fmtMonto(leido.total, cab.moneda)}). Puede faltar un producto o haber un monto mal leído.`,
+          `La suma (${fmtMonto(totalMoneda, cab.moneda)}) no coincide con la factura (${fmtMonto(esperado, cab.moneda)}). Puede faltar un producto o haber un monto mal leído.`,
         );
       for (const p of productos) {
         const info = precioInfo(p);
@@ -467,7 +545,7 @@ export function EscanearFactura({
       const flete = Number(cab.fleteUsd) > 0 ? Number(cab.fleteUsd) : undefined;
       const inputs: CompraInput[] = productos.map((p, i) => {
         const c = costo(p);
-        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId));
+        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId), c.usd);
         return {
           insumoId: p.insumoId,
           proveedorId: cab.proveedorId || undefined,
@@ -491,7 +569,7 @@ export function EscanearFactura({
           productos.map((p) => ({
             descripcion: p.descripcion,
             insumoId: p.insumoId,
-            factorCantidad: conversion(p, insumoPorId.get(p.insumoId)).enCompra / (p.cantidadFactura || 1),
+            factorCantidad: conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra / (p.cantidadFactura || 1),
           })),
           memoria,
         );
@@ -612,8 +690,61 @@ export function EscanearFactura({
         </div>
       )}
 
-      {paso === "formulario" && (
+      {paso === "formulario" && fotoUrl && (
         <>
+          {/* La foto, para comparar mientras se confirma. En pantallas anchas va
+              al lado del formulario; en el teléfono, como miniatura fija. */}
+          <button
+            type="button"
+            onClick={() => setVerFoto(true)}
+            className="sticky top-2 z-10 flex w-full items-center gap-2.5 rounded-lg bg-white/95 ring-1 ring-marfil px-2 py-1.5 text-left shadow-sm backdrop-blur lg:hidden"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- foto local (blob:), no pasa por el optimizador */}
+            <img src={fotoUrl} alt="Factura" className="h-9 w-7 shrink-0 rounded object-cover ring-1 ring-marfil" />
+            <span className="text-sm text-cacao">Ver la factura</span>
+            <SearchIcon className="ml-auto size-4 text-cacao-soft" />
+          </button>
+          {verFoto && (
+            <div role="dialog" aria-label="Foto de la factura" className="fixed inset-0 z-50 flex flex-col bg-black/90">
+              <div className="flex items-center justify-between gap-3 p-3 text-white">
+                <button type="button" onClick={() => setZoom((z) => !z)} className="rounded-lg ring-1 ring-white/40 px-3 py-1.5 text-sm">
+                  {zoom ? "Ver completa" : "Acercar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVerFoto(false)}
+                  aria-label="Cerrar la foto"
+                  className="rounded-lg bg-white px-4 py-1.5 text-sm font-medium text-cacao"
+                >
+                  Volver al formulario
+                </button>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto">
+                {/* eslint-disable-next-line @next/next/no-img-element -- foto local (blob:) */}
+                <img
+                  src={fotoUrl}
+                  alt="Factura"
+                  onClick={() => setZoom((z) => !z)}
+                  className={zoom ? "max-w-none" : "mx-auto h-full w-auto max-w-full object-contain"}
+                  style={zoom ? { width: "250%" } : undefined}
+                />
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {paso === "formulario" && (
+        <div className={fotoUrl ? "lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:gap-6" : ""}>
+          {fotoUrl && (
+            <aside className="hidden lg:block">
+              <div className="sticky top-4 max-h-[85vh] overflow-auto rounded-lg ring-1 ring-marfil">
+                {/* eslint-disable-next-line @next/next/no-img-element -- foto local (blob:) */}
+                <img src={fotoUrl} alt="Factura" className="w-full cursor-zoom-in" onClick={() => setVerFoto(true)} />
+              </div>
+            </aside>
+          )}
+          <div className="space-y-3">
           {/* ── Datos de la factura (una sola vez) — mismos campos y orden que
               el formulario manual. ── */}
           <label className="text-sm text-cacao block">
@@ -783,7 +914,7 @@ export function EscanearFactura({
             <ul className="mt-1 divide-y divide-marfil">
               {productos.map((p) => {
                 const ins = insumoPorId.get(p.insumoId);
-                const conv = conversion(p, ins);
+                const conv = conversion(p, ins, costo(p).usd);
                 const info = precioInfo(p);
                 return (
                   <li key={p.key} className="py-3 space-y-1.5">
@@ -824,7 +955,7 @@ export function EscanearFactura({
                                 unidad: u,
                                 cantidad: p.cantidad.trim() === "" ? "" : fmtQty(conv.enBase / f),
                               });
-                            } else setProducto(p.key, { cantidad: v });
+                            } else setProducto(p.key, { cantidad: v, unidad: conv.unidad });
                           }}
                         />
                       ) : (
@@ -927,12 +1058,7 @@ export function EscanearFactura({
               <span className="text-cacao font-medium">${totalUsd.toFixed(2)}</span>
               {cab.moneda === "bs" && <span className="text-cacao-soft"> · {fmtMonto(totalMoneda, "bs")}</span>}
               {cab.ivaModo === "sin" && <span className="text-cacao-mute"> · incluye IVA {Number(cab.ivaPorc) || 0}%</span>}
-              {cuadra !== null && leido.total !== undefined && (
-                <span className={`block mt-1 text-xs ${cuadra ? "text-oliva" : "text-terracotta font-medium"}`}>
-                  {!cuadra && <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />}
-                  Total impreso en la factura: {fmtMonto(leido.total, cab.moneda)} · {cuadra ? "cuadra" : "no cuadra"}
-                </span>
-              )}
+              <ResumenFactura resumen={leido.resumen} moneda={cab.moneda} cuadra={cuadra} />
             </div>
           )}
 
@@ -1016,7 +1142,8 @@ export function EscanearFactura({
               para poder registrar la factura.
             </p>
           )}
-        </>
+          </div>
+        </div>
       )}
     </div>
   );
