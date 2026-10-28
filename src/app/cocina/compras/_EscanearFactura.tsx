@@ -32,7 +32,7 @@ import {
   type FacturaLeida,
   type UnidadLeida,
 } from "@/lib/facturas/parser";
-import { leerFactura } from "@/lib/facturas/ocr";
+import { FotoIlegible, leerFactura, prepararFoto } from "@/lib/facturas/ocr";
 import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon, WarningIcon } from "@/components/icons";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
@@ -415,11 +415,13 @@ export function EscanearFactura({
   async function leerFoto(archivo: File | undefined) {
     if (!archivo) return;
     setError(null);
-    setFotoUrl(URL.createObjectURL(archivo));
     setPaso("leyendo");
-    setProgreso({ etapa: "Limpiando la foto", pct: 0 });
+    setProgreso({ etapa: "Preparando la foto", pct: 0 });
     try {
-      const t = await leerFactura(archivo, (etapa, pct) => setProgreso({ etapa, pct }));
+      // HEIC (iPhone) se convierte a JPG aquí; sirve para leer y para mostrar.
+      const foto = await prepararFoto(archivo);
+      setFotoUrl(URL.createObjectURL(foto));
+      const t = await leerFactura(foto, (etapa, pct) => setProgreso({ etapa, pct }));
       setTexto(t);
       if (!t.trim()) {
         setError("No se pudo leer texto en la foto. Prueba con más luz, la factura plana y completa.");
@@ -429,8 +431,9 @@ export function EscanearFactura({
       await aplicarTexto(t);
     } catch (e) {
       setError(
-        extractError(e, "No se pudo leer la foto.") +
-          " Si es la primera vez, el teléfono necesita internet para descargar el lector.",
+        e instanceof FotoIlegible
+          ? e.message
+          : `No se pudo cargar el lector de facturas. La primera vez necesita internet para descargarlo (unos MB). Detalle: ${extractError(e, "error desconocido")}`,
       );
       setPaso("origen");
     }
@@ -642,7 +645,7 @@ export function EscanearFactura({
       <input
         ref={fotoRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif"
         capture="environment"
         className="hidden"
         onChange={(e) => {
@@ -653,7 +656,7 @@ export function EscanearFactura({
       <input
         ref={galeriaRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.heic,.heif,.pdf"
         className="hidden"
         onChange={(e) => {
           void leerFoto(e.target.files?.[0]);
@@ -669,7 +672,7 @@ export function EscanearFactura({
           <ul className="mt-2 divide-y divide-marfil">
             {[
               { icono: CameraIcon, titulo: "Tomar foto", detalle: "Factura plana, con buena luz y completa", accion: "foto" },
-              { icono: ImageIcon, titulo: "Elegir de la galería", detalle: "Una foto que ya tomaste", accion: "galeria" },
+              { icono: ImageIcon, titulo: "Elegir una foto", detalle: "De la galería del teléfono o de la computadora", accion: "galeria" },
               { icono: DocIcon, titulo: "Pegar el texto", detalle: "Si ya tienes el texto de la factura", accion: "pegar" },
             ].map(({ icono: Icono, titulo, detalle, accion }) => (
               <li key={titulo}>
