@@ -233,7 +233,7 @@ const RE_RESUMEN = {
   flete: /\bflete\b|\bdelivery\b|\benv[ií]o\b|\bshipping\b|\bfreight\b|\btransporte\b|\bdespacho\s+a\s+domicilio\b/i,
   base: /(?:^|\s)b\.?\s?[i1l]\.?(?=\s|$)|\bbi\s*[gra]\s*\d|\bbase\b|\bimp[o0]nible\b|\bgravad[oa]\b|\bgravable\b|\btaxable\b|\bafect[oa]\b/i,
   exento: /\bexent[oa]s?\b|\bexoner|\binafect[oa]\b|\bno\s+gravad|\bno\s+sujet|\btax\s*exempt\b|\bexempt\b|\bzero\s*rated\b/i,
-  iva: /\b[i1l]\.?\s*v\.?\s*[a4](?:\b|[gra]\s*\()|(?:^|\s)v\.?\s*a\s*\d{1,2}(?:[.,]\d+)?\s*%|\bimpuestos?\b|\bal[ií1l]cu[o0]ta\b|%\s*sobre\b|\bigv\b|\bitbis\b|\bitbms\b|\bisv\b|\bvat\b|\b(?:sales\s*)?tax\b|\bgst\b|\bhst\b|\bmwst\b|\btva\b|\bbtw\b/i,
+  iva: /\b[i1l]\.?\s*[vu]\.?\s*[a4](?:\b|[gra]\s*\()|(?:^|\s)v\.?\s*a\s*\d{1,2}(?:[.,]\d+)?\s*%|\bimpuestos?\b|\bal[ií1l]cu[o0]ta\b|%\s*sobre\b|\bigv\b|\bitbis\b|\bitbms\b|\bisv\b|\bvat\b|\b(?:sales\s*)?tax\b|\bgst\b|\bhst\b|\bmwst\b|\btva\b|\bbtw\b/i,
   descuento: /\bdesc(?:uento|to)?\b|\bdscto\b|\brebaja\b|\bdiscount\b|\bbonificaci[oó]n\b/i,
   total: /\bt[o0]t[a4][l1i]\b|\ba\s+pagar\b|\bamount\s+due\b|\bbalance\s+due\b|\bgrand\s+total\b|\bimporte\b|\bvalor\s+a\s+pagar\b/i,
 };
@@ -244,6 +244,55 @@ const RE_TOTAL_FUERTE =
 // Otros renglones que NO son productos aunque terminen en un número.
 const RE_NO_PRODUCTO =
   /\b(rif|r\.i\.f|c\.?\s*i\.?|nit|ruc|rut|cuit|cuil|rfc|rtn|cnpj|cpf|nif|cif|ein|ncf|cufe|cae|uuid|folio|timbre|fecha|date|factura|invoice|bill\s+to|ship\s+to|sold\s+to|customer|control|tel[eé]?f?|telf|phone|e-?mail|www|http|direcci|domicilio|address|cliente|raz[oó]n|forma\s*de\s*pago|pago|payment|m[oó]vil|transferencia|cambio|tasa|bcv|ref|son:?|serie|caja\s*[:#n°º]|cajer[oa]|cashier|vendedor|hora|p[aá]gina|page|n[°º]|seniat|sunat|dian|sat|contribuyente|efectivo|cash|tarjeta|card|d[eé]bito|cr[eé]dito|punto|divisas?|zelle|vuelto|change|recibido|items?|art[ií]culos|gracias|thank|firma|contado|vence|vencimiento|due|condiciones|terms|zona|calle|avenida|av|edif|piso|local|galp[oó]n|sector|urb|aceptamos|billetes|deteriorados|plazo|conforme|despach\w*|conductor|placas?|veh[ií]culo|sello|envases|entregados|recibidos|original|copia|autorizaci[oó]n|resoluci[oó]n|providencia)\b/i;
+
+// Rótulos de ticket que el OCR suele leer con una o dos letras cambiadas
+// ("SUBTT", "SBTL", "BUBTT", "TUTAL", "TOIAL", "EHECT VO", "PAGD RAPIDO").
+const ROTULOS_APROX: [string, "subtotal" | "total" | "iva" | "exento" | "pago"][] = [
+  ["subttl", "subtotal"],
+  ["subtl", "subtotal"],
+  ["sbtl", "subtotal"],
+  ["subtotal", "subtotal"],
+  ["total", "total"],
+  ["iva", "iva"],
+  ["exento", "exento"],
+  ["efectivo", "pago"],
+  ["pagorapido", "pago"],
+  ["pagomovil", "pago"],
+];
+
+function distancia(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+
+/** Rótulo de ticket mal leído al comienzo del renglón, o null. Se compara la
+ *  primera palabra (y la unión de las dos primeras, por "EHECT VO") con los
+ *  rótulos conocidos, tolerando 1 letra cambiada (2 en los largos). */
+export function rotuloAproximado(linea: string): (typeof ROTULOS_APROX)[number][1] | null {
+  const palabras = linea
+    .toLowerCase()
+    .replace(/[0]/g, "o")
+    .replace(/[1|]/g, "i")
+    .replace(/[^a-zñ\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  if (palabras.length === 0) return null;
+  const candidatas = [palabras[0], palabras.slice(0, 2).join("")];
+  for (const c of candidatas) {
+    if (c.length < 3) continue;
+    for (const [rotulo, tipo] of ROTULOS_APROX) {
+      const tolerancia = rotulo.length >= 6 ? 2 : 1;
+      // No se aceptan fragmentos mucho más cortos que el rótulo ("ento" ≠ "exento").
+      if (c.length >= rotulo.length - 1 && Math.abs(c.length - rotulo.length) <= tolerancia && distancia(c, rotulo) <= tolerancia)
+        return tipo;
+    }
+  }
+  return null;
+}
 
 /** Qué parte de la fórmula es un renglón (o null si no es de resumen). */
 export function tipoResumen(linea: string): keyof typeof RE_RESUMEN | null {
@@ -257,6 +306,8 @@ export function tipoResumen(linea: string): keyof typeof RE_RESUMEN | null {
   if (RE_RESUMEN.iva.test(linea)) return "iva";
   if (RE_RESUMEN.descuento.test(linea)) return "descuento";
   if (RE_RESUMEN.total.test(linea)) return "total";
+  const aprox = rotuloAproximado(linea);
+  if (aprox && aprox !== "pago") return aprox;
   return null;
 }
 
@@ -281,7 +332,8 @@ function esRenglonResumen(linea: string): boolean {
   if (!tipoResumen(linea)) return false;
   const inicio = linea.replace(/^[^A-Za-z\u00C0-\u017F]+/, "").split(/\s+/).slice(0, 4).join(" ");
   const montos = (linea.match(/\d[\d.,]*\d|\d/g) ?? []).length;
-  return (tipoResumen(inicio) !== null && montos <= 2) || /%/.test(linea);
+  const fuerte = /^(b\.?\s?[i1l]\b|[i1l]\.?\s*[uv]\.?\s*a\b|subt|total|exent)/i.test(inicio) || (rotuloAproximado(linea) ?? "pago") !== "pago";
+  return (tipoResumen(inicio) !== null && (montos <= 2 || fuerte)) || /%/.test(linea);
 }
 
 // Renglón de cantidad de las máquinas fiscales, encima del producto:
@@ -298,6 +350,7 @@ function fechaISO(d: number, m: number, a: number): string | undefined {
 /** Intenta leer una línea de producto. null si no parece un producto. */
 export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
   let linea = lineaOriginal;
+  if (rotuloAproximado(linea) === "pago" || /\boperac/i.test(linea)) return null;
   if (esRenglonResumen(linea) || RE_NO_PRODUCTO.test(linea)) return null;
   linea = linea
     .replace(/[(\[{]\s*[68b]\s*[)\]}]/gi, "(G)")
@@ -380,6 +433,10 @@ export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
     tokens.pop();
   const descripcion = tokens.join(" ").replace(/\s+/g, " ").trim();
   if ((descripcion.match(/[a-zñ]/gi) ?? []).length < 3) return null;
+  // Basura del OCR sobre logos y códigos de barras ("cYam ntaYe"): palabras
+  // con una mayúscula metida entre minúsculas. Un nombre de producto real no.
+  const conLetras = tokens.filter((t) => /[a-z]/i.test(t));
+  if (conLetras.length > 0 && conLetras.filter((t) => /[a-z][A-Z]/.test(t)).length * 2 >= conLetras.length) return null;
 
   const total = finales[finales.length - 1];
   if (!(total > 0)) return null;
@@ -707,7 +764,7 @@ export function parseFactura(texto: string): FacturaLeida {
   let vioIva = false;
   for (let li = 0; li < lineas.length; li++) {
     const l = lineas[li].replace(/(\d)['’](\d{3})/g, "$1$2");
-    if (/\b(efectivo|pago\s*m[oó]vil|punto|tarjeta|d[eé]bito|transferencia|zelle|cash|card)\b/i.test(l)) {
+    if (/\b(efectivo|pago\s*m[oó]vil|punto|tarjeta|d[eé]bito|transferencia|zelle|cash|card)\b/i.test(l) || rotuloAproximado(l) === "pago") {
       const m = l.match(/(\d[\d.,]*\d)\s*$/);
       const v = m ? parseNumero(m[1]) : null;
       if (v && v > 0) pagos.push(v);
@@ -743,7 +800,8 @@ export function parseFactura(texto: string): FacturaLeida {
     const elegido = out.moneda === "bs" && mencionaOtra && nums.length >= 2 ? nums[0] : nums[nums.length - 1];
     // La etiqueta es lo que está justo antes del número (en una misma fila
     // pueden juntarse dos columnas: "…causará IGTF 3%… Total neto 104,43").
-    const etiqueta = l.slice(Math.max(0, elegido.i - 45), elegido.i);
+    // (si la ventana corta una palabra al inicio, esa palabra se descarta)
+    const etiqueta = elegido.i > 45 ? l.slice(elegido.i - 45, elegido.i).replace(/^\S*\s/, "") : l.slice(0, elegido.i);
     const tipo = tipoCercano(etiqueta) ?? (nums.length === 1 ? tipoResumen(l) : null);
     // % de IVA: "IVA 16%", "BI G16,00%", "ALICUOTA 16,00 %".
     const pct = l.match(/(?:g\s*)?(\d{1,2}(?:[.,]\d{1,2})?)\s*%/i);

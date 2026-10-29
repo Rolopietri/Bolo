@@ -541,6 +541,15 @@ Neto: 1267416)`);
 igual("b11 neto después del IVA = total", b11.total, 12674.16);
 igual("b11 subtotal", b11.subtotal, 10926);
 
+// ── Rótulos de ticket mal leídos (banco de fotos, PaddleOCR) ──
+igual("SUBTT es subtotal", tipoResumen("SUBTT Bs 73750, 50"), "subtotal");
+igual("SBTL es subtotal", tipoResumen("SBTL 3s 29. 591, 25"), "subtotal");
+igual("TUTAL es total", tipoResumen("TUTAL BS. 6.373,50"), "total");
+igual("EHECT VO no es producto", parseFactura("RIF J-1234567-8\nEHECT VO Bs 73750, 50").lineas.length, 0);
+igual("PAGD RAPIDO no es producto", parseFactura("RIF J-1234567-8\nPAGD RAPIDO 29.591,25").lineas.length, 0);
+igual("Vencimiento no es exento", parseFactura("Vencimiento: 17/09/2026 EMISIÓN: 10/09/2026|12:36:18").exento, undefined);
+igual("basura de logo no es producto", parseFactura("RIF J-1234567-8\ncYam ntaYe Bs 786.14").lineas.length, 0);
+
 // ── Rótulos del resumen mal leídos por el OCR ──
 const f4 = parseFactura(`
 LA GRANJA C.A.
