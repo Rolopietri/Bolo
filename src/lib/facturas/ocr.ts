@@ -1,11 +1,17 @@
-// OCR en el propio dispositivo (Tesseract compilado para el navegador). La foto
-// NUNCA sale del teléfono: se limpia y se lee aquí, y a Bolo solo llegan los
-// datos que la persona confirma en el preview. Sin APIs ni cobros.
+// OCR en el propio dispositivo. La foto NUNCA sale del teléfono: se limpia y
+// se lee aquí, y a Bolo solo llegan los datos que la persona confirma en el
+// preview. Sin APIs ni cobros.
 //
-// La primera vez el navegador descarga el motor y los idiomas español e inglés (unos MB)
-// y los guarda; las siguientes lecturas arrancan directo.
+// Dos motores, medidos con un banco de 25 facturas reales:
+//  - PaddleOCR (modelo latino PP-OCRv5, en ONNX): lee mejor las letras de los
+//    tickets y fotos regulares. Es el principal.
+//  - Tesseract (español + inglés): detecta el giro de la foto y lee de
+//    respaldo cuando lo de PaddleOCR no cuadra (tablas como la de Ervaigle).
+// La primera vez el navegador descarga los motores y modelos (~30 MB, desde
+// Hugging Face y jsDelivr, gratis) y los guarda; luego arrancan directo.
 
 import type { Worker } from "tesseract.js";
+import { parseFactura } from "./parser";
 
 type Progreso = (etapa: string, porcentaje: number) => void;
 
@@ -37,6 +43,49 @@ function obtenerWorker(): Promise<Worker> {
     });
   }
   return workerPromesa;
+}
+
+// ── PaddleOCR ──
+type PaddleResultado = {
+  text: string;
+  results?: { text: string; box: { x: number; y: number; width: number; height: number } }[];
+};
+type Paddle = { recognize: (c: HTMLCanvasElement, o?: Record<string, unknown>) => Promise<PaddleResultado> };
+let paddlePromesa: Promise<Paddle> | null = null;
+
+function obtenerPaddle(): Promise<Paddle> {
+  if (!paddlePromesa) {
+    paddlePromesa = (async () => {
+      const mod = await import("ppu-paddle-ocr/web");
+      // Modelo latino (español con tildes y Ñ); sin OpenCV (menos descarga).
+      const servicio = new mod.PaddleOcrService({
+        model: mod.V5_LATIN_MOBILE_MODEL,
+        processing: { engine: "canvas-native" },
+      });
+      await servicio.initialize();
+      return servicio as unknown as Paddle;
+    })();
+    // Si falla (teléfono sin WebAssembly, sin internet la primera vez), se
+    // reintenta la próxima vez y mientras tanto se usa Tesseract.
+    paddlePromesa.catch(() => {
+      paddlePromesa = null;
+    });
+  }
+  return paddlePromesa;
+}
+
+/** ¿El texto leído cuadra por dentro? Los productos suman el total (con o sin
+ *  IVA). Sirve para decidir si hace falta el segundo motor. */
+function cuadraPorDentro(texto: string): boolean {
+  const f = parseFactura(texto);
+  const suma = f.lineas.reduce((s, l) => s + l.total, 0);
+  if (!(f.total && f.total > 0) || !(suma > 0)) return false;
+  const conIva = suma * (1 + (f.ivaPorc ?? 16) / 100);
+  return (
+    Math.abs(suma - f.total) / f.total < 0.02 ||
+    Math.abs(conIva - f.total) / f.total < 0.03 ||
+    (suma < f.total && suma > f.total * 0.8)
+  );
 }
 
 /** Error con un mensaje para la persona (no técnico). */
@@ -356,12 +405,41 @@ export async function leerFactura(
       }
     }
 
-    // Lectura completa: foto derecha, en blanco y negro y sin bordes de tabla;
-    // el OCR busca texto suelto por toda la hoja (modo 11, sirve para tablas y
-    // tickets) y las filas se arman por la posición de cada palabra.
-    alProgresar = (_e, p) => onProgreso?.("Leyendo la factura", p);
+    const derecha = giro ? rotar(canvas, giro) : canvas;
+
+    // 1. PaddleOCR (principal), con las filas armadas por posición.
+    alProgresar = null;
+    onProgreso?.("Leyendo la factura", 60);
+    let textoPaddle: string | null = null;
+    try {
+      const paddle = await obtenerPaddle();
+      // Imagen moderada: con más, un teléfono puede quedarse sin memoria.
+      const img = rotar(derecha, 0, 2000);
+      const r = await paddle.recognize(img, { flatten: true, strategy: "per-box" });
+      const items = (r.results ?? []).filter((it) => it.text.trim());
+      if (items.length > 0) {
+        const altos = items.map((it) => it.box.height).sort((a, b) => a - b);
+        textoPaddle = filasDeTrozos(
+          items.map((it) => ({
+            texto: it.text,
+            x0: it.box.x,
+            x1: it.box.x + it.box.width,
+            yIzq: it.box.y + it.box.height / 2,
+            yDer: it.box.y + it.box.height / 2,
+          })),
+          altos[Math.floor(altos.length / 2)] || 20,
+        ).join("\n");
+      } else textoPaddle = r.text ?? "";
+    } catch {
+      textoPaddle = null; // sin PaddleOCR: sigue Tesseract
+    }
+    if (textoPaddle && cuadraPorDentro(textoPaddle)) return { texto: textoPaddle, giro };
+
+    // 2. Tesseract: foto en blanco y negro y sin bordes de tabla; busca texto
+    //    suelto por toda la hoja (modo 11) y las filas se arman por posición.
+    alProgresar = (_e, p) => onProgreso?.(textoPaddle ? "Revisando con el segundo lector" : "Leyendo la factura", p);
     await worker.setParameters({ tessedit_pageseg_mode: "11" as never });
-    const lista = paraLeer(giro ? rotar(canvas, giro) : canvas);
+    const lista = paraLeer(derecha);
     const { data } = await worker.recognize(lista, {}, { blocks: true, text: true });
     const trozos: Trozo[] = [];
     const alturas: number[] = [];
@@ -381,7 +459,11 @@ export async function leerFactura(
         }
     alturas.sort((a, b) => a - b);
     const filas = filasDeTrozos(trozos, alturas[Math.floor(alturas.length / 2)] || 20);
-    return { texto: filas.length > 0 ? filas.join("\n") : (data.text ?? ""), giro };
+    const textoTesseract = filas.length > 0 ? filas.join("\n") : (data.text ?? "");
+    // Se queda con el que cuadre; si ninguno, con PaddleOCR (lee mejor RIF,
+    // fecha y número aunque los productos no sumen).
+    if (cuadraPorDentro(textoTesseract) || !textoPaddle) return { texto: textoTesseract, giro };
+    return { texto: textoPaddle, giro };
   } finally {
     alProgresar = null;
   }
