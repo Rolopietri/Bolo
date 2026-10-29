@@ -29,15 +29,17 @@ import {
   parecido,
   parseFactura,
   sugerirInsumo,
+  variantesDigito,
   totalProductos,
   type FacturaLeida,
   type UnidadLeida,
 } from "@/lib/facturas/parser";
-import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto } from "@/lib/facturas/ocr";
+import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto, type FilaLeida } from "@/lib/facturas/ocr";
 import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon, WarningIcon } from "@/components/icons";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { cantidadEnBase, dimension, displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { CamaraGuiada } from "./_CamaraGuiada";
 import { extractError } from "@/lib/data/error";
 import { hoyISO } from "@/lib/ui";
 
@@ -140,10 +142,16 @@ function ResumenFactura({
   resumen,
   moneda,
   cuadra,
+  diferencia,
+  pista,
 }: {
   resumen: Leido["resumen"];
   moneda: "bs" | "usd";
   cuadra: boolean | null;
+  /** Lo que falta (positivo) o sobra (negativo) para cuadrar. */
+  diferencia?: number;
+  /** El renglón que probablemente explica la diferencia. */
+  pista?: string;
 }) {
   const partes: [string, number | undefined][] = [
     ["Subtotal", resumen.subtotal],
@@ -172,7 +180,10 @@ function ResumenFactura({
           {!cuadra && <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />}
           {cuadra
             ? "Los productos cuadran con la factura."
-            : `Los productos no cuadran con la factura${resumen.igtf ? " (sin contar el IGTF)" : ""}: revisa montos o si falta alguno.`}
+            : diferencia !== undefined
+              ? `${diferencia > 0 ? "Faltan" : "Sobran"} ${fmtMonto(Math.abs(diferencia), moneda)} para cuadrar con la factura${resumen.igtf ? " (sin contar el IGTF)" : ""}.`
+              : `Los productos no cuadran con la factura${resumen.igtf ? " (sin contar el IGTF)" : ""}: revisa montos o si falta alguno.`}
+          {!cuadra && pista && <span className="block font-normal">{pista}</span>}
         </span>
       )}
     </div>
@@ -310,6 +321,10 @@ export function EscanearFactura({
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [verFoto, setVerFoto] = useState(false);
   const [zoom, setZoom] = useState(false);
+  /** Filas leídas con su altura en la foto, para mostrar dónde está cada producto. */
+  const [filas, setFilas] = useState<FilaLeida[]>([]);
+  const [region, setRegion] = useState<{ y0: number; y1: number } | null>(null);
+  const fotoGrandeRef = useRef<HTMLDivElement>(null);
   const [productos, setProductos] = useState<Producto[]>([]);
   /** Renglones leídos que no parecen productos: se pueden rescatar. */
   const [otras, setOtras] = useState<Producto[]>([]);
@@ -324,9 +339,26 @@ export function EscanearFactura({
   const [nuevoProveedor, setNuevoProveedor] = useState("");
   const [guardandoProveedor, setGuardandoProveedor] = useState(false);
   const fotoRef = useRef<HTMLInputElement>(null);
+  const [camara, setCamara] = useState(false);
   const galeriaRef = useRef<HTMLInputElement>(null);
 
   const insumoPorId = useMemo(() => new Map(insumos.map((i) => [i.id, i])), [insumos]);
+
+  // Memoria de compras por proveedor: qué insumos se le compran y a qué precio
+  // se le compró cada uno la última vez (USD por unidad de compra).
+  const historial = useMemo(() => {
+    const compradosA = new Map<string, Set<string>>();
+    const ultimo = new Map<string, { usd: number; fecha: string }>();
+    for (const c of compras) {
+      if (!c.proveedorId || !(c.cantidad > 0) || !(c.precioTotalUsd > 0)) continue;
+      if (!compradosA.has(c.proveedorId)) compradosA.set(c.proveedorId, new Set());
+      compradosA.get(c.proveedorId)!.add(c.insumoId);
+      const k = `${c.proveedorId}|${c.insumoId}`;
+      const previo = ultimo.get(k);
+      if (!previo || c.fecha > previo.fecha) ultimo.set(k, { usd: c.precioTotalUsd / c.cantidad, fecha: c.fecha });
+    }
+    return { compradosA, ultimo };
+  }, [compras]);
 
   // Liberar la foto de la memoria al cambiarla o al cerrar.
   useEffect(() => {
@@ -377,7 +409,8 @@ export function EscanearFactura({
 
   /** Asigna insumo y cantidad a cada renglón con la memoria del proveedor (o
    *  una sugerencia por nombre). Respeta lo que la persona ya cambió a mano. */
-  function asignar(lista: Producto[], mem: Map<string, Equivalencia>): Producto[] {
+  function asignar(lista: Producto[], mem: Map<string, Equivalencia>, proveedorId = cab.proveedorId): Producto[] {
+    const habituales = historial.compradosA.get(proveedorId);
     return lista.map((p) => {
       if (p.origen === "" && p.insumoId) return p; // elegido a mano
       // Primero igual; si no, la más parecida (el OCR no lee igual cada vez).
@@ -396,7 +429,8 @@ export function EscanearFactura({
         return { ...p, insumoId: eq.insumoId, cantidad: fmtQty(p.cantidadFactura * eq.factorCantidad), unidad: "", origen: "memoria" };
       }
       if (p.origen === "memoria" || !p.insumoId) {
-        const sug = sugerirInsumo(p.descripcion, insumos, (ins) => coincideEmpaque(p, ins));
+        // Entre nombres parecidos gana el que ya se le compra a este proveedor.
+        const sug = sugerirInsumo(p.descripcion, insumos, (ins) => coincideEmpaque(p, ins) || !!habituales?.has(ins.id));
         const porEmpaque = sug ? cantidadPorEmpaque(p, sug) : null;
         return sug
           ? {
@@ -440,8 +474,8 @@ export function EscanearFactura({
     });
     const mem = id ? await listEquivalencias(id) : new Map<string, Equivalencia>();
     setMemoria(mem);
-    if (leida) repartir(asignar(leida.lista, mem), leida.confianza);
-    else setProductos((ps) => asignar(ps, mem));
+    if (leida) repartir(asignar(leida.lista, mem, id), leida.confianza);
+    else setProductos((ps) => asignar(ps, mem, id));
   }
 
   /** Pasa el texto (del OCR o pegado) por las reglas y llena el formulario. */
@@ -505,7 +539,7 @@ export function EscanearFactura({
       };
     });
     // Primero con sugerencias por nombre; al llegar la memoria se reasigna.
-    repartir(asignar(base, new Map()), confianza);
+    repartir(asignar(base, new Map(), prov?.id ?? ""), confianza);
     setPaso("formulario");
     if (prov) await elegirProveedor(prov.id, { lista: base, confianza });
   }
@@ -518,9 +552,11 @@ export function EscanearFactura({
     try {
       // HEIC (iPhone) se convierte a JPG aquí; sirve para leer y para mostrar.
       const foto = await prepararFoto(archivo);
-      const { texto: t, giro } = await leerFactura(foto, (etapa, pct) => setProgreso({ etapa, pct }));
-      // La foto se muestra derecha aunque se haya tomado de lado o al revés.
-      setFotoUrl(URL.createObjectURL(await fotoDerecha(foto, giro).catch(() => foto)));
+      const { texto: t, giro, filas: f, aplanada } = await leerFactura(foto, (etapa, pct) => setProgreso({ etapa, pct }));
+      // La foto se muestra derecha aunque se haya tomado de lado o al revés; si
+      // la hoja se aplanó, se muestra aplanada (las filas están medidas en ella).
+      setFotoUrl(URL.createObjectURL(aplanada ?? (await fotoDerecha(foto, giro).catch(() => foto))));
+      setFilas(f);
       setTexto(t);
       if (!t.trim()) {
         setError("No se pudo leer texto en la foto. Prueba con más luz, la factura plana y completa.");
@@ -539,13 +575,55 @@ export function EscanearFactura({
   }
 
   function elegirOrigen(origen: string) {
-    if (origen === "foto") fotoRef.current?.click();
+    // Cámara guiada si el navegador la permite; si no, la cámara del teléfono.
+    if (origen === "foto") {
+      if (typeof navigator !== "undefined" && "mediaDevices" in navigator) setCamara(true);
+      else fotoRef.current?.click();
+    }
     else if (origen === "galeria") galeriaRef.current?.click();
     else {
       setFotoUrl(null); // el texto pegado no trae foto
+      setFilas([]);
       setPaso("pegar");
     }
   }
+
+  /** La fila de la foto donde está un producto (por su texto leído). */
+  function filaDe(descripcion: string): FilaLeida | null {
+    const palabras = normalizarDescripcion(descripcion).split(" ").filter((w) => w.length >= 3);
+    if (palabras.length === 0) return null;
+    let mejor: FilaLeida | null = null;
+    let puntaje = 0.5;
+    for (const f of filas) {
+      const enFila = new Set(normalizarDescripcion(f.texto).split(" "));
+      const pt = palabras.filter((w) => enFila.has(w)).length / palabras.length;
+      if (pt > puntaje) {
+        puntaje = pt;
+        mejor = f;
+      }
+    }
+    return mejor;
+  }
+
+  function verEnFoto(fila: FilaLeida) {
+    setRegion({ y0: fila.y0, y1: fila.y1 });
+    setZoom(true);
+    setVerFoto(true);
+  }
+
+  // Al abrir la foto en un producto, se desplaza hasta su fila.
+  function centrarRegion() {
+    const el = fotoGrandeRef.current;
+    if (!el || !region || !zoom) return;
+    el.scrollTop = Math.max(0, region.y0 * el.scrollHeight - el.clientHeight * 0.35);
+    el.scrollLeft = 0;
+  }
+  useEffect(() => {
+    const el = fotoGrandeRef.current;
+    if (!el || !region || !zoom || !verFoto) return;
+    el.scrollTop = Math.max(0, region.y0 * el.scrollHeight - el.clientHeight * 0.35);
+    el.scrollLeft = 0;
+  }, [region, zoom, verFoto]);
 
   function setProducto(key: string, patch: Partial<Producto>) {
     setProductos((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p)));
@@ -615,6 +693,30 @@ export function EscanearFactura({
   const esperado = totalProductos(leido.resumen);
   const cuadra =
     esperado === undefined ? null : Math.abs(totalMoneda - esperado) <= Math.max(0.05, esperado * 0.01);
+  /** Qué renglón explica la diferencia: uno leído aparte que falta, un
+   *  producto que sobra, o un monto con un dígito o una coma mal leídos. */
+  const pistaCuadre = useMemo(() => {
+    if (cuadra !== false || esperado === undefined) return undefined;
+    const dif = esperado - totalMoneda;
+    const igual = (a: number) => Math.abs(a - Math.abs(dif)) <= Math.max(0.05, Math.abs(dif) * 0.005);
+    if (dif > 0) {
+      const falta = otras.find((o) => igual(Number(o.monto) || 0));
+      if (falta) return `Puede ser «${falta.descripcion}», que quedó aparte: agrégalo abajo.`;
+    } else {
+      const sobra = productos.find((p) => igual(costo(p).enMoneda));
+      if (sobra) return `Puede sobrar «${sobra.descripcion || insumoPorId.get(sobra.insumoId)?.nombre}».`;
+    }
+    for (const p of productos) {
+      const m = Number(p.monto) || 0;
+      if (!(m > 0)) continue;
+      const bueno = [...variantesDigito(m), m * 10, m / 10].find((v) => Math.abs(v - m - dif) <= 0.05);
+      if (bueno !== undefined)
+        return `Revisa «${p.descripcion || insumoPorId.get(p.insumoId)?.nombre}»: con ${fmtMonto(bueno, cab.moneda)} cuadra.`;
+    }
+    return undefined;
+    // costo depende de la cabecera y los productos, ya incluidos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cuadra, esperado, totalMoneda, otras, productos, cab]);
 
   // Una factura se paga completa: si ya existe, los productos heredan su estado.
   const facturaLock = useMemo(() => {
@@ -630,20 +732,42 @@ export function EscanearFactura({
   }, [compras, cab.numeroFactura, cab.proveedorId]);
   const pagarDespuesEfectivo = facturaLock ? !facturaLock.pagada : cab.pagarDespues;
 
-  /** Precio por unidad que deja el producto, frente al actual del insumo. */
+  /** Precio por unidad que deja el producto, frente al de la última compra a
+   *  este proveedor (o, si nunca se le compró, al actual del insumo). Si el
+   *  salto es grande y un dígito o una coma del monto lo explican, propone el
+   *  monto corregido (el OCR confunde 8/6/3, 1/7, 5/6 y corre comas). */
   function precioInfo(p: Producto) {
     const ins = insumoPorId.get(p.insumoId);
     const usd = costo(p).usd;
-    const { enBase } = conversion(p, ins, usd);
+    const { enBase, enCompra } = conversion(p, ins, usd);
     if (!ins || !(enBase > 0) || !(usd > 0)) return null;
     const nuevo = usd / enBase;
-    const actual = ins.precioBaseUsd ?? null;
+    const delProveedor = cab.proveedorId ? historial.ultimo.get(`${cab.proveedorId}|${ins.id}`) : undefined;
+    // Precio de antes, por unidad base.
+    const cpc = ins.cantidadPorCompra > 0 ? ins.cantidadPorCompra : 1;
+    const actual = delProveedor ? delProveedor.usd / cpc : (ins.precioBaseUsd ?? null);
     const cambio = actual && actual > 0 ? nuevo / actual - 1 : null;
+    const fuerte = cambio !== null && Math.abs(cambio) > 0.5;
+    let montoSugerido: number | null = null;
+    const monto = Number(p.monto) || 0;
+    if (fuerte && actual && monto > 0 && enCompra > 0) {
+      const candidatos = [...variantesDigito(monto), monto * 10, monto / 10, monto * 100, monto / 100];
+      let mejor = 0.2; // a menos de un 20 % del precio de antes
+      for (const m of candidatos) {
+        const desvio = Math.abs((nuevo * m) / monto / actual - 1);
+        if (desvio < mejor) {
+          mejor = desvio;
+          montoSugerido = Math.round(m * 100) / 100;
+        }
+      }
+    }
     return {
       ahora: precioLegible(nuevo, ins.unidadBase),
       antes: actual && actual > 0 ? precioLegible(actual, ins.unidadBase) : null,
+      deProveedor: !!delProveedor,
       cambio,
-      fuerte: cambio !== null && Math.abs(cambio) > 0.5,
+      fuerte,
+      montoSugerido,
     };
   }
 
@@ -761,6 +885,14 @@ export function EscanearFactura({
       </div>
 
       {error && <ErrorBanner>{error}</ErrorBanner>}
+
+      {camara && (
+        <CamaraGuiada
+          onCapturar={(foto) => void leerFoto(foto)}
+          onCerrar={() => setCamara(false)}
+          onCamaraDelTelefono={() => fotoRef.current?.click()}
+        />
+      )}
 
       {/* La cámara nativa del teléfono da la foto a resolución completa. */}
       <input
@@ -880,22 +1012,38 @@ export function EscanearFactura({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setVerFoto(false)}
+                  onClick={() => {
+                    setVerFoto(false);
+                    setRegion(null);
+                  }}
                   aria-label="Cerrar la foto"
                   className="rounded-lg bg-white px-4 py-1.5 text-sm font-medium text-cacao"
                 >
                   Volver al formulario
                 </button>
               </div>
-              <div className="min-h-0 flex-1 overflow-auto">
-                {/* eslint-disable-next-line @next/next/no-img-element -- foto local (blob:) */}
-                <img
-                  src={fotoUrl}
-                  alt="Factura"
-                  onClick={() => setZoom((z) => !z)}
-                  className={zoom ? "max-w-none" : "mx-auto h-full w-auto max-w-full object-contain"}
-                  style={zoom ? { width: "250%" } : undefined}
-                />
+              <div ref={fotoGrandeRef} className="min-h-0 flex-1 overflow-auto">
+                {zoom ? (
+                  <div className="relative" style={{ width: "250%" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element -- foto local (blob:) */}
+                    <img src={fotoUrl} alt="Factura" onClick={() => setZoom(false)} onLoad={centrarRegion} className="block w-full" />
+                    {/* La fila del producto, marcada sobre la foto. */}
+                    {region && (
+                      <div
+                        className="pointer-events-none absolute inset-x-0 bg-amber-300/25 ring-2 ring-amber-500"
+                        style={{ top: `${region.y0 * 100}%`, height: `${(region.y1 - region.y0) * 100}%` }}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  /* eslint-disable-next-line @next/next/no-img-element -- foto local (blob:) */
+                  <img
+                    src={fotoUrl}
+                    alt="Factura"
+                    onClick={() => setZoom(true)}
+                    className="mx-auto h-full w-auto max-w-full object-contain"
+                  />
+                )}
               </div>
             </div>
           )}
@@ -1080,6 +1228,7 @@ export function EscanearFactura({
                 const ins = insumoPorId.get(p.insumoId);
                 const conv = conversion(p, ins, costo(p).usd);
                 const info = precioInfo(p);
+                const fila = p.descripcion ? filaDe(p.descripcion) : null;
                 return (
                   <li key={p.key} className="py-3 space-y-1.5">
                     <div className="flex items-center gap-2">
@@ -1098,7 +1247,9 @@ export function EscanearFactura({
                           });
                         }}
                         aria-label="Insumo"
-                        className="min-w-0 flex-1 rounded-lg ring-1 ring-marfil px-3 py-2 bg-white text-sm"
+                        className={`min-w-0 flex-1 rounded-lg px-3 py-2 bg-white text-sm ${
+                          p.origen === "sugerido" || !p.insumoId ? "ring-2 ring-amber-300" : "ring-1 ring-marfil"
+                        }`}
                       >
                         <option value="">— Selecciona insumo —</option>
                         {insumos.map((i) => (
@@ -1139,7 +1290,11 @@ export function EscanearFactura({
                       <div>
                         <label
                           className={`mt-1 flex rounded-lg bg-white focus-within:ring-terracotta/60 ${
-                            cab.moneda === monedaPago ? "ring-2 ring-terracotta/50" : "ring-1 ring-marfil"
+                            info?.fuerte || (p.sinPrecio && !(Number(p.monto) > 0))
+                              ? "ring-2 ring-amber-400 bg-amber-50"
+                              : cab.moneda === monedaPago
+                                ? "ring-2 ring-terracotta/50"
+                                : "ring-1 ring-marfil"
                           }`}
                         >
                           <input
@@ -1174,6 +1329,15 @@ export function EscanearFactura({
                     </div>
                     <p className="text-[11px] text-cacao-mute">
                       {p.descripcion && <>«{p.descripcion}» · </>}
+                      {fotoUrl && fila && (
+                        <>
+                          <button type="button" onClick={() => verEnFoto(fila)} className="inline-flex items-center gap-0.5 underline">
+                            <SearchIcon className="size-3" />
+                            ver en la foto
+                          </button>
+                          {" · "}
+                        </>
+                      )}
                       {p.origen === "memoria" && <span className="text-oliva">recordado</span>}
                       {p.origen === "sugerido" && <span className="text-terracotta">sugerido, confírmalo</span>}
                       {p.sinPrecio && !(Number(p.monto) > 0) && (
@@ -1205,7 +1369,20 @@ export function EscanearFactura({
                         {info.antes && (
                           <>
                             {" "}(antes {fmtPrecio(info.antes.precio)} / {info.antes.unidad}
-                            {info.cambio !== null && `, ${info.cambio > 0 ? "+" : ""}${Math.round(info.cambio * 100)} %`})
+                            {info.cambio !== null && `, ${info.cambio > 0 ? "+" : ""}${Math.round(info.cambio * 100)} %`}
+                            {info.deProveedor && " con este proveedor"})
+                          </>
+                        )}
+                        {info.montoSugerido !== null && (
+                          <>
+                            {" · "}
+                            <button
+                              type="button"
+                              onClick={() => setProducto(p.key, { monto: String(info.montoSugerido) })}
+                              className="underline"
+                            >
+                              ¿el monto es {fmtMonto(info.montoSugerido, cab.moneda)}?
+                            </button>
                           </>
                         )}
                       </p>
@@ -1278,7 +1455,13 @@ export function EscanearFactura({
                 {tasaNum > 0 ? `A Bs ${tasaNum.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} por $ · ${origenTasa}` : "Falta la tasa del día"}
                 {cab.ivaModo === "sin" && ` · incluye IVA ${Number(cab.ivaPorc) || 0}%`}
               </span>
-              <ResumenFactura resumen={leido.resumen} moneda={cab.moneda} cuadra={cuadra} />
+              <ResumenFactura
+                resumen={leido.resumen}
+                moneda={cab.moneda}
+                cuadra={cuadra}
+                diferencia={esperado !== undefined ? esperado - totalMoneda : undefined}
+                pista={pistaCuadre}
+              />
             </div>
           )}
 

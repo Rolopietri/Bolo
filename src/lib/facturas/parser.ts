@@ -173,6 +173,38 @@ export function ajustarCantidad(
     : { cantidad, precio };
 }
 
+// Dígitos que el OCR confunde entre sí en tickets térmicos y fotos.
+const CONFUSIONES: Record<string, string> = {
+  "0": "86", "1": "74", "2": "7", "3": "85", "4": "19", "5": "693", "6": "805", "7": "12", "8": "6305", "9": "54",
+};
+
+/** Variantes de un monto cambiando UN dígito por otro que el OCR suele
+ *  confundir (8↔6, 5↔9…), conservando los decimales. */
+export function variantesDigito(n: number): number[] {
+  const txt = n.toFixed(2);
+  const out: number[] = [];
+  for (let i = 0; i < txt.length; i++) {
+    const alternativas = CONFUSIONES[txt[i]];
+    if (!alternativas) continue;
+    for (const c of alternativas) {
+      const v = Number(txt.slice(0, i) + c + txt.slice(i + 1));
+      if (v > 0 && v !== n) out.push(v);
+    }
+  }
+  return out;
+}
+
+/** La aritmética de la factura: corrige UN número mal leído para que
+ *  cantidad × precio = monto. Devuelve la corrección o null. */
+function corregirPorAritmetica(cantidad: number, precio: number, total: number): { cantidad: number; precio: number; total: number } | null {
+  const cuadra = (c: number, p: number, t: number) => Math.abs(c * p - t) <= Math.max(0.02, t * 0.003);
+  if (cuadra(cantidad, precio, total)) return null;
+  for (const t of variantesDigito(total)) if (cuadra(cantidad, precio, t)) return { cantidad, precio, total: t };
+  for (const p of variantesDigito(precio)) if (cuadra(cantidad, p, total)) return { cantidad, precio: p, total };
+  for (const c of variantesDigito(cantidad)) if (cuadra(c, precio, total)) return { cantidad: c, precio, total };
+  return null;
+}
+
 /** true si la cantidad está escrita con decimales (es un peso). */
 function escritaConDecimales(raw: string): boolean {
   return /^\d+[.,\s]\d+$/.test(raw.trim());
@@ -445,6 +477,7 @@ export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
   if (finales.length === 1 && !/[.,]\d{2}$/.test(limpia)) return null;
   let cantidad = cantInicial ?? 1;
   let precioUnit: number | undefined;
+  let totalCorregido: number | undefined;
   const cerca = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.02, b * 0.02);
 
   if (finales.length >= 3) {
@@ -462,6 +495,17 @@ export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
         }
       }
     }
+    // Un dígito mal leído en la cantidad, el precio o el monto (8 por 6…).
+    for (let i = 0; i < previos.length && !hallado; i++)
+      for (let j = i + 1; j < previos.length && !hallado; j++) {
+        const arreglo = corregirPorAritmetica(previos[i], previos[j], total);
+        if (arreglo && previos[i] > 0 && previos[i] <= 9999) {
+          cantidad = arreglo.cantidad;
+          precioUnit = arreglo.precio;
+          totalCorregido = arreglo.total;
+          hallado = true;
+        }
+      }
     if (!hallado) {
       // La cantidad se leyó mal (en tablas suele salir "[1]" o "30" en vez de
       // "3 CJ"): se deduce de subtotal ÷ precio cuando da un número entero.
@@ -515,13 +559,24 @@ export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
     precioUnit = cantidad > 0 ? total / cantidad : undefined;
   }
   if (!(cantidad > 0)) cantidad = 1;
+  // La aritmética del renglón: si cantidad × precio no da el monto, se corrige
+  // el dígito que el OCR leyó mal (8 por 6, 5 por 9…).
+  let totalFinal = totalCorregido ?? total;
+  if (totalCorregido === undefined && precioUnit !== undefined && cantidad > 0) {
+    const arreglo = corregirPorAritmetica(cantidad, precioUnit, total);
+    if (arreglo) {
+      cantidad = arreglo.cantidad;
+      precioUnit = arreglo.precio;
+      totalFinal = arreglo.total;
+    }
+  }
   // Sin cantidad al inicio, una cantidad no entera también delata un peso.
   if (cantInicial === null && !Number.isInteger(cantidad)) pesable = true;
   return {
     descripcion,
     cantidad,
     precioUnit,
-    total,
+    total: totalFinal,
     exento,
     confianza: finales.length >= 2 ? "alta" : "baja",
     pesable,
@@ -601,6 +656,8 @@ function parseLineaSinMonto(linea: string): Omit<LineaLeida, "cantidad" | "total
 export function parseFactura(texto: string): FacturaLeida {
   const lineas = texto
     .split(/\r?\n/)
+    // "7059, 44" / "3.391 ,88": espacio del OCR junto a la coma decimal.
+    .map((l) => l.replace(/(\d)\s?([.,])\s(\d{2})(?!\d)/g, "$1$2$3").replace(/(\d)\s([.,])(\d{2})(?!\d)/g, "$1$2$3"))
     .map((l) => l.replace(/\s+/g, " ").trim())
     .filter((l) => l.length > 0);
   const out: FacturaLeida = { lineas: [] };
@@ -855,7 +912,14 @@ export function parseFactura(texto: string): FacturaLeida {
     // fórmula corriendo la coma: se corrige ("1267418" era 12.674,18).
     const conPago = pagos.find((p) => casiIgual(p, calculado));
     if (conPago !== undefined) out.total = conPago;
-    else for (const k of [2, 1, 3]) if (casiIgual(out.total / 10 ** k, calculado)) out.total = Number((out.total / 10 ** k).toFixed(2));
+    else {
+      for (const k of [2, 1, 3]) if (casiIgual(out.total / 10 ** k, calculado)) out.total = Number((out.total / 10 ** k).toFixed(2));
+      // Un dígito mal leído en el total ("13.433,63" por 13.433,83).
+      if (Math.abs(out.total - calculado) > 0.02) {
+        const v = variantesDigito(out.total).find((c) => Math.abs(c - calculado) <= 0.02);
+        if (v !== undefined) out.total = v;
+      }
+    }
   }
 
   // Productos (la cabecera del proveedor, hasta su RIF, nunca es un producto).
@@ -956,6 +1020,57 @@ export function parseFactura(texto: string): FacturaLeida {
       } else {
         l.cantidad = 1;
         l.precioUnit = l.total;
+      }
+    }
+  }
+
+  // La aritmética de toda la factura: los productos deben sumar el subtotal
+  // (o base + exento, o total − IVA). Si no suman, se prueba (1) quitar uno o
+  // dos renglones basura y (2) corregir un dígito o la coma de UN monto.
+  {
+    const objetivos = [
+      out.subtotal,
+      out.base !== undefined ? out.base + (out.exento ?? 0) : undefined,
+      out.total !== undefined ? out.total - (out.iva ?? 0) - (out.igtf ?? 0) : undefined,
+      out.total,
+    ].filter((v): v is number => v !== undefined && v > 0);
+    // Exacto al céntimo (con margen de redondeo): un cuadre aproximado podría
+    // "arreglar" un monto bueno para calzar con un objetivo mal leído.
+    const cuadraSuma = (suma: number) => objetivos.some((o) => Math.abs(suma - o) <= Math.max(0.05, o * 0.0002));
+    const suma = (ls: LineaLeida[]) => ls.reduce((s, l) => s + l.total, 0);
+    if (objetivos.length > 0 && out.lineas.length > 1 && !cuadraSuma(suma(out.lineas))) {
+      let arreglado = false;
+      // (1) Quitar uno o dos renglones (los de menos confianza primero).
+      const idx = out.lineas.map((_, i) => i).sort((a, b) => (out.lineas[a].confianza === "baja" ? -1 : 0) - (out.lineas[b].confianza === "baja" ? -1 : 0));
+      for (const i of idx) {
+        const resto = out.lineas.filter((_, k) => k !== i);
+        if (resto.length > 0 && cuadraSuma(suma(resto))) {
+          out.lineas = resto;
+          arreglado = true;
+          break;
+        }
+      }
+      for (let a = 0; !arreglado && a < out.lineas.length; a++)
+        for (let b = a + 1; !arreglado && b < out.lineas.length; b++) {
+          const resto = out.lineas.filter((_, k) => k !== a && k !== b);
+          if (resto.length > 0 && out.lineas.length >= 4 && cuadraSuma(suma(resto))) {
+            out.lineas = resto;
+            arreglado = true;
+          }
+        }
+      // (2) Corregir un dígito o la coma de un monto.
+      for (let i = 0; !arreglado && i < out.lineas.length; i++) {
+        const l = out.lineas[i];
+        const base = suma(out.lineas) - l.total;
+        // Correr la coma solo si ese monto solo ya es más grande que la factura.
+        const maximo = Math.max(...objetivos);
+        const candidatos = [...variantesDigito(l.total), ...(l.total > maximo ? [l.total / 10, l.total / 100] : [])];
+        const v = candidatos.find((c) => cuadraSuma(base + c));
+        if (v !== undefined) {
+          l.total = Number(v.toFixed(2));
+          if (l.precioUnit && l.cantidad > 0) l.precioUnit = l.total / l.cantidad;
+          arreglado = true;
+        }
       }
     }
   }

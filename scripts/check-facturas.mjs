@@ -541,6 +541,34 @@ Neto: 1267416)`);
 igual("b11 neto después del IVA = total", b11.total, 12674.16);
 igual("b11 subtotal", b11.subtotal, 10926);
 
+// ── Aritmética de la factura ──
+igual("renglón: 8 leído como 6 en el monto", parseFactura("RIF J-1234567-8\nANCHOAS 2 3.439,98 6.679,96").lineas[0]?.total, 6879.96);
+igual("renglón: precio con un 4 leído como 9", parseFactura("RIF J-1234567-8\nANCHOAS 2 3.939,98 6.879,96").lineas[0]?.precioUnit, 3439.98);
+const arit = parseFactura(`RIF J-1234567-8
+PAN CANILLA 2 15,00 30,00
+QUESO BLANCO 1 40,00 40,00
+OPERACION REF 99,00
+SUBTOTAL 70,00
+TOTAL 70,00`);
+igual("suma: renglón basura fuera", arit.lineas.length, 2);
+const arit2 = parseFactura(`RIF J-1234567-8
+PAN CANILLA 30,00
+QUESO BLANCO 46,00
+SUBTOTAL 70,00`);
+igual("suma: un dígito corregido para cuadrar", arit2.lineas[1]?.total, 40);
+
+igual("espacio tras la coma: 7059, 44", parseFactura("RIF J-1234567-8\nEXENTO Bs 7059, 44").exento, 7059.44);
+const noDanar = parseFactura(`J-505704478
+Bs 2189,32
+VIVERES (E) (E) Bs 4870,12
+VIVERES (E) (E) B 1348,10
+VIVERES (G) Bs 1926,72
+EXENTO Bs 7059, 44
+BI G(16,00%) Bs 3274,83
+SUBTTL Bs 10334,27
+TOTAL B8 10858,24`);
+igual("la aritmética no daña un monto bueno", noDanar.lineas[0]?.total, 4870.12);
+
 // ── Rótulos de ticket mal leídos (banco de fotos, PaddleOCR) ──
 igual("SUBTT es subtotal", tipoResumen("SUBTT Bs 73750, 50"), "subtotal");
 igual("SBTL es subtotal", tipoResumen("SBTL 3s 29. 591, 25"), "subtotal");

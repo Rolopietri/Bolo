@@ -88,6 +88,126 @@ function cuadraPorDentro(texto: string): boolean {
   );
 }
 
+// ── OpenCV (detección de la hoja) ──
+// Se carga desde jsDelivr solo cuando hace falta (unos 10 MB la primera vez).
+const OPENCV_URL = "https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.12.0-release.1/dist/opencv.js";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CV = any;
+let cvPromesa: Promise<CV> | null = null;
+
+export function cargarOpenCV(): Promise<CV> {
+  if (!cvPromesa) {
+    cvPromesa = new Promise<CV>((ok, mal) => {
+      // OpenCV.js trae su propio .then: si se entrega tal cual a una promesa,
+      // el navegador lo sigue llamando en un ciclo sin fin y congela la página.
+      const entregar = (cv: CV) => {
+        delete cv.then;
+        ok(cv);
+      };
+      const listo = (cv: CV) => {
+        if (cv?.Mat) entregar(cv);
+        else if (cv instanceof Promise) cv.then((m: CV) => entregar(m), mal);
+        else if (cv) cv.onRuntimeInitialized = () => entregar(cv);
+        else mal(new Error("OpenCV no cargó"));
+      };
+      const g = globalThis as unknown as { cv?: CV };
+      if (g.cv) return listo(g.cv);
+      const script = document.createElement("script");
+      script.src = OPENCV_URL;
+      script.async = true;
+      script.onload = () => listo(g.cv);
+      script.onerror = () => mal(new Error("OpenCV no cargó"));
+      document.head.appendChild(script);
+    });
+    cvPromesa.catch(() => {
+      cvPromesa = null;
+    });
+  }
+  return cvPromesa;
+}
+
+export type Esquinas = [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }, { x: number; y: number }];
+
+/** Busca la hoja por sus BORDES (Canny + contornos): el contorno de 4 lados
+ *  más grande que ocupe al menos el 20 % de la imagen. Devuelve sus esquinas
+ *  (arriba-izq., arriba-der., abajo-der., abajo-izq.) o null. */
+export function detectarHoja(cv: CV, fuente: HTMLCanvasElement | HTMLVideoElement, ancho: number, alto: number): Esquinas | null {
+  const escala = 600 / Math.max(ancho, alto);
+  const w = Math.round(ancho * escala);
+  const h = Math.round(alto * escala);
+  const chico = document.createElement("canvas");
+  chico.width = w;
+  chico.height = h;
+  chico.getContext("2d")?.drawImage(fuente, 0, 0, w, h);
+  const src = cv.imread(chico);
+  const gris = new cv.Mat();
+  const bordes = new cv.Mat();
+  const contornos = new cv.MatVector();
+  const jerarquia = new cv.Mat();
+  let mejor: Esquinas | null = null;
+  try {
+    cv.cvtColor(src, gris, cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gris, gris, new cv.Size(5, 5), 0);
+    cv.Canny(gris, bordes, 50, 150);
+    const k = cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3));
+    cv.dilate(bordes, bordes, k);
+    k.delete();
+    cv.findContours(bordes, contornos, jerarquia, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+    let mejorArea = w * h * 0.2;
+    for (let i = 0; i < contornos.size(); i++) {
+      const c = contornos.get(i);
+      const aprox = new cv.Mat();
+      cv.approxPolyDP(c, aprox, 0.02 * cv.arcLength(c, true), true);
+      const area = cv.contourArea(aprox);
+      if (aprox.rows === 4 && area > mejorArea && area < w * h * 0.98 && cv.isContourConvex(aprox)) {
+        const pts = [0, 1, 2, 3].map((j) => ({ x: aprox.data32S[j * 2] / escala, y: aprox.data32S[j * 2 + 1] / escala }));
+        const suma = pts.map((p) => p.x + p.y);
+        const resta = pts.map((p) => p.y - p.x);
+        mejor = [
+          pts[suma.indexOf(Math.min(...suma))],
+          pts[resta.indexOf(Math.min(...resta))],
+          pts[suma.indexOf(Math.max(...suma))],
+          pts[resta.indexOf(Math.max(...resta))],
+        ];
+        mejorArea = area;
+      }
+      aprox.delete();
+      c.delete();
+    }
+  } finally {
+    src.delete();
+    gris.delete();
+    bordes.delete();
+    contornos.delete();
+    jerarquia.delete();
+  }
+  return mejor;
+}
+
+/** Aplana la hoja: corrige la perspectiva para que quede como escaneada. */
+export function aplanarHoja(cv: CV, origen: HTMLCanvasElement, e: Esquinas): HTMLCanvasElement {
+  const d = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
+  const ancho = Math.round(Math.max(d(e[0], e[1]), d(e[3], e[2])));
+  const alto = Math.round(Math.max(d(e[0], e[3]), d(e[1], e[2])));
+  const src = cv.imread(origen);
+  const dst = new cv.Mat();
+  const de = cv.matFromArray(4, 1, cv.CV_32FC2, e.flatMap((p) => [p.x, p.y]));
+  const a = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, ancho, 0, ancho, alto, 0, alto]);
+  const M = cv.getPerspectiveTransform(de, a);
+  const salida = document.createElement("canvas");
+  try {
+    cv.warpPerspective(src, dst, M, new cv.Size(ancho, alto), cv.INTER_LINEAR, cv.BORDER_REPLICATE);
+    cv.imshow(salida, dst);
+  } finally {
+    src.delete();
+    dst.delete();
+    de.delete();
+    a.delete();
+    M.delete();
+  }
+  return salida;
+}
+
 /** Error con un mensaje para la persona (no técnico). */
 export class FotoIlegible extends Error {}
 
@@ -300,7 +420,10 @@ const centro = (b: Caja) => (b.y0 + b.y1) / 2;
  *  La foto casi nunca está perfectamente derecha: cada trozo se compara con el
  *  FINAL de la fila (el trozo más cercano a su izquierda), así la fila "sigue"
  *  la inclinación aunque la hoja sea ancha. */
-function filasDeTrozos(trozos: Trozo[], alto: number): string[] {
+/** Una fila leída y dónde está en la foto (0 = arriba, 1 = abajo). */
+export type FilaLeida = { texto: string; y0: number; y1: number };
+
+function filasDeTrozos(trozos: Trozo[], alto: number, altoImagen: number): FilaLeida[] {
   const ts = [...trozos].sort((a, b) => a.x0 - b.x0);
   const filas: { yIni: number; yFin: number; xFin: number; ts: Trozo[] }[] = [];
   for (const t of ts) {
@@ -322,7 +445,17 @@ function filasDeTrozos(trozos: Trozo[], alto: number): string[] {
       mejor.xFin = t.x1;
     } else filas.push({ yIni: t.yIzq, yFin: t.yDer, xFin: t.x1, ts: [t] });
   }
-  return filas.sort((a, b) => a.yIni - b.yIni).map((f) => f.ts.map((t) => t.texto).join(" "));
+  const borde = (y: number) => Math.min(1, Math.max(0, y / altoImagen));
+  return filas
+    .sort((a, b) => a.yIni - b.yIni)
+    .map((f) => {
+      const ys = f.ts.flatMap((t) => [t.yIzq, t.yDer]);
+      return {
+        texto: f.ts.map((t) => t.texto).join(" "),
+        y0: borde(Math.min(...ys) - alto * 0.8),
+        y1: borde(Math.max(...ys) + alto * 0.8),
+      };
+    });
 }
 
 /** Gira un canvas 90, 180 o 270 grados (sentido horario). */
@@ -372,14 +505,11 @@ function puntaje(texto: string, confianza: number): number {
 export async function leerFactura(
   archivo: Blob,
   onProgreso?: Progreso,
-): Promise<{ texto: string; giro: number }> {
+): Promise<{ texto: string; giro: number; filas: FilaLeida[]; aplanada: Blob | null }> {
   alProgresar = onProgreso ?? null;
   try {
     onProgreso?.("Limpiando la foto", 0);
-    // (Un recorte automático de la hoja por zonas claras se probó con el banco
-    // de fotos reales y empeoró la lectura: cortaba texto en sombra. Queda
-    // pendiente hacerlo con detección de bordes.)
-    const canvas = await limpiarFoto(archivo);
+    const limpia = await limpiarFoto(archivo);
     const worker = await obtenerWorker();
 
     // Lectura rápida para saber si la foto está derecha.
@@ -392,8 +522,27 @@ export async function leerFactura(
       const { data } = await worker.recognize(rotar(canvas, grados, 1400));
       return puntaje(data.text ?? "", data.confidence ?? 0);
     };
+    // Aplanar la hoja por sus bordes (OpenCV). Solo se usa si se lee igual o
+    // mejor que la foto original: si el recorte cortara texto, se descarta.
+    // (El recorte por zonas claras se probó antes y cortaba texto en sombra.)
+    let canvas = limpia;
+    let puntajeOriginal = -1;
+    try {
+      const cv = await cargarOpenCV();
+      const esquinas = detectarHoja(cv, limpia, limpia.width, limpia.height);
+      if (esquinas) {
+        const aplanada = aplanarHoja(cv, limpia, esquinas);
+        canvas = limpia;
+        puntajeOriginal = await prueba(0);
+        canvas = aplanada;
+        const puntajeAplanada = await prueba(0);
+        if (puntajeAplanada < puntajeOriginal) canvas = limpia;
+      }
+    } catch {
+      canvas = limpia; // sin OpenCV se sigue con la foto tal cual
+    }
     let giro = 0;
-    let mejor = await prueba(0);
+    let mejor = canvas === limpia && puntajeOriginal >= 0 ? puntajeOriginal : await prueba(0);
     // Derecha y bien leída: no hace falta probar más.
     if (mejor < 30) {
       for (const g of [90, 270, 180]) {
@@ -411,6 +560,7 @@ export async function leerFactura(
     alProgresar = null;
     onProgreso?.("Leyendo la factura", 60);
     let textoPaddle: string | null = null;
+    let filasPaddle: FilaLeida[] = [];
     try {
       const paddle = await obtenerPaddle();
       // Imagen moderada: con más, un teléfono puede quedarse sin memoria.
@@ -419,7 +569,7 @@ export async function leerFactura(
       const items = (r.results ?? []).filter((it) => it.text.trim());
       if (items.length > 0) {
         const altos = items.map((it) => it.box.height).sort((a, b) => a - b);
-        textoPaddle = filasDeTrozos(
+        filasPaddle = filasDeTrozos(
           items.map((it) => ({
             texto: it.text,
             x0: it.box.x,
@@ -428,12 +578,16 @@ export async function leerFactura(
             yDer: it.box.y + it.box.height / 2,
           })),
           altos[Math.floor(altos.length / 2)] || 20,
-        ).join("\n");
+          img.height,
+        );
+        textoPaddle = filasPaddle.map((f) => f.texto).join("\n");
       } else textoPaddle = r.text ?? "";
     } catch {
       textoPaddle = null; // sin PaddleOCR: sigue Tesseract
     }
-    if (textoPaddle && cuadraPorDentro(textoPaddle)) return { texto: textoPaddle, giro };
+    // La hoja aplanada se muestra en lugar de la foto: las filas están en ella.
+    const aplanada = canvas !== limpia ? await new Promise<Blob | null>((ok) => derecha.toBlob(ok, "image/jpeg", 0.85)) : null;
+    if (textoPaddle && cuadraPorDentro(textoPaddle)) return { texto: textoPaddle, giro, filas: filasPaddle, aplanada };
 
     // 2. Tesseract: foto en blanco y negro y sin bordes de tabla; busca texto
     //    suelto por toda la hoja (modo 11) y las filas se arman por posición.
@@ -458,12 +612,12 @@ export async function leerFactura(
           });
         }
     alturas.sort((a, b) => a - b);
-    const filas = filasDeTrozos(trozos, alturas[Math.floor(alturas.length / 2)] || 20);
-    const textoTesseract = filas.length > 0 ? filas.join("\n") : (data.text ?? "");
+    const filas = filasDeTrozos(trozos, alturas[Math.floor(alturas.length / 2)] || 20, lista.height);
+    const textoTesseract = filas.length > 0 ? filas.map((f) => f.texto).join("\n") : (data.text ?? "");
     // Se queda con el que cuadre; si ninguno, con PaddleOCR (lee mejor RIF,
     // fecha y número aunque los productos no sumen).
-    if (cuadraPorDentro(textoTesseract) || !textoPaddle) return { texto: textoTesseract, giro };
-    return { texto: textoPaddle, giro };
+    if (cuadraPorDentro(textoTesseract) || !textoPaddle) return { texto: textoTesseract, giro, filas, aplanada };
+    return { texto: textoPaddle, giro, filas: filasPaddle, aplanada };
   } finally {
     alProgresar = null;
   }
