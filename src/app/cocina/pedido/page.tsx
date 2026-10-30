@@ -1,9 +1,21 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
 import { funcionActiva } from "@/lib/modulos.mjs";
-import { PedidoSugeridoClient } from "./PedidoSugeridoClient";
+import { PedidoCliente, type VistaPedido } from "./PedidoCliente";
 
-export default function PedidoSugeridoPage() {
+export default async function PedidoSugeridoPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const { vista, receta, plan } = await searchParams;
+  const vistaParam = typeof vista === "string" ? vista : undefined;
+  const vieneDeRaciones = Boolean(receta || plan);
+  const inicial: VistaPedido =
+    vistaParam === "raciones" || (vistaParam !== "stock" && vieneDeRaciones)
+      ? "raciones"
+      : "stock";
+
   return (
     <>
       <Header subtitle="Pedido sugerido" />
@@ -17,9 +29,8 @@ export default function PedidoSugeridoPage() {
               Pedido sugerido
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft">
-              Define cuántas raciones quieres preparar de cada receta. La
-              plataforma calcula los ingredientes que faltan y arma la orden de
-              compra.
+              Qué comprar según el stock y el mínimo. Si preparas un servicio,
+              también puedes calcularlo por raciones.
             </p>
           </div>
           <Link
@@ -29,7 +40,8 @@ export default function PedidoSugeridoPage() {
             ← Compras, Ventas y Pedidos
           </Link>
         </section>
-        <PedidoSugeridoClient
+        <PedidoCliente
+          inicial={inicial}
           planesActivos={funcionActiva("planes", process.env.BOLO_MODULOS)}
         />
       </main>

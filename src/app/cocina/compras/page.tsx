@@ -21,6 +21,12 @@ export default function ComprasPage() {
               Cada compra registrada actualiza el stock y el precio del insumo
               automáticamente.
             </p>
+            <p className="mt-2 text-sm text-cacao-soft">
+              <Link href="/cocina/pedido" className="font-semibold text-terracotta hover:underline">
+                Ver qué pedir
+              </Link>{" "}
+              según el stock y el mínimo, antes de anotar la compra.
+            </p>
           </div>
           <Link
             href="/cocina/inventario"

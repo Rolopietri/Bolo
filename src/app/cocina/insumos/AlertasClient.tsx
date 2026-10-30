@@ -191,7 +191,7 @@ export function AlertasClient({
           href="/cocina/pedido"
           className="rounded-xl bg-cacao text-white px-5 py-2.5 font-medium hover:bg-terracotta transition-colors text-sm"
         >
-          + Generar pedido sugerido
+          Armar pedido sugerido
         </Link>
         <Link
           href="/cocina/compras"
