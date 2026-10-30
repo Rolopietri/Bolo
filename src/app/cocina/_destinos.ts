@@ -65,6 +65,11 @@ export const DESTINOS = {
     selector: '[data-guia="guia-plato"]',
     etiqueta: "cómo crear un plato y ver su costo",
   },
+  stock: {
+    ruta: "/cocina",
+    selector: '[data-guia="accion-stock"]',
+    etiqueta: "dónde ver el stock, su valor y qué se acaba pronto",
+  },
 } satisfies Record<string, Destino>;
 
 export type ClaveDestino = keyof typeof DESTINOS;

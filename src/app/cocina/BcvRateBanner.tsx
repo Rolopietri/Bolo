@@ -7,6 +7,8 @@ import { extractError } from "@/lib/data/error";
 import type { TasaBcv } from "@/lib/types";
 import {
   bsDesdeUsd,
+  CLAVE_TASA_HOY,
+  CLAVE_TASA_PERSONALIZADA,
   cotizacionDe,
   fechaHoyCaracas,
   fechaTasaLegible,
@@ -20,8 +22,8 @@ import {
   type IdTasa,
 } from "./_tasa";
 
-const CLAVE_SEL = "bolo.hoy.tasa";
-const CLAVE_CUSTOM = "bolo.hoy.tasaPersonalizada";
+const CLAVE_SEL = CLAVE_TASA_HOY;
+const CLAVE_CUSTOM = CLAVE_TASA_PERSONALIZADA;
 
 type Estado = "cargando" | "listo" | "error";
 

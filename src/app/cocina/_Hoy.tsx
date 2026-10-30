@@ -6,6 +6,7 @@ import type { ComponentType, SVGProps } from "react";
 import {
   BookIcon,
   CartIcon,
+  ChartIcon,
   CheckIcon,
   ChevronIcon,
   ClipboardIcon,
@@ -33,7 +34,14 @@ import {
 
 type Icono = ComponentType<SVGProps<SVGSVGElement>>;
 
-const ACCIONES: { href: string; titulo: string; detalle: string; Icon: Icono }[] = [
+const ACCIONES: { href: string; titulo: string; detalle: string; Icon: Icono; dataGuia?: string }[] = [
+  {
+    href: "/cocina/inventario/stock",
+    titulo: "Stock",
+    detalle: "Cuánto hay libre, cuánto vale y qué se acaba pronto.",
+    Icon: ChartIcon,
+    dataGuia: "accion-stock",
+  },
   {
     href: "/cocina/inventario/conteo",
     titulo: "Conteo",
@@ -271,7 +279,7 @@ export function Hoy() {
 
       <section aria-label="Acciones rápidas">
         <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">Para hoy</h2>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+        <ul className="mt-3 grid gap-3 sm:grid-cols-2">
           {ACCIONES.map((a) => {
             const detalle =
               a.href === "/cocina/pedido" && faltantes > 0
@@ -281,6 +289,7 @@ export function Hoy() {
             <li key={a.href}>
               <Link
                 href={a.href}
+                data-guia={a.dataGuia}
                 className="group flex h-full flex-col gap-3 rounded-2xl bg-marfil-soft p-4 ring-1 ring-marfil transition-colors hover:bg-white hover:ring-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta sm:p-5"
               >
                 <span className="flex items-center justify-between gap-2">

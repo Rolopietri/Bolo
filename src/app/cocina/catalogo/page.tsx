@@ -1,7 +1,7 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
 import { MenuLista, type MenuItem } from "@/components/MenuLista";
-import { BoxIcon, TruckIcon, UtensilsIcon } from "@/components/icons";
+import { BoxIcon, ChartIcon, TruckIcon, UtensilsIcon } from "@/components/icons";
 
 const SUBMODULOS: MenuItem[] = [
   {
@@ -9,6 +9,12 @@ const SUBMODULOS: MenuItem[] = [
     label: "Insumos",
     Icon: BoxIcon,
     desc: "Ficha de cada materia prima: precio y stock, con sus alertas, mermas y pérdidas y la auditoría de cada cambio en el mismo lugar.",
+  },
+  {
+    href: "/cocina/inventario/stock",
+    label: "Stock",
+    Icon: ChartIcon,
+    desc: "De un vistazo: valor de la cámara, stock libre y qué se acaba pronto.",
   },
   {
     href: "/cocina/proveedores",

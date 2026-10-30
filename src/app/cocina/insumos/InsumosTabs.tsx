@@ -19,7 +19,14 @@ const TABS: { id: Vista; label: string }[] = [
   { id: "auditoria", label: "Auditoría" },
 ];
 
-export function InsumosTabs({ vistaInicial }: { vistaInicial: Vista }) {
+export function InsumosTabs({
+  vistaInicial,
+  insumoInicial = null,
+}: {
+  vistaInicial: Vista;
+  /** Abre el catálogo y lleva a la ficha de este insumo. */
+  insumoInicial?: string | null;
+}) {
   const [vista, setVista] = useState<Vista>(vistaInicial);
   // Insumo con el que abrir la auditoría (desde "Historial" en el catálogo).
   const [auditoriaInsumo, setAuditoriaInsumo] = useState<string | null>(null);
@@ -75,6 +82,7 @@ export function InsumosTabs({ vistaInicial }: { vistaInicial: Vista }) {
 
       {vista === "catalogo" && (
         <InsumosClient
+          insumoInicial={insumoInicial}
           onVerAlertas={() => ir("alertas")}
           onVerMermas={() => ir("mermas")}
           onVerHistorial={(id) => ir("auditoria", { insumoId: id })}
