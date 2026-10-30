@@ -61,7 +61,7 @@ const ESTADOS: { id: FiltroEstadoStock; label: string }[] = [
   { id: "pronto", label: "Se acaba pronto" },
   { id: "agotado", label: "Agotado" },
   { id: "bajo", label: "Bajo mínimo" },
-  { id: "ok", label: "OK" },
+  { id: "ok", label: "En orden" },
   { id: "sin_minimo", label: "Sin mínimo" },
 ];
 
@@ -408,7 +408,8 @@ export function StockClient() {
             className="w-full bg-transparent text-sm text-cacao outline-none placeholder:text-cacao-mute"
           />
         </label>
-        <div className="flex flex-wrap gap-2" aria-label="Filtrar por estado">
+        <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por estado">
+          <span className="text-[10px] uppercase tracking-widest text-cacao-mute">Estado</span>
           {ESTADOS.map((e) => (
             <button key={e.id} type="button" onClick={() => setEstado(e.id)} className={pillClass(estado === e.id)}>
               {e.label}
@@ -416,7 +417,8 @@ export function StockClient() {
           ))}
         </div>
         {categorias.length > 1 && (
-          <div className="flex flex-wrap gap-2" aria-label="Filtrar por categoría">
+          <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por categoría">
+            <span className="text-[10px] uppercase tracking-widest text-cacao-mute">Categoría</span>
             <button type="button" onClick={() => setCategoria("todas")} className={pillClass(categoria === "todas")}>
               Todas
             </button>
@@ -530,7 +532,7 @@ function Pastilla({ estado }: { estado: EstadoStock }) {
   const meta = {
     agotado: { label: "Agotado", cls: "bg-red-50 text-red-800 ring-red-200", dot: "bg-red-500" },
     bajo: { label: "Bajo mínimo", cls: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-500" },
-    ok: { label: "OK", cls: "bg-emerald-50 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500" },
+    ok: { label: "En orden", cls: "bg-emerald-50 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500" },
     sin_minimo: { label: "Sin mínimo", cls: "bg-stone-100 text-stone-700 ring-stone-200", dot: "bg-stone-400" },
   }[estado];
   return (
