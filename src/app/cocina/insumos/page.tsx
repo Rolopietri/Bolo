@@ -1,5 +1,6 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
+import { ChartIcon } from "@/components/icons";
 import { InsumosTabs, type Vista } from "./InsumosTabs";
 import { PasoSiguiente } from "../_PasoSiguiente";
 import { PasosCocina } from "../_PasosCocina";
@@ -11,8 +12,11 @@ export default async function InsumosPage({
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
-  const { vista } = await searchParams;
-  const vistaInicial = VISTAS.find((v) => v === vista) ?? "catalogo";
+  const { vista, insumo } = await searchParams;
+  const insumoInicial = typeof insumo === "string" ? insumo : undefined;
+  const vistaInicial = insumoInicial
+    ? "catalogo"
+    : (VISTAS.find((v) => v === vista) ?? "catalogo");
   return (
     <>
       <Header subtitle="Insumos" />
@@ -30,15 +34,24 @@ export default async function InsumosPage({
               alertas, mermas y el historial de cada cambio de stock.
             </p>
           </div>
-          <Link
-            href="/cocina/catalogo"
-            className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao"
-          >
-            ← Insumos e Inventario
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            <Link
+              href="/cocina/inventario/stock"
+              className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-cacao ring-1 ring-marfil transition-colors hover:text-terracotta hover:ring-terracotta"
+            >
+              <ChartIcon className="size-4 text-terracotta" />
+              Ver stock
+            </Link>
+            <Link
+              href="/cocina/catalogo"
+              className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao"
+            >
+              ← Insumos e Inventario
+            </Link>
+          </div>
         </section>
         <PasosCocina actual={2} className="mb-8" />
-        <InsumosTabs vistaInicial={vistaInicial} />
+        <InsumosTabs vistaInicial={vistaInicial} insumoInicial={insumoInicial} />
         <PasoSiguiente
           paso={2}
           seguirTexto="seguir cargando insumos"

@@ -1,3 +1,7 @@
+/** La calculadora de Hoy guarda aquí la tasa elegida y, si es personalizada, el número. */
+export const CLAVE_TASA_HOY = "bolo.hoy.tasa";
+export const CLAVE_TASA_PERSONALIZADA = "bolo.hoy.tasaPersonalizada";
+
 /** Lectura de un monto escrito a mano. El separador de más a la derecha es el
  *  decimal, así valen "10", "10.5", "10,50" y "1.234,56". */
 export function parseMonto(s: string): number | null {

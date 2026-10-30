@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   frescuraPrecio,
   type Insumo,
@@ -144,11 +144,14 @@ async function archivoABase64(
 }
 
 export function InsumosClient({
+  insumoInicial = null,
   onVerAlertas,
   onVerMermas,
   onVerHistorial,
   onConteoAlertas,
 }: {
+  /** Si viene de Stock, desplaza la lista hasta esta ficha. */
+  insumoInicial?: string | null;
   onVerAlertas?: () => void;
   onVerMermas?: () => void;
   /** Abre la auditoría de stock filtrada a este insumo. */
@@ -194,6 +197,7 @@ export function InsumosClient({
     null,
   );
   const [showInactivos, setShowInactivos] = useState(false);
+  const fichaVista = useRef<string | null>(null);
   // Insumo al que se le va a registrar una pérdida (abre el modal).
   const [perdidaInsumo, setPerdidaInsumo] = useState<Insumo | null>(null);
   // Aviso tras registrar una pérdida, con acceso a la pestaña de Mermas.
@@ -216,6 +220,12 @@ export function InsumosClient({
         if (!cancelled) {
           setItems(ins);
           setProveedores(prov);
+          if (
+            insumoInicial &&
+            ins.some((i) => i.id === insumoInicial && !i.activo)
+          ) {
+            setShowInactivos(true);
+          }
         }
         try {
           const cats = await listCategoriasInsumo();
@@ -233,7 +243,22 @@ export function InsumosClient({
     return () => {
       cancelled = true;
     };
-  }, [intento]);
+  }, [intento, insumoInicial]);
+
+  useEffect(() => {
+    if (loading || !insumoInicial || fichaVista.current === insumoInicial) return;
+    const el = document.querySelector<HTMLElement>(
+      `[data-insumo-id="${CSS.escape(insumoInicial)}"]`,
+    );
+    if (!el) return;
+    fichaVista.current = insumoInicial;
+    el.scrollIntoView({ block: "center" });
+    el.classList.add("ring-2", "ring-terracotta");
+    const t = window.setTimeout(() => {
+      el.classList.remove("ring-2", "ring-terracotta");
+    }, 1600);
+    return () => window.clearTimeout(t);
+  }, [loading, insumoInicial, items, showInactivos]);
 
   function reintentarCarga() {
     setLoading(true);

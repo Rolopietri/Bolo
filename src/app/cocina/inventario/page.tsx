@@ -2,7 +2,7 @@ import { Header } from "@/components/Header";
 import Link from "next/link";
 import { funcionActiva } from "@/lib/modulos.mjs";
 import { MenuLista, type MenuItem } from "@/components/MenuLista";
-import { CalendarIcon, CartIcon, ReceiptIcon, ClipboardIcon } from "@/components/icons";
+import { CalendarIcon, CartIcon, ChartIcon, ReceiptIcon, ClipboardIcon } from "@/components/icons";
 import { InventarioVacio } from "./InventarioVacio";
 
 const PLANES: MenuItem = {
@@ -13,6 +13,12 @@ const PLANES: MenuItem = {
 };
 
 const SUBMODULOS: MenuItem[] = [
+  {
+    href: "/cocina/inventario/stock",
+    label: "Stock",
+    Icon: ChartIcon,
+    desc: "Cuánto hay libre, cuánto vale y qué se acaba pronto.",
+  },
   {
     href: "/cocina/compras",
     label: "Compras",
