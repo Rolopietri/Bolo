@@ -5,7 +5,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnalisisVentas } from "./AnalisisVentas";
 import { AnalisisCompras } from "./AnalisisCompras";
-import { listComprasRango } from "@/lib/data/cocina";
+import { getTasaBcvPorFecha, listComprasRango } from "@/lib/data/cocina";
+import { listVentasRango } from "@/lib/data/ventas";
+import { fmtBs, fmtUsd } from "@/lib/moneda";
 import { hoyISO } from "@/lib/ui";
 import { WarningIcon } from "@/components/icons";
 
@@ -28,19 +30,24 @@ export function AnalisisAdministrativo() {
 }
 
 // ── Resumen / Utilidad real ────────────────────────────────────────────────
-const fEUR = (n: number) => `${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 const fPct = (n: number) => `${n.toFixed(1)}%`;
 function isoLocal(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function rangoMes() { const h = new Date(); return { desde: isoLocal(new Date(h.getFullYear(), h.getMonth(), 1)), hasta: isoLocal(h) }; }
 
-type Conc = { setuxNeto: number; cxcNeto: number; cxc: number; rpp: number } | null;
-type Gastos = { fijos: number; variables: number; insumosEgreso: number; cortesias: number; porCategoria: { categoria: string; clasificacion: string; eur: number }[] } | null;
+type Gastos = {
+  fijosUsd?: number;
+  variablesUsd?: number;
+  insumosEgresoUsd?: number;
+  cortesiasUsd?: number;
+  porCategoria: { categoria: string; clasificacion: string; eur: number; usd?: number }[];
+} | null;
 
 function ResumenUtilidad() {
   const ini = rangoMes();
   const [desde, setDesde] = useState(ini.desde);
   const [hasta, setHasta] = useState(ini.hasta);
-  const [conc, setConc] = useState<Conc>(null);
+  const [ventasNetasSrc, setVentasNetasSrc] = useState(0);
+  const [tasaUsdBs, setTasaUsdBs] = useState<number | null>(null);
   const [gastos, setGastos] = useState<Gastos>(null);
   const [cogsCaja, setCogsCaja] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -51,15 +58,17 @@ function ResumenUtilidad() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        const [c, g, compras] = await Promise.all([
-          fetch(`/api/admin/conciliacion?desde=${desde}&hasta=${hasta}`, { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+        const [g, compras, ventas, tasa] = await Promise.all([
           fetch(`/api/admin/gastos?desde=${desde}&hasta=${hasta}`, { cache: "no-store" }).then((r) => r.ok ? r.json() : null).catch(() => null),
           listComprasRango(desde, hasta).catch(() => []),
+          listVentasRango(desde, hasta).catch(() => []),
+          getTasaBcvPorFecha(hasta).catch(() => null),
         ]);
         if (cancel) return;
-        setConc(c && !c.error ? c : null);
         setGastos(g && !g.error ? g : null);
         setCogsCaja((compras as { precioTotalUsd: number }[]).reduce((s, x) => s + (x.precioTotalUsd || 0), 0));
+        setVentasNetasSrc((ventas as { totalUsd?: number }[]).reduce((s, v) => s + (v.totalUsd || 0), 0));
+        setTasaUsdBs(tasa && tasa.usdBs > 0 ? tasa.usdBs : null);
       } catch (e) {
         if (!cancel) setError(e instanceof Error ? e.message : "Error");
       } finally {
@@ -70,10 +79,10 @@ function ResumenUtilidad() {
   }, [desde, hasta]);
 
   const r = useMemo(() => {
-    const ventasNetas = (conc?.setuxNeto ?? 0) + (conc?.cxcNeto ?? 0);
+    const ventasNetas = ventasNetasSrc;
     const cogs = cogsCaja;
-    const variables = gastos?.variables ?? 0;
-    const fijos = gastos?.fijos ?? 0;
+    const variables = gastos?.variablesUsd ?? 0;
+    const fijos = gastos?.fijosUsd ?? 0;
     const margenBruto = ventasNetas - cogs;
     const contribucion = margenBruto - variables;
     const utilidad = contribucion - fijos;
@@ -83,10 +92,10 @@ function ResumenUtilidad() {
     const contribPct = ventasNetas > 0 ? contribucion / ventasNetas : 0;
     const equilibrio = contribPct > 0 ? fijos / contribPct : 0;
     return { ventasNetas, cogs, variables, fijos, margenBruto, contribucion, utilidad, foodCost, margenBrutoPct, margenNetoPct, equilibrio };
-  }, [conc, gastos, cogsCaja]);
+  }, [ventasNetasSrc, gastos, cogsCaja]);
 
-  // Guard de doble conteo: insumos en Egresos vs compras de Cocina.
-  const insumoEgreso = gastos?.insumosEgreso ?? 0;
+  // Guard de doble conteo: insumos en Egresos vs compras de Cocina. Todo en USD.
+  const insumoEgreso = gastos?.insumosEgresoUsd ?? 0;
   const guard = insumoEgreso > 5 && cogsCaja > 5
     ? "doble" // ambos tienen datos → posible doble registro
     : insumoEgreso > 5 && cogsCaja <= 5
@@ -116,37 +125,38 @@ function ResumenUtilidad() {
         <>
           {/* KPIs */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <Kpi titulo="Ventas netas" valor={fEUR(r.ventasNetas)} sub="contado + crédito, sin cortesías" />
-            <Kpi titulo="Utilidad operativa" valor={fEUR(r.utilidad)} sub={`margen neto ${fPct(r.margenNetoPct)}`} tono={r.utilidad >= 0 ? "bien" : "alerta"} />
-            <Kpi titulo="Food cost (caja)" valor={fPct(r.foodCost)} sub={`insumos ${fEUR(r.cogs)}`} tono={r.foodCost > 38 ? "alerta" : r.foodCost > 0 ? "bien" : undefined} />
-            <Kpi titulo="Margen bruto" valor={fPct(r.margenBrutoPct)} sub={fEUR(r.margenBruto)} />
-            <Kpi titulo="Punto de equilibrio" valor={r.equilibrio > 0 ? fEUR(r.equilibrio) : "—"} sub="ventas para cubrir fijos" />
+            <Kpi titulo="Ventas netas" valor={fmtUsd(r.ventasNetas)} sub={tasaUsdBs ? fmtBs(r.ventasNetas * tasaUsdBs) : "ventas de Cocina, en USD"} />
+            <Kpi titulo="Utilidad operativa" valor={fmtUsd(r.utilidad)} sub={`${tasaUsdBs ? fmtBs(r.utilidad * tasaUsdBs) + " · " : ""}margen neto ${fPct(r.margenNetoPct)}`} tono={r.utilidad >= 0 ? "bien" : "alerta"} />
+            <Kpi titulo="Food cost (caja)" valor={fPct(r.foodCost)} sub={`insumos ${fmtUsd(r.cogs)}`} tono={r.foodCost > 38 ? "alerta" : r.foodCost > 0 ? "bien" : undefined} />
+            <Kpi titulo="Margen bruto" valor={fPct(r.margenBrutoPct)} sub={fmtUsd(r.margenBruto)} />
+            <Kpi titulo="Punto de equilibrio" valor={r.equilibrio > 0 ? fmtUsd(r.equilibrio) : "—"} sub="ventas para cubrir fijos" />
           </div>
 
           {/* P&L */}
           <section className="rounded-2xl bg-white ring-1 ring-marfil p-4">
             <h3 className="font-cinzel text-base text-cacao mb-3">Utilidad real del período</h3>
             <div className="max-w-lg space-y-1 text-sm">
-              <PL label="Ventas netas" val={fEUR(r.ventasNetas)} fuerte />
-              <PL label="− Costo de insumos (compras del período)" val={fEUR(r.cogs)} tenue />
-              <div className="border-t border-marfil pt-1"><PL label={`= Margen bruto (${fPct(r.margenBrutoPct)})`} val={fEUR(r.margenBruto)} fuerte /></div>
-              <PL label="− Gastos variables (no insumos)" val={fEUR(r.variables)} tenue />
-              <div className="border-t border-marfil pt-1"><PL label="= Margen de contribución" val={fEUR(r.contribucion)} /></div>
-              <PL label="− Gastos fijos (alquiler, nómina…)" val={fEUR(r.fijos)} tenue />
-              <div className="border-t-2 border-marfil pt-1"><PL label={`= Utilidad operativa (${fPct(r.margenNetoPct)})`} val={fEUR(r.utilidad)} fuerte /></div>
+              <PL label="Ventas netas" val={fmtUsd(r.ventasNetas)} fuerte />
+              <PL label="− Costo de insumos (compras del período)" val={fmtUsd(r.cogs)} tenue />
+              <div className="border-t border-marfil pt-1"><PL label={`= Margen bruto (${fPct(r.margenBrutoPct)})`} val={fmtUsd(r.margenBruto)} fuerte /></div>
+              <PL label="− Gastos variables (no insumos)" val={fmtUsd(r.variables)} tenue />
+              <div className="border-t border-marfil pt-1"><PL label="= Margen de contribución" val={fmtUsd(r.contribucion)} /></div>
+              <PL label="− Gastos fijos (alquiler, nómina…)" val={fmtUsd(r.fijos)} tenue />
+              <div className="border-t-2 border-marfil pt-1"><PL label={`= Utilidad operativa (${fPct(r.margenNetoPct)})`} val={fmtUsd(r.utilidad)} fuerte /></div>
             </div>
-            {(conc?.rpp ?? 0) > 0.005 && (
-              <p className="text-[11px] text-cacao-mute mt-3">Informativo: cortesías (RPP) {fEUR(conc?.rpp ?? 0)} — venta regalada, no entra en la utilidad. {gastos && gastos.cortesias > 0.005 ? `` : ``}</p>
+            {(gastos?.cortesiasUsd ?? 0) > 0.005 && (
+              <p className="text-[11px] text-cacao-mute mt-3">Informativo: cortesías {fmtUsd(gastos?.cortesiasUsd ?? 0)} — venta regalada, no entra en la utilidad.</p>
             )}
+            <p className="text-[11px] text-cacao-mute mt-3">Ventas de Cocina, en dólares. {tasaUsdBs ? `Equivalente BCV: ${fmtBs(1 * tasaUsdBs)} por $1.` : "Sin tasa BCV para mostrar bolívares."} El libro viejo de ingresos no se suma.</p>
           </section>
 
           {/* Guard de fuente / doble conteo */}
           {guard !== "ok" && (
             <div className={`rounded-xl p-3 text-[12px] ring-1 ${guard === "doble" ? "bg-[#FBF3E2] ring-[#E7D4A6] text-[#7A5A18]" : "bg-marfil-soft ring-marfil text-cacao-soft"}`}>
               {guard === "doble" ? (
-                <><WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" /><strong>Posible doble conteo de insumos:</strong> hay {fEUR(insumoEgreso)} en Egresos categoría “Insumos” y {fEUR(cogsCaja)} en Compras de Cocina para el mismo período. La utilidad usa <strong>solo</strong> las compras de Cocina como costo de insumos (los “Insumos” de Egresos se excluyen a propósito). Si registras en los dos lados, elige uno para no distorsionar.</>
+                <><WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" /><strong>Posible doble conteo de insumos:</strong> hay {fmtUsd(insumoEgreso)} en Egresos categoría “Insumos” y {fmtUsd(cogsCaja)} en Compras de Cocina para el mismo período. La utilidad usa <strong>solo</strong> las compras de Cocina como costo de insumos (los “Insumos” de Egresos se excluyen a propósito). Si registras en los dos lados, elige uno para no distorsionar.</>
               ) : (
-                <>Los insumos parecen registrarse en <strong>Egresos</strong> ({fEUR(insumoEgreso)}) y no en Compras de Cocina ({fEUR(cogsCaja)}). Hoy la utilidad toma el costo de insumos desde <strong>Cocina → Compras</strong>. Para que la utilidad sea correcta, registra las compras de insumos en Cocina → Compras.</>
+                <>Los insumos parecen registrarse en <strong>Egresos</strong> ({fmtUsd(insumoEgreso)}) y no en Compras de Cocina ({fmtUsd(cogsCaja)}). Hoy la utilidad toma el costo de insumos desde <strong>Cocina → Compras</strong>. Para que la utilidad sea correcta, registra las compras de insumos en Cocina → Compras.</>
               )}
             </div>
           )}
@@ -167,7 +177,7 @@ function ResumenUtilidad() {
                       <tr key={c.categoria} className="border-t border-marfil">
                         <td className="py-1 text-cacao">{c.categoria}</td>
                         <td className="py-1 text-cacao-soft">{c.clasificacion === "fija" ? "Fijo" : "Variable"}</td>
-                        <td className="py-1 text-right tabular-nums text-cacao">{fEUR(c.eur)}</td>
+                        <td className="py-1 text-right tabular-nums text-cacao">{fmtUsd(c.usd ?? 0)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -176,7 +186,7 @@ function ResumenUtilidad() {
             </section>
           )}
 
-          <p className="text-[11px] text-cacao-soft italic">Costo de insumos en base <strong>caja</strong> (lo comprado en el período). El costo por <strong>consumo de recetas</strong> (food cost real del menú) está en la pestaña <strong>Ingresos</strong> → “Rentabilidad (margen)”. Montos en €.</p>
+          <p className="text-[11px] text-cacao-soft italic">Costo de insumos en base <strong>caja</strong> (lo comprado en el período, en dólares). El costo por <strong>consumo de recetas</strong> (food cost real del menú) está en la pestaña <strong>Ingresos</strong> → “Rentabilidad (margen)”.</p>
         </>
       )}
     </div>

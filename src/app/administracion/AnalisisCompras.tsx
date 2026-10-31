@@ -42,10 +42,8 @@ const fUSD = (n: number) =>
 const fUnid = (n: number) =>
   Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 const fPct = (n: number) => `${n.toFixed(1)}%`;
-// Egresos vienen en € (admin_egreso). Se muestran en € para no mezclar.
-const fEUR = (n: number) => `${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 type EgItem = { id: string; fecha: string; concepto: string | null; proveedor: string | null; categoria: string; categoria_id: string | null; usd: number; moneda: string; monto: number };
-type GastosResp = { fijos: number; variables: number; insumosEgreso: number; cortesias: number; porCategoria: { categoria: string; clasificacion: string; eur: number; usd: number }[]; items?: EgItem[]; prev: { fijos: number; variables: number } };
+type GastosResp = { fijos: number; variables: number; insumosEgreso: number; cortesias: number; fijosUsd?: number; variablesUsd?: number; cortesiasUsd?: number; porCategoria: { categoria: string; clasificacion: string; eur: number; usd: number }[]; items?: EgItem[]; prev: { fijos: number; variables: number; fijosUsd?: number; variablesUsd?: number } };
 
 function isoLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -989,10 +987,10 @@ export function AnalisisCompras() {
 
           {/* ── Egresos operativos (Administración) ─────────────── */}
           {(() => {
-            const egFijos = gastos?.fijos ?? 0;
-            const egVariables = gastos?.variables ?? 0;
+            const egFijos = gastos?.fijosUsd ?? 0;
+            const egVariables = gastos?.variablesUsd ?? 0;
             const egresosTotal = egFijos + egVariables;
-            const egresosPrev = (gastos?.prev.fijos ?? 0) + (gastos?.prev.variables ?? 0);
+            const egresosPrev = (gastos?.prev.fijosUsd ?? 0) + (gastos?.prev.variablesUsd ?? 0);
             const egDelta = egresosPrev > 0 ? (egresosTotal - egresosPrev) / egresosPrev : null;
             const salidasTotal = globalTotal + egresosTotal;
             const egCategorias = gastos?.porCategoria ?? [];
@@ -1004,22 +1002,22 @@ export function AnalisisCompras() {
                 ) : (
                   <>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                      <CompraCard titulo="Gastos fijos" valor={fEUR(egFijos)} sub="alquiler, nómina…" />
-                      <CompraCard titulo="Gastos variables" valor={fEUR(egVariables)} sub="sin insumos" />
-                      <CompraCard titulo="Egresos (total)" valor={fEUR(egresosTotal)} sub={egDelta == null ? undefined : `${egDelta >= 0 ? "▲" : "▼"} ${fPct(Math.abs(egDelta) * 100)} vs antes`} tono={egDelta == null ? undefined : egDelta >= 0 ? "alerta" : "bien"} />
-                      <CompraCard titulo="Salidas totales" valor={fEUR(salidasTotal)} sub="insumos + egresos" tono="alerta" />
+                      <CompraCard titulo="Gastos fijos" valor={fUSD(egFijos)} sub="alquiler, nómina…" />
+                      <CompraCard titulo="Gastos variables" valor={fUSD(egVariables)} sub="sin insumos" />
+                      <CompraCard titulo="Egresos (total)" valor={fUSD(egresosTotal)} sub={egDelta == null ? undefined : `${egDelta >= 0 ? "▲" : "▼"} ${fPct(Math.abs(egDelta) * 100)} vs antes`} tono={egDelta == null ? undefined : egDelta >= 0 ? "alerta" : "bien"} />
+                      <CompraCard titulo="Salidas totales" valor={fUSD(salidasTotal)} sub="insumos + egresos" tono="alerta" />
                     </div>
                     {egCategorias.length > 0 && (
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <PanelCard titulo="Egresos por categoría">
-                          <BarrasH rows={egCategorias.map((c, i) => ({ key: c.categoria, label: c.categoria, value: c.eur, color: colorPorIndice(i), tip: `${c.categoria} (${c.clasificacion === "fija" ? "fijo" : "variable"}): ${fEUR(c.eur)}` }))} format={fEUR} />
+                          <BarrasH rows={egCategorias.map((c, i) => ({ key: c.categoria, label: c.categoria, value: c.usd, color: colorPorIndice(i), tip: `${c.categoria} (${c.clasificacion === "fija" ? "fijo" : "variable"}): ${fUSD(c.usd)}` }))} format={fUSD} />
                         </PanelCard>
                         <PanelCard titulo="Distribución de egresos">
-                          <Dona segmentos={egCategorias.map((c, i) => ({ key: c.categoria, label: c.categoria, value: c.eur, color: colorPorIndice(i) }))} format={fEUR} />
+                          <Dona segmentos={egCategorias.map((c, i) => ({ key: c.categoria, label: c.categoria, value: c.usd, color: colorPorIndice(i) }))} format={fUSD} />
                         </PanelCard>
                       </div>
                     )}
-                    <p className="text-[11px] text-cacao-mute">Los <strong>insumos</strong> se cuentan arriba (Compras de Cocina); por eso aquí se excluye la categoría “Insumos” de Egresos para no duplicar. Las <strong>cortesías</strong> ({fEUR(gastos.cortesias)}) no se suman: son venta regalada, no un gasto. Egresos en €.</p>
+                    <p className="text-[11px] text-cacao-mute">Los <strong>insumos</strong> se cuentan arriba (Compras de Cocina); por eso aquí se excluye la categoría “Insumos” de Egresos para no duplicar. Las <strong>cortesías</strong> ({fUSD(gastos.cortesiasUsd ?? 0)}) no se suman: son venta regalada, no un gasto. Montos en dólares.</p>
                   </>
                 )}
               </section>

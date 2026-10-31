@@ -87,28 +87,32 @@ export async function GET(req: NextRequest) {
     moneda: e.moneda ?? "EUR", monto: n(e.monto),
   })).sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? ""));
   let fijos = 0, variables = 0, insumosEgreso = 0, cortesias = 0;
+  let fijosUsd = 0, variablesUsd = 0, insumosEgresoUsd = 0, cortesiasUsd = 0;
+  const usdDe = (e: EgRow) => ((e.moneda ?? "EUR") === "EUR" ? n(e.monto) * crossDe(e.fecha) : n(e.monto_usd));
   const porCat = new Map<string, { categoria: string; clasificacion: string; eur: number; usd: number }>();
   for (const e of rows) {
     const eur = eurDe(e);
-    const usd = (e.moneda ?? "EUR") === "EUR" ? n(e.monto) * crossDe(e.fecha) : n(e.monto_usd);
-    if (esCortesia(e)) { cortesias += eur; continue; }
-    if (esInsumo(e)) { insumosEgreso += eur; continue; }
-    if (esFijo(e)) fijos += eur; else variables += eur;
+    const usd = usdDe(e);
+    if (esCortesia(e)) { cortesias += eur; cortesiasUsd += usd; continue; }
+    if (esInsumo(e)) { insumosEgreso += eur; insumosEgresoUsd += usd; continue; }
+    if (esFijo(e)) { fijos += eur; fijosUsd += usd; } else { variables += eur; variablesUsd += usd; }
     const key = norm(e.categoria_nombre) || "otros";
     const cell = porCat.get(key) ?? { categoria: e.categoria_nombre || "Otros", clasificacion: esFijo(e) ? "fija" : "variable", eur: 0, usd: 0 };
     cell.eur += eur; cell.usd += usd; porCat.set(key, cell);
   }
-  let pFijos = 0, pVariables = 0;
+  let pFijos = 0, pVariables = 0, pFijosUsd = 0, pVariablesUsd = 0;
   for (const e of (prev.data ?? []) as unknown as EgRow[]) {
     if (e.pagada === false || esCortesia(e) || esInsumo(e)) continue;
-    if (esFijo(e)) pFijos += eurDe(e); else pVariables += eurDe(e);
+    if (esFijo(e)) { pFijos += eurDe(e); pFijosUsd += usdDe(e); }
+    else { pVariables += eurDe(e); pVariablesUsd += usdDe(e); }
   }
 
   return NextResponse.json({
     desde, hasta,
     fijos: r2(fijos), variables: r2(variables), insumosEgreso: r2(insumosEgreso), cortesias: r2(cortesias),
-    porCategoria: Array.from(porCat.values()).map((c) => ({ ...c, eur: r2(c.eur), usd: r2(c.usd) })).sort((a, b) => b.eur - a.eur),
+    fijosUsd: r2(fijosUsd), variablesUsd: r2(variablesUsd), insumosEgresoUsd: r2(insumosEgresoUsd), cortesiasUsd: r2(cortesiasUsd),
+    porCategoria: Array.from(porCat.values()).map((c) => ({ ...c, eur: r2(c.eur), usd: r2(c.usd) })).sort((a, b) => b.usd - a.usd),
     items,
-    prev: { fijos: r2(pFijos), variables: r2(pVariables) },
+    prev: { fijos: r2(pFijos), variables: r2(pVariables), fijosUsd: r2(pFijosUsd), variablesUsd: r2(pVariablesUsd) },
   });
 }
