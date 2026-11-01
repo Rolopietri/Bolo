@@ -10,10 +10,13 @@ import type {
   Insumo,
 } from "@/lib/types";
 import { listRecetas } from "@/lib/data/recetas";
-import { listProveedores, listInsumos } from "@/lib/data/cocina";
+import { getTasaBcvActual, listProveedores, listInsumos } from "@/lib/data/cocina";
+import { leerAjustesVentas, type AjustesVentas } from "@/lib/data/ajustes-ventas";
+import { fmtUsd, fmtUsdBs } from "@/lib/moneda";
+import { ComoRegistras } from "./ComoRegistras";
+import { RegistroPlatos } from "./RegistroPlatos";
 import {
   listVentasDiasCompletos,
-  createVenta,
   createVentasBatch,
   deleteVenta,
   deleteVentasXetuxFechas,
@@ -112,14 +115,15 @@ export function VentasClient() {
   const [historialDesactualizado, setHistorialDesactualizado] = useState<string | null>(null);
   const [recargandoHistorial, setRecargandoHistorial] = useState(false);
   const [totalesMes, setTotalesMes] = useState<Record<string, number>>({});
-  const [tasaEurUsd, setTasaEurUsd] = useState(1.17);
+  const [tasaUsdBs, setTasaUsdBs] = useState<number | null>(null);
+  const [ajustes, setAjustes] = useState<AjustesVentas>({
+    ventasManual: true,
+    ventasPos: true,
+    persistido: false,
+  });
 
-  // Registro manual
+  // Registro manual por plato
   const [mFecha, setMFecha] = useState(todayISO());
-  const [mRecetaId, setMRecetaId] = useState("");
-  const [mCantidad, setMCantidad] = useState("1");
-  const [mPrecio, setMPrecio] = useState("");
-  const [saving, setSaving] = useState(false);
 
   // Importar
   const [iFecha, setIFecha] = useState(todayISO());
@@ -165,13 +169,17 @@ export function VentasClient() {
           setInsumos(ins);
           setTotalesMes(tm);
         }
-        // Tasa €→USD del panel de Administración (misma conversión).
         try {
-          const rt = await fetch("/api/admin/tasa", { cache: "no-store" });
-          const dt = await rt.json();
-          if (!cancelled && dt?.tasa) setTasaEurUsd(Number(dt.tasa));
+          const [aj, tasa] = await Promise.all([
+            leerAjustesVentas(),
+            getTasaBcvActual().catch(() => null),
+          ]);
+          if (!cancelled) {
+            setAjustes(aj);
+            setTasaUsdBs(tasa && tasa.usdBs > 0 ? tasa.usdBs : null);
+          }
         } catch {
-          /* usa 1,17 por defecto */
+          /* sin ajustes ni tasa: ambos caminos visibles, montos solo en $ */
         }
       } catch (e) {
         if (!cancelled)
@@ -204,44 +212,6 @@ export function VentasClient() {
       setHistorialDesactualizado(e instanceof Error ? e.message : "Error cargando");
     } finally {
       setRecargandoHistorial(false);
-    }
-  }
-
-  async function handleRegistroManual(e: React.FormEvent) {
-    e.preventDefault();
-    if (!mRecetaId) return;
-    // Validar la cantidad: una venta con cantidad 0/NaN/negativa descontaría
-    // stock incorrectamente.
-    const cant = Number(mCantidad);
-    if (!Number.isFinite(cant) || cant <= 0) {
-      setError("La cantidad debe ser un número mayor a 0.");
-      return;
-    }
-    const precio = mPrecio ? Number(mPrecio) : undefined;
-    if (precio !== undefined && (!Number.isFinite(precio) || precio < 0)) {
-      setError("El precio no puede ser negativo.");
-      return;
-    }
-    setError(null);
-    setSaving(true);
-    try {
-      const r = recetas.find((x) => x.id === mRecetaId);
-      const nueva = await createVenta({
-        fecha: mFecha,
-        recetaId: mRecetaId,
-        recetaNombre: r?.nombre ?? "—",
-        cantidad: cant,
-        precioUnitarioUsd: precio,
-        totalUsd: precio ? cant * precio : undefined,
-        fuente: "manual",
-      });
-      setVentas((prev) => [nueva, ...prev]);
-      setMCantidad("1");
-      setMPrecio("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error guardando");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -626,28 +596,53 @@ export function VentasClient() {
       </div>
     );
   }
-  if (errorCarga) {
-    return (
-      <ErrorCarga
-        que="las ventas"
-        detalle={errorCarga}
-        onReintentar={reintentarCarga}
-      />
-    );
-  }
+  const pestanas = (
+    [
+      ajustes.ventasManual ? { v: "registrar" as const, l: "Registro manual" } : null,
+      ajustes.ventasPos ? { v: "importar" as const, l: "Importar Xetux" } : null,
+      ajustes.ventasPos ? { v: "clasificacion" as const, l: "Clasificación POS" } : null,
+      { v: "historial" as const, l: "Historial" },
+    ] as ({ v: Tab; l: string } | null)[]
+  ).filter((t): t is { v: Tab; l: string } => t != null);
+  const tabVisible = pestanas.some((t) => t.v === tab) ? tab : pestanas[0]?.v ?? "historial";
 
   return (
     <div className="space-y-6">
       {error && <ErrorBanner>{error}</ErrorBanner>}
+      {errorCarga && (
+        <ErrorCarga
+          que="las ventas"
+          detalle={errorCarga}
+          onReintentar={reintentarCarga}
+        />
+      )}
+
+      <ComoRegistras ajustes={ajustes} onChange={setAjustes} />
+
+      {!ajustes.ventasManual && !ajustes.ventasPos && (
+        <div className="rounded-2xl bg-white ring-1 ring-marfil p-5 text-sm text-cacao-soft">
+          Con los dos caminos apagados no hay dónde anotar las ventas del día.{" "}
+          <a href="#como-registras" className="text-cacao underline decoration-dotted">
+            Elige cómo registras tus ventas
+          </a>{" "}
+          para ver el registro por plato o la importación del POS.
+        </div>
+      )}
 
       {ventas.length === 0 && (
         <EstadoVacioCocina
           titulo="Todavía no hay ventas"
           beneficio="Cada venta descuenta los ingredientes de la receta. El inventario baja solo, sin contar a mano."
-          cta="Registrar venta"
+          cta={ajustes.ventasManual ? "Registrar venta" : ajustes.ventasPos ? "Importar cierre" : "Cómo registras tus ventas"}
           onCta={() => {
-            setTab("registrar");
-            document.getElementById("registro-venta")?.scrollIntoView({ behavior: "smooth" });
+            if (ajustes.ventasManual) {
+              setTab("registrar");
+              document.getElementById("registro-venta")?.scrollIntoView({ behavior: "smooth" });
+            } else if (ajustes.ventasPos) {
+              setTab("importar");
+            } else {
+              document.getElementById("como-registras")?.scrollIntoView({ behavior: "smooth" });
+            }
           }}
           onDemo={reintentarCarga}
         />
@@ -655,19 +650,12 @@ export function VentasClient() {
 
       {/* Tabs */}
       <div className="flex flex-wrap gap-2">
-        {(
-          [
-            { v: "registrar", l: "Registro manual" },
-            { v: "importar", l: "Importar Xetux" },
-            { v: "clasificacion", l: "Clasificación POS" },
-            { v: "historial", l: "Historial" },
-          ] as { v: Tab; l: string }[]
-        ).map((t) => (
+        {pestanas.map((t) => (
           <button
             key={t.v}
             onClick={() => setTab(t.v)}
             className={`px-3 py-1.5 rounded-full text-xs uppercase tracking-widest ring-1 ${
-              tab === t.v
+              tabVisible === t.v
                 ? "bg-cacao text-white ring-cacao"
                 : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
             }`}
@@ -677,81 +665,17 @@ export function VentasClient() {
         ))}
       </div>
 
-      {/* TAB: Registro manual */}
-      {tab === "registrar" && (
-        <form
-          id="registro-venta"
-          onSubmit={handleRegistroManual}
-          className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
-        >
-          <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">
-            Registrar venta puntual
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="text-sm text-cacao">
-              Fecha
-              <input
-                type="date"
-                value={mFecha}
-                onChange={(e) => setMFecha(e.target.value)}
-                required
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-              />
-            </label>
-            <label className="text-sm text-cacao">
-              Receta
-              <select
-                value={mRecetaId}
-                onChange={(e) => setMRecetaId(e.target.value)}
-                required
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
-              >
-                <option value="">— Selecciona —</option>
-                {recetasVendibles.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.nombre}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm text-cacao">
-              Cantidad vendida
-              <input
-                type="number"
-                step="1"
-                min="1"
-                value={mCantidad}
-                onChange={(e) => setMCantidad(e.target.value)}
-                required
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-              />
-            </label>
-            <label className="text-sm text-cacao">
-              Precio unitario € (opcional)
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={mPrecio}
-                onChange={(e) => setMPrecio(e.target.value)}
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-              />
-            </label>
-          </div>
-          <div className="text-right">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-lg bg-cacao text-white px-4 py-2 font-medium hover:bg-terracotta disabled:opacity-50"
-            >
-              {saving ? "Guardando..." : "Registrar venta"}
-            </button>
-          </div>
-        </form>
+      {tabVisible === "registrar" && ajustes.ventasManual && (
+        <RegistroPlatos
+          recetas={recetasVendibles}
+          fecha={mFecha}
+          onFecha={setMFecha}
+          onGuardado={() => { void recargarHistorial(); }}
+        />
       )}
 
       {/* TAB: Importar */}
-      {tab === "importar" && (
+      {tabVisible === "importar" && ajustes.ventasPos && (
         <div className="space-y-4">
           <section className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3">
             <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">
@@ -961,14 +885,13 @@ export function VentasClient() {
                     clasif.forEach((c) => { const f = c.fila.fecha; if (!f) return; porDia[f] = (porDia[f] ?? 0) + (valoresMonto(c.fila, montoEsTotal).total ?? 0); });
                     const dias = Object.keys(porDia).sort();
                     const total = dias.reduce((s, d) => s + porDia[d], 0);
-                    const f2 = (n: number) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                     return (
                       <div className="text-[11px] text-cacao-soft border-t border-[#C9D6BC] pt-2">
                         <p className="mb-1">Totales por día que se importarán (verifica contra tu reporte):</p>
                         <ul className="space-y-0.5">
-                          {dias.map((d) => (<li key={d} className="flex justify-between tabular-nums"><span>{d}</span><span>{f2(porDia[d])} €</span></li>))}
+                          {dias.map((d) => (<li key={d} className="flex justify-between tabular-nums"><span>{d}</span><span>{fmtUsd(porDia[d])}</span></li>))}
                         </ul>
-                        <div className="flex justify-between tabular-nums font-medium text-cacao border-t border-[#C9D6BC] mt-1 pt-1"><span>Total</span><span>{f2(total)} €</span></div>
+                        <div className="flex justify-between tabular-nums font-medium text-cacao border-t border-[#C9D6BC] mt-1 pt-1"><span>Total</span><span>{fmtUsd(total)}</span></div>
                       </div>
                     );
                   })()}
@@ -991,10 +914,10 @@ export function VentasClient() {
                     <div className="col-span-2 text-cacao-soft text-xs">
                       {mv.total != null ? (
                         <>
-                          {mv.total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                          {fmtUsd(mv.total)}
                           {mv.precioUnitario != null && (
                             <span className="block text-[10px] text-cacao-mute">
-                              {mv.precioUnitario.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € c/u
+                              {fmtUsd(mv.precioUnitario)} c/u
                             </span>
                           )}
                         </>
@@ -1099,7 +1022,7 @@ export function VentasClient() {
       )}
 
       {/* TAB: Clasificación POS */}
-      {tab === "clasificacion" && (
+      {tabVisible === "clasificacion" && ajustes.ventasPos && (
         <section className="rounded-2xl bg-white ring-1 ring-marfil p-5">
           <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute mb-1">
             Clasificación de ítems del POS
@@ -1333,12 +1256,12 @@ export function VentasClient() {
       )}
 
       {/* TAB: Historial */}
-      {tab === "historial" && (
+      {tabVisible === "historial" && (
         <div className="space-y-4">
           {Object.keys(totalesMes).length > 0 && (
             <div className="rounded-2xl bg-white ring-1 ring-marfil p-4">
               <div className="font-display text-[9px] tracking-[0.25em] uppercase text-cacao-mute mb-2">
-                Total por mes <span className="normal-case tracking-normal text-cacao-mute">(euros · ≈ $ a {tasaEurUsd.toString()})</span>
+                Total por mes <span className="normal-case tracking-normal text-cacao-mute">(dólares{tasaUsdBs ? ` · Bs a BCV ${tasaUsdBs.toLocaleString("es-VE")}` : ""})</span>
               </div>
               <ul className="divide-y divide-marfil">
                 {Object.entries(totalesMes)
@@ -1347,8 +1270,7 @@ export function VentasClient() {
                     <li key={mes} className="flex justify-between py-1.5 text-sm">
                       <span className="text-cacao-soft">{nombreMesVentas(mes)}</span>
                       <span className="text-cacao font-medium tabular-nums text-right">
-                        {total.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                        <span className="block text-[11px] text-cacao-mute font-normal">≈ ${(total * tasaEurUsd).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        {fmtUsdBs(total, tasaUsdBs)}
                       </span>
                     </li>
                   ))}
@@ -1399,8 +1321,7 @@ export function VentasClient() {
                         {grupo.items.length === 1 ? "venta" : "ventas"}
                       </span>
                       <span className="ml-auto text-sm text-cacao font-medium text-right">
-                        {grupo.totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
-                        <span className="block text-[10px] text-cacao-mute font-normal">≈ ${(grupo.totalUsd * tasaEurUsd).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        {fmtUsdBs(grupo.totalUsd, tasaUsdBs)}
                       </span>
                     </button>
                     {abierto && (
@@ -1440,7 +1361,7 @@ export function VentasClient() {
                             <div className="text-right shrink-0">
                               <div className="text-cacao font-medium">
                                 {v.cantidad}× ·{" "}
-                                {v.totalUsd ? `${v.totalUsd.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : ""}
+                                {v.totalUsd ? fmtUsd(v.totalUsd) : ""}
                               </div>
                               <button
                                 onClick={() => setPendienteBorrar(v.id)}

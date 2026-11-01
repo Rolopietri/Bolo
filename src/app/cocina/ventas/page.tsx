@@ -16,8 +16,8 @@ export default function VentasPage() {
               Ventas del día
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft">
-              Importa el cierre diario de Xetux (CSV/Excel exportado a CSV) o
-              registra ventas manualmente. El stock se descuenta automáticamente.
+              Anota los platos del día o sube el cierre del POS. Las dos formas
+              guardan en el mismo libro y el stock se descuenta solo.
             </p>
           </div>
           <Link

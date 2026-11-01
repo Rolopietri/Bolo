@@ -195,7 +195,7 @@ export function AnalisisVentas() {
   };
   const [error, setError] = useState<string | null>(null);
   // Conciliación con Administración (componentes del rango, en euros).
-  const [conc, setConc] = useState<{ setuxNeto: number; ivaSetux: number; cxc: number; rpp: number; cxcNeto: number; rppNeto: number; cobrosEur: number; otrosEur: number; tickets: number } | null>(null);
+  const [ticketsPeriodo, setTicketsPeriodo] = useState(0);
   // Panel de clasificación de productos (asigna la categoría desde Admin).
   const [mostrarClasif, setMostrarClasif] = useState(false);
   const [mostrarDetalle, setMostrarDetalle] = useState(false);
@@ -254,16 +254,17 @@ export function AnalisisVentas() {
     };
   }, [desde, hasta]);
 
-  // Componentes de conciliación (Setux neto, CXC, RPP…) del mismo rango.
+  // Conteo de tickets del período (si existe). No se usa el dinero de Setux:
+  // las ventas salen de la tabla `ventas`, en dólares.
   useEffect(() => {
     let cancel = false;
     (async () => {
       try {
         const r = await fetch(`/api/admin/conciliacion?desde=${desde}&hasta=${hasta}`, { cache: "no-store" });
         const d = await r.json();
-        if (!cancel) setConc(r.ok ? d : null);
+        if (!cancel) setTicketsPeriodo(r.ok ? Number(d.tickets) || 0 : 0);
       } catch {
-        if (!cancel) setConc(null);
+        if (!cancel) setTicketsPeriodo(0);
       }
     })();
     return () => { cancel = true; };
@@ -503,17 +504,6 @@ export function AnalisisVentas() {
       .sort((a, b) => b.ganancia - a.ganancia);
   }, [filtradas]);
 
-  // Mix de ingreso: contado (dinero que entró) vs crédito (CXC) vs cortesías (RPP).
-  const mixIngreso = useMemo(() => {
-    if (!conc) return null;
-    const contado = Math.max(0, conc.setuxNeto);
-    const credito = Math.max(0, conc.cxc);
-    const cortesias = Math.max(0, conc.rpp);
-    const total = contado + credito + cortesias;
-    if (total <= 0.005) return null;
-    return { contado, credito, cortesias, total };
-  }, [conc]);
-
   // Productos activos SIN ninguna venta en el período (menú "muerto").
   const productosSinVenta = useMemo(() => {
     const vendidas = new Set(ventas.filter((v) => v.recetaId).map((v) => v.recetaId));
@@ -599,15 +589,9 @@ export function AnalisisVentas() {
   const ticketCafeteria = useMemo(() => {
     const consumoNeto = enriquecidas.reduce((s, e) => s + (e.grpKey === "cafeteria" ? e.monto : 0), 0);
     const lineasAlquiler = enriquecidas.reduce((s, e) => s + (e.grpKey !== "cafeteria" ? 1 : 0), 0);
-    const ticketsTotal = conc?.tickets ?? 0;
-    const ticketsCaf = Math.max(0, ticketsTotal - lineasAlquiler);
-    // Se muestra con IVA (lo que paga el cliente): se sube el neto a bruto con la
-    // proporción REAL de IVA del período (IVA/neto de Setux), que respeta los
-    // métodos sin IVA (Zelle/Dólar). Si no hay datos, se asume 16%.
-    const factorIva = conc && conc.setuxNeto > 0 ? (conc.setuxNeto + conc.ivaSetux) / conc.setuxNeto : 1.16;
-    const consumo = consumoNeto * factorIva;
-    return { consumo, tickets: ticketsCaf, promedio: ticketsCaf > 0 ? consumo / ticketsCaf : null };
-  }, [enriquecidas, conc]);
+    const ticketsCaf = Math.max(0, ticketsPeriodo - lineasAlquiler);
+    return { consumo: consumoNeto, tickets: ticketsCaf, promedio: ticketsCaf > 0 ? consumoNeto / ticketsCaf : null };
+  }, [enriquecidas, ticketsPeriodo]);
 
   // Evolución diaria: todos los días del rango, con 0 si no hubo ventas.
   const porDia = useMemo(() => {
@@ -1026,8 +1010,8 @@ export function AnalisisVentas() {
             <StatCard titulo="Unidades vendidas" valor={fUnid(totalUnidades)} />
             <StatCard
               titulo="Ticket prom. cafetería"
-              valor={ticketCafeteria.promedio != null ? `${ticketCafeteria.promedio.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €` : "—"}
-              sub={ticketCafeteria.tickets > 0 ? `${fUnid(ticketCafeteria.tickets)} tickets · con IVA` : "faltan tickets del período (importa el reporte por factura)"}
+              valor={ticketCafeteria.promedio != null ? fUSD(ticketCafeteria.promedio) : "—"}
+              sub={ticketCafeteria.tickets > 0 ? `${fUnid(ticketCafeteria.tickets)} tickets · USD` : "sin conteo de tickets en el período"}
             />
             <StatCard
               titulo="Productos distintos"
@@ -1310,27 +1294,14 @@ export function AnalisisVentas() {
           </Plegable>
 
           {/* ── Ritmo y mezcla (plegable) ── */}
-          <Plegable titulo="Ritmo: día de la semana y mezcla de ingreso">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Plegable titulo="Ritmo: día de la semana">
+          <div className="grid grid-cols-1 gap-4">
             <PanelCard titulo="Ventas por día de la semana">
               <BarrasH
                 rows={porDiaSemana.map((d, i) => ({ key: d.key, label: d.label, value: d.value, color: colorPorIndice(i), tip: `${d.label}: ${fUSD(d.value)}` }))}
                 format={fUSD}
               />
             </PanelCard>
-            {mixIngreso && (
-              <PanelCard titulo="Mezcla de ingreso (contado / crédito / cortesías)">
-                <Dona
-                  segmentos={[
-                    { key: "contado", label: "Contado (entró)", value: mixIngreso.contado, color: "#4B7A2F" },
-                    { key: "credito", label: "Crédito (CXC)", value: mixIngreso.credito, color: "#C9A24B" },
-                    { key: "cortesias", label: "Cortesías (RPP)", value: mixIngreso.cortesias, color: "#B0784F" },
-                  ]}
-                  format={(n) => `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}
-                />
-                <p className="mt-2 text-[11px] text-cacao-mute">Del período completo (todas las ventas). Muestra cuánto de lo vendido fue dinero real vs crédito y cortesías.</p>
-              </PanelCard>
-            )}
           </div>
           </Plegable>
 
@@ -1504,55 +1475,7 @@ export function AnalisisVentas() {
         </>
       )}
 
-      {/* ── Venta vs Ingresos (conciliación) · plegable, al final ── */}
-      {conc && (cocinaTotalRango > 0.005 || conc.setuxNeto > 0.005) && (() => {
-        // Ventas en Cocina − Ingresos = lo vendido a crédito (CXC) + cortesías,
-        // todo en NETO (sin IVA). Se muestra plegado al final para consultarlo
-        // cuando hace falta sin ocupar la parte de arriba del análisis.
-        const diferencia = Math.round((cocinaTotalRango - conc.setuxNeto) * 100) / 100;
-        const creditoYCortesias = Math.round((conc.cxcNeto + conc.rppNeto) * 100) / 100;
-        const sinExplicar = Math.round((diferencia - creditoYCortesias) * 100) / 100;
-        const cuadra = Math.abs(sinExplicar) <= 50; // tolerancia de 50 € (redondeos)
-        const fEUR = (n: number) => `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
-        return (
-          <Plegable titulo="Venta vs Ingresos" sub={cuadra ? "Cuadra" : "Revisar"}>
-            <section className="rounded-2xl bg-white ring-1 ring-marfil p-4">
-              <div className="flex items-center justify-end mb-1">
-                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-widest ${cuadra ? "bg-[#F1F4ED] text-[#2F4A1F]" : "bg-[#FBF3E2] text-[#7A5A18]"}`}>
-                  <span className={`h-1.5 w-1.5 rounded-full ${cuadra ? "bg-[#4B7A2F]" : "bg-[#C9A24B]"}`} />
-                  {cuadra ? "Cuadra" : "Revisar"}
-                </span>
-              </div>
-              <p className="text-[11px] text-cacao-mute mb-3">Del período (todas las ventas, sin filtros), todo en neto (sin IVA). La diferencia es lo que se vendió a crédito y las cortesías: sale en Cocina pero todavía no es dinero.</p>
-              <div className="text-sm max-w-md space-y-1">
-                <Fila label="Ventas registradas" val={fEUR(cocinaTotalRango)} />
-                <Fila label="Ingresos (dinero que entró)" val={fEUR(conc.setuxNeto)} />
-                <div className="border-t border-marfil pt-1"><Fila label="Diferencia" val={fEUR(diferencia)} fuerte /></div>
-              </div>
-              <div className="text-sm max-w-md space-y-1 mt-3 rounded-xl bg-marfil-soft p-3">
-                <p className="text-[11px] uppercase tracking-widest text-cacao-mute mb-1">Esa diferencia debería ser (neto):</p>
-                <Fila label="Ventas a crédito (CXC)" val={fEUR(conc.cxcNeto)} />
-                <Fila label="Cortesías (RPP)" val={fEUR(conc.rppNeto)} />
-                <div className="border-t border-marfil pt-1"><Fila label="Juntas" val={fEUR(creditoYCortesias)} fuerte /></div>
-                <div className="border-t border-marfil pt-1">
-                  <Fila label={cuadra ? "Todo explicado ✓" : "Sin explicar"} val={`${sinExplicar < 0 ? "− " : ""}${fEUR(Math.abs(sinExplicar))}`} fuerte />
-                </div>
-              </div>
-              <p className="text-[11px] text-cacao-mute mt-2">CXC y RPP aquí van en neto (sin IVA) para cuadrar con Cocina. En Cuentas por Cobrar el cliente debe el total con IVA (lo que paga al cobrarle).</p>
-              {!cuadra && (
-                <p className="text-[12px] text-cacao-soft mt-2">
-                  {sinExplicar > 0
-                    ? <>Cocina muestra más de lo que se explica con crédito y cortesías. Suele ser: falta importar la CXC del período, o se duplicó un día en Cocina. {conc.ivaSetux > 1 && <>Si este resto se parece al IVA ({fEUR(conc.ivaSetux)}), Cocina traía IVA y los ingresos no.</>}</>
-                    : <>El crédito y las cortesías registrados superan la diferencia. Suele ser: faltan días de venta por importar en Cocina, o se cargó CXC de más.</>}
-                </p>
-              )}
-              {conc.cobrosEur > 0.005 && (
-                <p className="text-[11px] text-cacao-mute mt-2">Aparte: {fEUR(conc.cobrosEur)} cobrados de cuentas por cobrar en el período (cobranzas de ventas anteriores, no cuentan aquí).</p>
-              )}
-            </section>
-          </Plegable>
-        );
-      })()}
+      <p className="text-[11px] text-cacao-soft italic">Las ventas de este análisis salen de Cocina, en dólares. No se suman los ingresos viejos del libro de Administración.</p>
     </div>
   );
 
@@ -1573,15 +1496,6 @@ export function AnalisisVentas() {
 }
 
 // ── Subcomponentes ─────────────────────────────────────────────────────
-function Fila({ label, val, tenue, fuerte }: { label: string; val: string; tenue?: boolean; fuerte?: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3">
-      <span className={tenue ? "text-cacao-soft" : fuerte ? "text-cacao font-medium" : "text-cacao"}>{label}</span>
-      <span className={`tabular-nums whitespace-nowrap ${fuerte ? "text-cacao font-medium" : tenue ? "text-cacao-soft" : "text-cacao"}`}>{val}</span>
-    </div>
-  );
-}
-
 function StatCard({
   titulo,
   valor,

@@ -6,8 +6,10 @@
 // token). Menú desplegable con las secciones; se van construyendo por fases.
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { totalesVentasPorMes } from "@/lib/data/ventas";
-import { listTasasBcvRango, listComprasRango, listComprasEgresoMes, listComprasPendientes, listProveedores, listInsumos, marcarCompraPagada, marcarFacturaPagada, getTasaBcvPorFecha } from "@/lib/data/cocina";
+import { listVentasRango, totalesVentasPorMes } from "@/lib/data/ventas";
+import { listTasasBcvRango, listComprasRango, listComprasEgresoMes, listComprasPendientes, listProveedores, listInsumos, marcarCompraPagada, marcarFacturaPagada, getTasaBcvPorFecha, getTasaBcvActual } from "@/lib/data/cocina";
+import { fmtUsdBs } from "@/lib/moneda";
+import { leerAjustesVentas } from "@/lib/data/ajustes-ventas";
 import type { TasaBcv, Compra, Proveedor as ProveedorCocina, Insumo } from "@/lib/types";
 import { AnalisisAdministrativo } from "./AnalisisAdministrativo";
 import { ChevronIcon, CalendarIcon } from "@/components/icons";
@@ -33,7 +35,8 @@ export function AdministracionClient() {
 function Panel() {
   const [seccion, setSeccion] = useState<Seccion>("estado");
   const [menuAbierto, setMenuAbierto] = useState(false);
-  const actual = SECCIONES.find((s) => s.id === seccion)!;
+  const menu = SECCIONES.filter((s) => s.id !== "cobrar" && s.id !== "solicitudes");
+  const actual = SECCIONES.find((s) => s.id === seccion) ?? menu[0];
 
   function salir() {
     window.location.href = "/";
@@ -60,8 +63,8 @@ function Panel() {
                   <span className="font-display text-[10px] tracking-[0.25em] uppercase text-cacao-mute">Secciones</span>
                   <button type="button" onClick={() => setMenuAbierto(false)} className="text-cacao-soft hover:text-cacao text-sm">✕</button>
                 </div>
-                {SECCIONES.map((s, i) => {
-                  const primerDelGrupo = s.grupo && SECCIONES[i - 1]?.grupo !== s.grupo;
+                {menu.map((s, i) => {
+                  const primerDelGrupo = s.grupo && menu[i - 1]?.grupo !== s.grupo;
                   return (
                     <div key={s.id}>
                       {primerDelGrupo && (
@@ -83,8 +86,6 @@ function Panel() {
           <button type="button" onClick={salir} className="text-[11px] uppercase tracking-widest text-cacao-soft hover:text-terracotta">Salir</button>
         </div>
       </div>
-
-      <AlertaCobrar refreshKey={seccion} onIr={() => setSeccion("cobrar")} />
 
       {seccion === "proveedores" ? (
         <SeccionProveedores />
@@ -1185,22 +1186,8 @@ function EgresosMes() {
   const [reclasificando, setReclasificando] = useState<string | null>(null);
   const [mostrarClasif, setMostrarClasif] = useState(false);
   const [cuentaPagar, setCuentaPagar] = useState<CuentaPagar | null>(null);
-  const [tasaEurUsd, setTasaEurUsd] = useState(1.17); // €→$ para el total del día en euros
   const [tick, setTick] = useState(0);
   const recargar = useCallback(() => setTick((t) => t + 1), []);
-
-  useEffect(() => {
-    let a = true;
-    (async () => {
-      try {
-        const r = await fetch("/api/admin/config", { cache: "no-store" });
-        const d = await r.json();
-        const v = Number(String(d.config?.tasa_eur_usd ?? "").replace(",", "."));
-        if (a && isFinite(v) && v > 0) setTasaEurUsd(v);
-      } catch { /* usa 1.17 por defecto */ }
-    })();
-    return () => { a = false; };
-  }, []);
 
   useEffect(() => {
     let a = true;
@@ -1261,10 +1248,7 @@ function EgresosMes() {
     .sort((a2, b2) => (b2.fecha ?? "").localeCompare(a2.fecha ?? ""));
   const esCocina = (e: Egreso) => e.id.startsWith("compra:");
 
-  // Egresos agrupados por FECHA (acordeón, como en Ingresos): el encabezado
-  // lleva la fecha y el total del día CONVERTIDO A EUROS (todo en una sola
-  // moneda). Para los Bs se usa la tasa del día (ya guardada en monto_usd) y
-  // luego la tasa €/$; los que no tengan tasa (monto_usd nulo) se cuentan aparte.
+  // Egresos agrupados por FECHA. El encabezado va en dólares (monto_usd).
   const egresosPorFecha = (() => {
     const m = new Map<string, Egreso[]>();
     for (const e of egresosAll) {
@@ -1274,14 +1258,14 @@ function EgresosMes() {
     return [...m.entries()]
       .sort((a2, b2) => b2[0].localeCompare(a2[0])) // más reciente primero
       .map(([fecha, items]) => {
-        let eur = 0;
+        let usd = 0;
         let faltaTasa = 0;
         for (const e of items) {
-          if ((e.moneda || "Bs") === "EUR") eur += e.monto ?? 0;
-          else if (e.monto_usd != null) eur += e.monto_usd / (tasaEurUsd > 0 ? tasaEurUsd : 1.17);
+          if (e.monto_usd != null) usd += e.monto_usd;
+          else if ((e.moneda || "") === "USD") usd += e.monto ?? 0;
           else faltaTasa++;
         }
-        return { fecha, items, eur: Math.round(eur * 100) / 100, faltaTasa };
+        return { fecha, items, usd: Math.round(usd * 100) / 100, faltaTasa };
       });
   })();
   const nombreInsumo = (id: string) => insumos.find((i) => i.id === id)?.nombre ?? "insumo";
@@ -1508,7 +1492,7 @@ function EgresosMes() {
                   <span className="font-medium text-cacao">{fmtFecha(g.fecha)}</span>
                   <span className="text-xs text-cacao-mute">{g.items.length} {g.items.length === 1 ? "egreso" : "egresos"}</span>
                   <span className="ml-auto text-sm text-cacao font-medium text-right">
-                    {fmtMonto(g.eur, "EUR")}
+                    {fmtMonto(g.usd, "USD")}
                     {g.faltaTasa > 0 && <span className="block text-[10px] text-terracotta font-normal">{g.faltaTasa} sin tasa</span>}
                   </span>
                 </button>
@@ -1999,21 +1983,28 @@ type Ingreso = {
 
 function SeccionIngresos() {
   const [vista, setVista] = useState<"ingresos" | "factura" | "categorias">("ingresos");
+  const [pos, setPos] = useState(true);
+  useEffect(() => {
+    let vivo = true;
+    leerAjustesVentas().then((aj) => { if (vivo) setPos(aj.ventasPos); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  const vistaEfectiva: typeof vista = !pos && vista === "factura" ? "ingresos" : vista;
   const tabs: [typeof vista, string][] = [
     ["ingresos", "Ingresos"],
-    ["factura", "Importar por factura"],
+    ...(pos ? [["factura", "Importar por factura"] as [typeof vista, string]] : []),
     ["categorias", "Categorías"],
   ];
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-1 rounded-lg ring-1 ring-marfil p-1 w-fit">
         {tabs.map(([k, label]) => (
-          <button key={k} type="button" onClick={() => setVista(k)} className={`rounded-md px-3 py-1.5 text-xs uppercase tracking-widest ${vista === k ? "bg-cacao text-white" : "text-cacao hover:bg-marfil-soft"}`}>
+          <button key={k} type="button" onClick={() => setVista(k)} className={`rounded-md px-3 py-1.5 text-xs uppercase tracking-widest ${vistaEfectiva === k ? "bg-cacao text-white" : "text-cacao hover:bg-marfil-soft"}`}>
             {label}
           </button>
         ))}
       </div>
-      {vista === "ingresos" ? <IngresosMes /> : vista === "factura" ? <CuadreFacturas /> : <CategoriasIngresoCatalogo />}
+      {vistaEfectiva === "ingresos" ? <IngresosMes /> : vistaEfectiva === "factura" ? <CuadreFacturas /> : <CategoriasIngresoCatalogo />}
     </div>
   );
 }
@@ -2249,6 +2240,7 @@ function IngresosMes() {
   const [editando, setEditando] = useState<Ingreso | null>(null);
   const [diasAbiertos, setDiasAbiertos] = useState<Record<string, boolean>>({});
   const [ventasMes, setVentasMes] = useState<Record<string, number>>({});
+  const [tasaUsdBs, setTasaUsdBs] = useState<number | null>(null);
   const [tasaInput, setTasaInput] = useState("1.17");
   const [guardandoTasa, setGuardandoTasa] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
@@ -2287,8 +2279,14 @@ function IngresosMes() {
     let a = true;
     (async () => {
       try {
-        const t = await totalesVentasPorMes();
-        if (a) setVentasMes(t);
+        const [t, tasa] = await Promise.all([
+          totalesVentasPorMes(),
+          getTasaBcvActual().catch(() => null),
+        ]);
+        if (a) {
+          setVentasMes(t);
+          setTasaUsdBs(tasa && tasa.usdBs > 0 ? tasa.usdBs : null);
+        }
       } catch {
         /* la comparación es opcional */
       }
@@ -2520,9 +2518,9 @@ function IngresosMes() {
           {monedasPresentes.length > 1 && <div className="text-[10px] text-[#9A938B] mt-1.5">Cada moneda por separado.</div>}
           {/* Ingreso: total y comparación con Cocina, juntos arriba */}
           <div className="mt-2 pt-2 border-t border-[#333]">
-            <div className="text-[9px] tracking-[0.2em] uppercase text-[#9A938B]">Ventas en Cocina (POS)</div>
-            <div className="text-sm font-medium leading-tight mt-0.5">{fmtMonto(ventasMes[mes] ?? 0, "EUR")}</div>
-            <div className="text-[10px] text-[#9A938B] mt-0.5">Para comparar (misma moneda). La diferencia con los ingresos suele ser CXC y cortesías.</div>
+            <div className="text-[9px] tracking-[0.2em] uppercase text-[#9A938B]">Ventas de Cocina</div>
+            <div className="text-sm font-medium leading-tight mt-0.5">{fmtUsdBs(ventasMes[mes] ?? 0, tasaUsdBs)}</div>
+            <div className="text-[10px] text-[#9A938B] mt-0.5">Esta es la venta del mes, en dólares. El libro de abajo no se suma al estado de cuenta.</div>
           </div>
           {/* No es ingreso: al fondo */}
           {ivaMes > 0 && (
@@ -2839,15 +2837,14 @@ function CategoriasIngresoCatalogo() {
 // No guarda nada: solo lee lo ya registrado en las otras secciones.
 function SeccionEstado() {
   const [mes, setMes] = useState<string>(mesActualISO());
-  const [ingresos, setIngresos] = useState<Ingreso[]>([]);
+  const [ventasUsd, setVentasUsd] = useState(0);
+  const [porPlato, setPorPlato] = useState<[string, number][]>([]);
   const [egresos, setEgresos] = useState<Egreso[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Vista de moneda: todo en € (por defecto) o todo en $.
-  const [vista, setVista] = useState<"eur" | "usd">("eur");
-  const [eurUsd, setEurUsd] = useState(1.17); // 1 € = X $ (respaldo si no hay tasa BCV)
-  const [tasasBcv, setTasasBcv] = useState<TasaBcv[]>([]); // tasas BCV del mes (por fecha)
-  const [compras, setCompras] = useState<Compra[]>([]); // compras de insumos (Cocina) = egresos en $
+  const [tasasBcv, setTasasBcv] = useState<TasaBcv[]>([]);
+  const [tasaHoy, setTasaHoy] = useState<number | null>(null);
+  const [compras, setCompras] = useState<Compra[]>([]);
 
   useEffect(() => {
     let a = true;
@@ -2855,17 +2852,28 @@ function SeccionEstado() {
       try {
         const [y, m] = mes.split("-").map((x) => parseInt(x, 10));
         const finMes = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-        const [ri, re, tb, cp] = await Promise.all([
-          fetch(`/api/admin/ingresos?mes=${mes}`, { cache: "no-store" }),
+        const [ventas, re, tb, cp, tasaAct] = await Promise.all([
+          listVentasRango(`${mes}-01`, finMes).catch(() => []),
           fetch(`/api/admin/egresos?mes=${mes}`, { cache: "no-store" }),
           listTasasBcvRango(`${mes}-01`, finMes).catch(() => [] as TasaBcv[]),
           listComprasRango(`${mes}-01`, finMes).catch(() => [] as Compra[]),
+          getTasaBcvActual().catch(() => null),
         ]);
-        const [di, de] = await Promise.all([ri.json(), re.json()]);
+        const de = await re.json();
         if (a) {
-          setIngresos(di.ingresos ?? []);
+          const mapa = new Map<string, number>();
+          let total = 0;
+          for (const v of ventas) {
+            const usd = v.totalUsd ?? 0;
+            total += usd;
+            const nombre = v.recetaNombre || "Sin plato";
+            mapa.set(nombre, (mapa.get(nombre) ?? 0) + usd);
+          }
+          setVentasUsd(total);
+          setPorPlato([...mapa.entries()].sort((x, z) => z[1] - x[1]));
           setEgresos(de.egresos ?? []);
           setTasasBcv(tb);
+          setTasaHoy(tasaAct && tasaAct.usdBs > 0 ? tasaAct.usdBs : null);
           setCompras(cp);
         }
       } catch {
@@ -2876,20 +2884,6 @@ function SeccionEstado() {
     })();
     return () => { a = false; };
   }, [mes]);
-
-  useEffect(() => {
-    let a = true;
-    (async () => {
-      try {
-        const r = await fetch("/api/admin/config", { cache: "no-store" });
-        const d = await r.json();
-        const v = Number(String(d.config?.tasa_eur_usd ?? "").replace(",", "."));
-        if (a && isFinite(v) && v > 0) setEurUsd(v);
-      } catch { /* usa el valor por defecto */ }
-    })();
-    return () => { a = false; };
-  }, []);
-
 
   // Las compras de insumos (Cocina) son egresos en $ (precio canónico en USD).
   // Se suman al Estado de Cuenta como egresos, categoría "Insumos (Cocina)".
@@ -2904,57 +2898,32 @@ function SeccionEstado() {
     }) as unknown as Egreso);
   const egresosAll: Egreso[] = [...egresos, ...comprasEgreso];
 
-  // Totales por moneda (sin forzar conversión): Setux en €, alquileres en $, etc.
-  const sumaMoneda = (arr: (Ingreso | Egreso)[]) => {
-    const m: Record<string, number> = {};
-    for (const e of arr) { const k = e.moneda || "EUR"; m[k] = (m[k] ?? 0) + (e.monto ?? 0); }
-    return m;
-  };
-  const ingByMon = sumaMoneda(ingresos);
-  const egrByMon = sumaMoneda(egresosAll);
-  const ORDEN = ["EUR", "USD", "Bs"];
-  const conValor = (k: string) => (ingByMon[k] ?? 0) > 0.005 || (egrByMon[k] ?? 0) > 0.005;
-  const monedas = ORDEN.filter(conValor).concat(
-    [...new Set([...Object.keys(ingByMon), ...Object.keys(egrByMon)])].filter((k) => !ORDEN.includes(k) && conValor(k)),
-  );
-
-  // ── Conversión a moneda única (conserva el original abajo) ──
-  // Cada registro guarda monto_usd (equivalente calculado a la tasa con que se
-  // pagó). El paso €↔$ usa el CRUCE BCV REAL del día del registro
-  // (eur_bs ÷ usd_bs); si falta, la última tasa disponible; si no, el 1,17 fijo.
+  // Egresos a USD con el equivalente ya guardado (monto_usd). Si un euro no
+  // lo tiene, se pasa con el cruce BCV del día (eur_bs ÷ usd_bs).
   const crossMap = new Map<string, number>();
-  let ultimoCross = eurUsd;
+  let ultimoCross = 0;
+  let tasaMes: number | null = null;
   for (const t of tasasBcv) {
+    if (t.usdBs > 0) tasaMes = t.usdBs;
     if (t.eurBs != null && t.usdBs > 0) { const c = t.eurBs / t.usdBs; crossMap.set(t.fecha, c); ultimoCross = c; }
   }
-  const crossDe = (fecha: string): number => crossMap.get(fecha) ?? ultimoCross ?? eurUsd;
-  const enUSD = (e: Ingreso | Egreso): number => {
+  const tasaUsdBs = tasaMes && tasaMes > 0 ? tasaMes : tasaHoy;
+  const crossDe = (fecha: string): number => crossMap.get(fecha) ?? ultimoCross;
+  const enUSD = (e: Egreso): number => {
     if (e.monto_usd != null) return e.monto_usd;
-    const mon = e.moneda || "EUR";
+    const mon = e.moneda || "USD";
     if (mon === "USD") return e.monto ?? 0;
-    if (mon === "EUR") return (e.monto ?? 0) * crossDe(e.fecha);
-    return 0; // Bs sin equivalente: no se puede convertir con fiabilidad
+    if (mon === "EUR" && crossDe(e.fecha) > 0) return (e.monto ?? 0) * crossDe(e.fecha);
+    return 0;
   };
-  const enEUR = (e: Ingreso | Egreso): number => {
-    const mon = e.moneda || "EUR";
-    if (mon === "EUR") return e.monto ?? 0;
-    const cross = crossDe(e.fecha);
-    return cross > 0 ? enUSD(e) / cross : 0;
-  };
-  const conv = vista === "usd" ? enUSD : enEUR;
-  const monedaUni = vista === "usd" ? "USD" : "EUR";
-  const ingUni = ingresos.reduce((s, e) => s + conv(e), 0);
-  const egrUni = egresosAll.reduce((s, e) => s + conv(e), 0);
+  const ingUni = ventasUsd;
+  const egrUni = egresosAll.reduce((s, e) => s + enUSD(e), 0);
   const balUni = ingUni - egrUni;
-  // Categorías en moneda única (para la vista unificada).
-  const catUni = (arr: (Ingreso | Egreso)[]): [string, number][] => {
+  const catUni = (arr: Egreso[]): [string, number][] => {
     const o: Record<string, number> = {};
-    for (const e of arr) { const c = e.categoria_nombre || "Sin categoría"; o[c] = (o[c] ?? 0) + conv(e); }
+    for (const e of arr) { const c = e.categoria_nombre || "Sin categoría"; o[c] = (o[c] ?? 0) + enUSD(e); }
     return Object.entries(o).sort((a, b) => b[1] - a[1]);
   };
-  // Composición por moneda original de los egresos (para no perder la tasa).
-  const egrOrig = monedas.map((k) => ({ k, monto: egrByMon[k] ?? 0 })).filter((x) => x.monto > 0.005);
-  const btn = (active: boolean) => `rounded-md px-3 py-1.5 text-[11px] uppercase tracking-widest ${active ? "bg-cacao text-white" : "text-cacao hover:bg-marfil-soft"}`;
 
   return (
     <div className="space-y-4">
@@ -2962,11 +2931,6 @@ function SeccionEstado() {
         <button type="button" onClick={() => { setCargando(true); setMes((m) => moverMes(m, -1)); }} className="rounded-lg ring-1 ring-marfil px-2.5 py-1.5 text-cacao hover:bg-marfil-soft" aria-label="Mes anterior">←</button>
         <span className="font-cinzel text-base text-cacao min-w-[9rem] text-center">{nombreMes(mes)}</span>
         <button type="button" onClick={() => { setCargando(true); setMes((m) => moverMes(m, 1)); }} className="rounded-lg ring-1 ring-marfil px-2.5 py-1.5 text-cacao hover:bg-marfil-soft" aria-label="Mes siguiente">→</button>
-        <div className="ml-auto flex gap-1 rounded-lg ring-1 ring-marfil p-1">
-          {([["eur", "Todo en €"], ["usd", "Todo en $"]] as const).map(([k, label]) => (
-            <button key={k} type="button" onClick={() => setVista(k)} className={btn(vista === k)}>{label}</button>
-          ))}
-        </div>
       </div>
 
       {error && <div className="rounded-lg bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-3 text-sm text-[#7A2419]">{error}</div>}
@@ -2980,29 +2944,30 @@ function SeccionEstado() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <div className="rounded-2xl bg-white ring-1 ring-marfil p-4">
                   <div className="font-display text-[9px] tracking-[0.25em] uppercase text-cacao-mute">Ingresos</div>
-                  <div className="mt-1 text-lg font-medium text-cacao leading-tight">{fmtMonto(ingUni, monedaUni)}</div>
+                  <div className="mt-1 text-lg font-medium text-cacao leading-tight">{fmtUsdBs(ingUni, tasaUsdBs)}</div>
+                  <div className="text-[10px] text-cacao-mute mt-1">Ventas de Cocina</div>
                 </div>
                 <div className="rounded-2xl bg-white ring-1 ring-marfil p-4">
                   <div className="font-display text-[9px] tracking-[0.25em] uppercase text-cacao-mute">Egresos</div>
-                  <div className="mt-1 text-lg font-medium text-cacao leading-tight">{fmtMonto(egrUni, monedaUni)}</div>
-                  {egrOrig.length > 1 && <div className="text-[10px] text-cacao-mute mt-1">De: {egrOrig.map((x) => fmtMonto(x.monto, x.k)).join(" + ")}</div>}
+                  <div className="mt-1 text-lg font-medium text-cacao leading-tight">{fmtUsdBs(egrUni, tasaUsdBs)}</div>
                 </div>
                 <div className="rounded-2xl ring-1 p-4 bg-[#0F0F0F] text-[#EDE7E0] ring-[#0F0F0F]">
                   <div className="font-display text-[9px] tracking-[0.25em] uppercase text-[#9A938B]">Balance del mes</div>
-                  <div className={`mt-1 text-lg font-medium leading-tight ${balUni < 0 ? "text-[#E7A99B]" : ""}`}>{balUni < 0 ? `− ${fmtMonto(Math.abs(balUni), monedaUni)}` : fmtMonto(balUni, monedaUni)}</div>
-                  <div className="text-[10px] text-[#9A938B] mt-1.5">Convertido con la tasa BCV real de cada fecha ({crossMap.size > 0 ? `≈ 1 € = ${ultimoCross.toFixed(2)} $` : `1 € = ${eurUsd} $`}). La tasa de cada pago se conserva en su registro.</div>
+                  <div className={`mt-1 text-lg font-medium leading-tight ${balUni < 0 ? "text-[#E7A99B]" : ""}`}>{fmtUsdBs(balUni, tasaUsdBs)}</div>
+                  <div className="text-[10px] text-[#9A938B] mt-1.5">{tasaUsdBs ? `Bolívares a la tasa BCV (Bs ${tasaUsdBs.toLocaleString("es-VE")} por $).` : "Sin tasa BCV para mostrar bolívares."}</div>
                 </div>
               </div>
-              <div className="grid gap-4">
-                <DesgloseUnico titulo="Egresos por categoría" filas={catUni(egresosAll)} moneda={monedaUni} />
+              <div className="grid gap-4 lg:grid-cols-2">
+                <DesgloseUnico titulo="Ventas por plato" filas={porPlato} moneda="USD" />
+                <DesgloseUnico titulo="Egresos por categoría" filas={catUni(egresosAll)} moneda="USD" />
               </div>
-              <p className="text-[11px] text-cacao-soft italic">Cada egreso conserva su moneda y tasa originales en su registro. Los pagos en Bs sin equivalente calculado no se convierten.</p>
+              <p className="text-[11px] text-cacao-soft italic">Los ingresos salen de las ventas de Cocina, en dólares. El libro anterior de ingresos no se suma. Los egresos en bolívares o euros usan el equivalente en dólares de cada pago.</p>
             </>
           )}
 
-          {ingresos.length === 0 && egresosAll.length === 0 && (
+          {ventasUsd <= 0.005 && egresosAll.length === 0 && (
             <p className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft italic font-serif">
-              Sin movimientos en {nombreMes(mes)}. Registra ingresos y egresos y aquí verás el balance.
+              Sin movimientos en {nombreMes(mes)}. Anota las ventas en Cocina y los egresos, y aquí verás el balance.
             </p>
           )}
         </>
@@ -3079,6 +3044,8 @@ function diasHastaCierre(): number {
 }
 
 // Banner de alerta: aparece arriba del panel cuando hay clientes con saldo.
+// Fuera del menú: el aviso de cuentas por cobrar se conserva, no se muestra.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function AlertaCobrar({ refreshKey, onIr }: { refreshKey: string; onIr: () => void }) {
   const [clientes, setClientes] = useState<ClienteCXC[]>([]);
   const [tasa, setTasa] = useState(1.17);
@@ -3828,8 +3795,8 @@ function TortaIngresos({ titulo, datos }: { titulo: string; datos: RebanadaTorta
 function SeccionHistorico() {
   const [meses, setMeses] = useState<MesHist[]>([]);
   const [monedas, setMonedas] = useState<string[]>([]);
-  const [moneda, setMoneda] = useState<string>("");
-  const [porMetodo, setPorMetodo] = useState<{ mes: string; clave: string; usd: number }[]>([]);
+  const [moneda, setMoneda] = useState<string>("USD");
+  const [tasaUsdBs, setTasaUsdBs] = useState<number | null>(null);
   const [porCategoria, setPorCategoria] = useState<{ mes: string; clave: string; usd: number }[]>([]);
   const [periodoTorta, setPeriodoTorta] = useState<string>("todo");
   const [obs, setObs] = useState<Record<string, string>>({});
@@ -3851,12 +3818,11 @@ function SeccionHistorico() {
         const [dh, dc] = await Promise.all([rh.json(), rc.json()]);
         if (!a) return;
         const ms: MesHist[] = dh.meses ?? [];
-        const mons: string[] = dh.monedas ?? [];
         setMeses(ms);
-        setMonedas(mons);
-        setMoneda(mons[0] ?? "EUR");
-        setPorMetodo(dh.porMetodo ?? []);
-        setPorCategoria(dh.porCategoria ?? []);
+        setMonedas(["USD"]);
+        setMoneda("USD");
+        setTasaUsdBs(typeof dh.tasaUsdBs === "number" && dh.tasaUsdBs > 0 ? dh.tasaUsdBs : null);
+        setPorCategoria(dh.porPlato ?? []);
         const observaciones: Record<string, string> = {};
         for (const [k, v] of Object.entries((dc.config ?? {}) as Record<string, string>)) {
           if (k.startsWith("obs_") && v) observaciones[k.slice(4)] = v;
@@ -3917,10 +3883,9 @@ function SeccionHistorico() {
     }
     return [...m.entries()].map(([label, value]) => ({ label, value }));
   };
-  const tortaMetodo = agrupaTorta(porMetodo);
   const tortaCategoria = agrupaTorta(porCategoria);
-  const hayTortas = tortaMetodo.some((d) => d.value > 0.005) || tortaCategoria.some((d) => d.value > 0.005);
-  const mesesTorta = [...new Set([...porMetodo, ...porCategoria].map((r) => r.mes))].sort((a, b) => b.localeCompare(a));
+  const hayTortas = tortaCategoria.some((d) => d.value > 0.005);
+  const mesesTorta = [...new Set(porCategoria.map((r) => r.mes))].sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="space-y-4">
@@ -3945,10 +3910,10 @@ function SeccionHistorico() {
         <>
           {/* Indicadores */}
           <div className="grid gap-3 sm:grid-cols-4">
-            <ResumenCaja titulo="Promedio ingresos" valor={fmtMonto(promIng, moneda)} fuerte />
-            <ResumenCaja titulo="Promedio balance" valor={fmtMonto(promBal, moneda)} />
-            <ResumenCaja titulo="Mejor mes" valor={mejor ? fmtMonto(mejor.bal, moneda) : "—"} sub={mejor ? nombreMes(mejor.mes) : undefined} />
-            <ResumenCaja titulo="Peor mes" valor={peor ? fmtMonto(peor.bal, moneda) : "—"} sub={peor ? nombreMes(peor.mes) : undefined} />
+            <ResumenCaja titulo="Promedio ingresos" valor={fmtUsdBs(promIng, tasaUsdBs)} fuerte />
+            <ResumenCaja titulo="Promedio balance" valor={fmtUsdBs(promBal, tasaUsdBs)} />
+            <ResumenCaja titulo="Mejor mes" valor={mejor ? fmtUsdBs(mejor.bal, tasaUsdBs) : "—"} sub={mejor ? nombreMes(mejor.mes) : undefined} />
+            <ResumenCaja titulo="Peor mes" valor={peor ? fmtUsdBs(peor.bal, tasaUsdBs) : "—"} sub={peor ? nombreMes(peor.mes) : undefined} />
           </div>
 
           {/* Comparación último vs anterior */}
@@ -3956,9 +3921,9 @@ function SeccionHistorico() {
             <div className="rounded-2xl bg-white ring-1 ring-marfil p-4">
               <div className="font-display text-[9px] tracking-[0.25em] uppercase text-cacao-mute mb-2">{nombreMes(pen.mes)} → {nombreMes(ult.mes)}</div>
               <div className="grid grid-cols-3 gap-3">
-                <Comparacion titulo="Ingresos" cur={ult.ing} prev={pen.ing} moneda={moneda} />
-                <Comparacion titulo="Egresos" cur={ult.egr} prev={pen.egr} moneda={moneda} invertir />
-                <Comparacion titulo="Balance" cur={ult.bal} prev={pen.bal} moneda={moneda} />
+                <Comparacion titulo="Ingresos" cur={ult.ing} prev={pen.ing} moneda="USD" />
+                <Comparacion titulo="Egresos" cur={ult.egr} prev={pen.egr} moneda="USD" invertir />
+                <Comparacion titulo="Balance" cur={ult.bal} prev={pen.bal} moneda="USD" />
               </div>
             </div>
           )}
@@ -3995,10 +3960,9 @@ function SeccionHistorico() {
                   </select>
                 </div>
               </div>
-              <p className="text-[11px] text-cacao-mute">Montos en $ (equivalente) para poder comparar entre monedas.</p>
+              <p className="text-[11px] text-cacao-mute">Ventas de Cocina, en dólares{tasaUsdBs ? `. El bolívar de las tarjetas usa el BCV de hoy (Bs ${tasaUsdBs.toLocaleString("es-VE")} por $).` : "."}</p>
               <div className="grid gap-3 lg:grid-cols-2">
-                <TortaIngresos titulo="Por método de pago" datos={tortaMetodo} />
-                <TortaIngresos titulo="Por categoría" datos={tortaCategoria} />
+                {tortaCategoria.some((d) => d.value > 0.005) && <TortaIngresos titulo="Por plato" datos={tortaCategoria} />}
               </div>
             </div>
           )}
