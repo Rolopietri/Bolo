@@ -134,6 +134,18 @@ export function CierreCajaAdmin() {
         </div>
       ) : (
         <section className="rounded-2xl bg-white ring-1 ring-marfil px-4 sm:px-5">
+          <div className="flex flex-wrap gap-2 pt-4">
+            {(
+              [
+                ["cuadra", "Cuadran"],
+                ["sobra", "Sobran"],
+                ["falta", "Faltan"],
+              ] as const
+            ).map(([estado, label]) => {
+              const n = filas.filter((f) => f.comp?.estado === estado).length;
+              return <EstadoCajaPill key={estado} estado={estado} titulo={`${n} ${label.toLowerCase()}`} />;
+            })}
+          </div>
           <h2 className="pt-4 text-[10px] uppercase tracking-widest text-cacao-mute">Por día</h2>
           <ul className="divide-y divide-marfil">
             {filas.map(({ cierre, comp }) => (

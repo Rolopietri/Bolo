@@ -858,7 +858,7 @@ export function PlanesClient() {
                   </strong>{" "}
                   como producción terminada. Es solo un cambio de estado — el
                   ingrediente <strong>sigue comprometido</strong> hasta que se
-                  venda el producto (vía Xetux) o se borre el plan.
+                  venda el producto o se borre el plan.
                 </>
               )}
               {confirmAction.type === "cancelar" && (

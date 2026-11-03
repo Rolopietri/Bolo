@@ -5,10 +5,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { AnalisisVentas } from "./AnalisisVentas";
 import { AnalisisCompras } from "./AnalisisCompras";
+import { usdDeCompra, sumarVentasUsd } from "@/lib/admin/cuadre";
 import { getTasaBcvPorFecha, listComprasRango } from "@/lib/data/cocina";
 import { listVentasRango } from "@/lib/data/ventas";
+import { hoyCaracas } from "@/lib/cierre-caja";
 import { fmtBs, fmtUsd } from "@/lib/moneda";
-import { hoyISO } from "@/lib/ui";
 import { WarningIcon } from "@/components/icons";
 
 type Sub = "ventas" | "compras" | "resumen";
@@ -31,8 +32,10 @@ export function AnalisisAdministrativo() {
 
 // ── Resumen / Utilidad real ────────────────────────────────────────────────
 const fPct = (n: number) => `${n.toFixed(1)}%`;
-function isoLocal(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
-function rangoMes() { const h = new Date(); return { desde: isoLocal(new Date(h.getFullYear(), h.getMonth(), 1)), hasta: isoLocal(h) }; }
+function rangoMes() {
+  const hoy = hoyCaracas();
+  return { desde: `${hoy.slice(0, 8)}01`, hasta: hoy };
+}
 
 type Gastos = {
   fijosUsd?: number;
@@ -66,8 +69,8 @@ function ResumenUtilidad() {
         ]);
         if (cancel) return;
         setGastos(g && !g.error ? g : null);
-        setCogsCaja((compras as { precioTotalUsd: number }[]).reduce((s, x) => s + (x.precioTotalUsd || 0), 0));
-        setVentasNetasSrc((ventas as { totalUsd?: number }[]).reduce((s, v) => s + (v.totalUsd || 0), 0));
+        setCogsCaja((compras as { precioTotalUsd: number; fleteUsd?: number | null }[]).reduce((s, x) => s + usdDeCompra(x), 0));
+        setVentasNetasSrc(sumarVentasUsd(ventas as { totalUsd?: number; precioUnitarioUsd?: number; cantidad: number }[]));
         setTasaUsdBs(tasa && tasa.usdBs > 0 ? tasa.usdBs : null);
       } catch (e) {
         if (!cancel) setError(e instanceof Error ? e.message : "Error");
@@ -112,7 +115,7 @@ function ResumenUtilidad() {
           <button type="button" onClick={() => preset("mes")} className={pill(false)}>Mes actual</button>
           <div className="flex items-center gap-2 ml-auto">
             <label className="flex items-center gap-1 text-xs text-cacao-soft">Desde<input type="date" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" /></label>
-            <label className="flex items-center gap-1 text-xs text-cacao-soft">Hasta<input type="date" value={hasta} min={desde} max={hoyISO()} onChange={(e) => setHasta(e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" /></label>
+            <label className="flex items-center gap-1 text-xs text-cacao-soft">Hasta<input type="date" value={hasta} min={desde} max={hoyCaracas()} onChange={(e) => setHasta(e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" /></label>
           </div>
         </div>
       </section>
@@ -137,7 +140,7 @@ function ResumenUtilidad() {
             <h3 className="font-cinzel text-base text-cacao mb-3">Utilidad real del período</h3>
             <div className="max-w-lg space-y-1 text-sm">
               <PL label="Ventas netas" val={fmtUsd(r.ventasNetas)} fuerte />
-              <PL label="− Costo de insumos (compras del período)" val={fmtUsd(r.cogs)} tenue />
+              <PL label="− Costo de insumos (compras del período, con flete)" val={fmtUsd(r.cogs)} tenue />
               <div className="border-t border-marfil pt-1"><PL label={`= Margen bruto (${fPct(r.margenBrutoPct)})`} val={fmtUsd(r.margenBruto)} fuerte /></div>
               <PL label="− Gastos variables (no insumos)" val={fmtUsd(r.variables)} tenue />
               <div className="border-t border-marfil pt-1"><PL label="= Margen de contribución" val={fmtUsd(r.contribucion)} /></div>

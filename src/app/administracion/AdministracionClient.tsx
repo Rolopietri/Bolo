@@ -6,9 +6,12 @@
 // token). Menú desplegable con las secciones; se van construyendo por fases.
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { esCategoriaCortesia, esCategoriaInsumos, usdDeCompra, usdDeEgreso } from "@/lib/admin/cuadre";
 import { listVentasRango, totalesVentasPorMes } from "@/lib/data/ventas";
 import { listTasasBcvRango, listComprasRango, listComprasEgresoMes, listComprasPendientes, listProveedores, listInsumos, marcarCompraPagada, marcarFacturaPagada, getTasaBcvPorFecha, getTasaBcvActual } from "@/lib/data/cocina";
 import { fmtUsdBs } from "@/lib/moneda";
+import { hoyCaracas } from "@/lib/cierre-caja";
+import { montoVenta } from "@/lib/semana";
 import { leerAjustesVentas } from "@/lib/data/ajustes-ventas";
 import type { TasaBcv, Compra, Proveedor as ProveedorCocina, Insumo } from "@/lib/types";
 import { AnalisisAdministrativo } from "./AnalisisAdministrativo";
@@ -19,14 +22,14 @@ import { ChevronIcon, CalendarIcon } from "@/components/icons";
 type Seccion = "semana" | "cierre" | "proveedores" | "solicitudes" | "ingresos" | "analisis-ventas" | "cobrar" | "egresos" | "estado" | "historico";
 const SECCIONES: { id: Seccion; label: string; grupo?: string }[] = [
   { id: "semana", label: "Semana" },
-  { id: "cierre", label: "Cierre de caja" },
-  { id: "estado", label: "Estado de Cuenta" },
+  { id: "estado", label: "Estado de cuenta" },
   { id: "ingresos", label: "Ingresos" },
   { id: "egresos", label: "Egresos" },
+  { id: "analisis-ventas", label: "Análisis" },
+  { id: "historico", label: "Históricos" },
+  { id: "cierre", label: "Cierre de caja" },
   { id: "cobrar", label: "Cuentas por cobrar" },
-  { id: "analisis-ventas", label: "Análisis administrativo" },
-  { id: "historico", label: "Históricos y comparación" },
-  { id: "proveedores", label: "Proveedores", grupo: "Proveedores" },
+  { id: "proveedores", label: "Proveedores" },
   { id: "solicitudes", label: "Generar solicitud de pagos", grupo: "Proveedores" },
 ];
 
@@ -55,7 +58,6 @@ export function AdministracionClient({ seccionInicial = null }: { seccionInicial
 function Panel({ inicial }: { inicial: Seccion }) {
   const [seccion, setSeccion] = useState<Seccion>(inicial);
   const [inicialVista, setInicialVista] = useState(inicial);
-  const [menuAbierto, setMenuAbierto] = useState(false);
   if (inicial !== inicialVista) {
     setInicialVista(inicial);
     setSeccion(inicial);
@@ -69,58 +71,27 @@ function Panel({ inicial }: { inicial: Seccion }) {
 
   return (
     <div className="space-y-6">
-      {/* Barra superior con menú desplegable */}
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-cinzel text-xl text-cacao">{actual.label}</h1>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <button
-              type="button"
-              onClick={() => setMenuAbierto((v) => !v)}
-              className="flex items-center gap-2 rounded-lg ring-1 ring-marfil px-3 py-1.5 text-xs uppercase tracking-widest text-cacao hover:bg-marfil-soft"
-            >
-              Menú
-              <span className={`transition-transform ${menuAbierto ? "rotate-180" : ""}`}>▾</span>
-            </button>
-            {menuAbierto && (
-              <div className="absolute right-0 mt-1 w-64 rounded-xl bg-white ring-1 ring-marfil shadow-lg z-30 p-1.5">
-                <div className="flex justify-between items-center px-2 py-1">
-                  <span className="font-display text-[10px] tracking-[0.25em] uppercase text-cacao-mute">Secciones</span>
-                  <button type="button" onClick={() => setMenuAbierto(false)} className="text-cacao-soft hover:text-cacao text-sm">✕</button>
-                </div>
-                {menu.map((s, i) => {
-                  const primerDelGrupo = s.grupo && menu[i - 1]?.grupo !== s.grupo;
-                  return (
-                    <div key={s.id}>
-                      {primerDelGrupo && (
-                        <div className="px-2 pt-2 pb-0.5 font-display text-[9px] tracking-[0.2em] uppercase text-cacao-mute">{s.grupo}</div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSeccion(s.id);
-                          setMenuAbierto(false);
-                        }}
-                        className={`block w-full text-left rounded-lg px-2 py-2 text-sm ${seccion === s.id ? "bg-cacao text-white" : "text-cacao hover:bg-marfil-soft"} ${s.grupo ? "pl-4" : ""}`}
-                      >
-                        {s.label}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <button type="button" onClick={salir} className="text-[11px] uppercase tracking-widest text-cacao-soft hover:text-terracotta">Salir</button>
-        </div>
+        <button type="button" onClick={salir} className="text-[11px] uppercase tracking-widest text-cacao-soft hover:text-terracotta">Salir</button>
       </div>
+      <nav className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" aria-label="Secciones de administración">
+        {menu.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => setSeccion(s.id)}
+            aria-current={seccion === s.id ? "page" : undefined}
+            className={`shrink-0 rounded-full px-3 py-1.5 text-xs ${seccion === s.id ? "bg-terracotta text-white" : "bg-white text-cacao ring-1 ring-marfil hover:bg-marfil-soft"}`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </nav>
 
       {seccion === "semana" ? (
         <SemanaAdministracion
-          onVerCierres={() => {
-            setSeccion("cierre");
-            setMenuAbierto(false);
-          }}
+          onVerCierres={() => setSeccion("cierre")}
         />
       ) : seccion === "cierre" ? (
         <CierreCajaAdmin />
@@ -1174,8 +1145,7 @@ function ConfirmarPago({
 
 // ── Egresos ─────────────────────────────────────────────────────────
 function mesActualISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return hoyCaracas().slice(0, 7);
 }
 function nombreMes(iso: string): string {
   const [y, m] = iso.split("-").map((x) => parseInt(x, 10));
@@ -1244,7 +1214,7 @@ function EgresosMes() {
         ]);
         const [de, dc, dp, dpe] = await Promise.all([re.json(), rc.json(), rp.json(), rpe.json()]);
         if (a) {
-          setEgresos(de.egresos ?? []);
+          setEgresos(re.ok ? (de.egresos ?? []) : []);
           setEgresosPend(dpe.egresos ?? []);
           setCompras(cp);
           setComprasPend(cpend);
@@ -1268,14 +1238,15 @@ function EgresosMes() {
   const comprasEgreso: Egreso[] = compras
     .filter((c) => (c.precioTotalUsd ?? 0) > 0.005)
     .map((c) => {
-      const prov = c.proveedorId ? provCocina.find((p) => p.id === c.proveedorId)?.nombre ?? null : null;
+        const prov = c.proveedorId ? provCocina.find((p) => p.id === c.proveedorId)?.nombre ?? null : null;
       const ins = insumos.find((i) => i.id === c.insumoId)?.nombre;
+      const usd = usdDeCompra(c);
       return {
         id: `compra:${c.id}`, fecha: c.fechaPago ?? c.fecha,
-        concepto: `Compra Cocina${c.numeroFactura ? ` · Factura ${c.numeroFactura}` : ins ? ` · ${ins}` : ""}`,
+        concepto: `Compra Cocina${c.numeroFactura ? ` · Factura ${c.numeroFactura}` : ins ? ` · ${ins}` : ""}${c.fleteUsd && c.fleteUsd > 0.005 ? " · con flete" : ""}`,
         categoria_id: null, categoria_nombre: "Insumos (Cocina)", clasificacion: "variable",
         proveedor_id: null, proveedor_nombre: prov,
-        monto: c.precioTotalUsd, moneda: "USD", tasa: null, monto_usd: c.precioTotalUsd,
+        monto: usd, moneda: "USD", tasa: null, monto_usd: usd,
         metodo: c.modalidadPago ?? null, factura: c.numeroFactura ?? null, nota: null, solicitud_linea_id: null,
       } as unknown as Egreso;
     });
@@ -1366,7 +1337,10 @@ function EgresosMes() {
     recargar();
   }
 
-  const totalUSD = egresosAll.reduce((s, e) => s + (e.monto_usd ?? 0), 0);
+  const totalUSD = egresosAll.reduce((s, e) => {
+    if (!e.id.startsWith("compra:") && (esCategoriaInsumos(e.categoria_nombre) || esCategoriaCortesia(e.categoria_nombre))) return s;
+    return s + (e.monto_usd ?? (e.moneda === "USD" ? e.monto ?? 0 : 0));
+  }, 0);
   const fijasUSD = egresosAll.filter((e) => e.clasificacion === "fija").reduce((s, e) => s + (e.monto_usd ?? 0), 0);
   const variablesUSD = egresosAll.filter((e) => e.clasificacion === "variable").reduce((s, e) => s + (e.monto_usd ?? 0), 0);
   const sinTasa = egresosAll.some((e) => e.monto != null && e.monto_usd == null);
@@ -1512,7 +1486,10 @@ function EgresosMes() {
         {cargando ? (
           <p className="p-5 text-cacao-soft italic font-serif">Cargando…</p>
         ) : egresosAll.length === 0 ? (
-          <p className="p-8 text-center text-cacao-soft italic font-serif">No hay egresos en {nombreMes(mes)}.</p>
+          <div className="p-8 text-center">
+            <p className="text-cacao-soft italic font-serif">No hay egresos en {nombreMes(mes)}.</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-cacao-soft">Acá va lo que salió y no es compra de insumos: el gas, el alquiler, la nómina. Las compras de Cocina entran solas en el estado de cuenta.</p>
+          </div>
         ) : (
           egresosPorFecha.map((g, idx) => {
             const abierto = diasAbiertos[g.fecha] ?? idx === 0;
@@ -1719,7 +1696,7 @@ function FormEgreso({
     proveedor_id: inicial?.proveedor_id ?? "",
     concepto: inicial?.concepto ?? "",
     monto: baseIni != null ? String(baseIni) : "",
-    moneda: inicial?.moneda ?? "Bs",
+    moneda: inicial?.moneda ?? "USD",
     tasa: inicial?.tasa != null ? String(inicial.tasa) : "",
     metodo: inicial?.metodo ?? "Transferencia",
     factura: inicial?.factura ?? "",
@@ -2066,7 +2043,7 @@ function CuadreFacturas() {
   const [confirmando, setConfirmando] = useState(false);
   const [ok, setOk] = useState<string | null>(null);
 
-  const fEUR = (v: number) => `${(v ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  const fmtArchivo = (v: number) => (v ?? 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   async function subir(file: File) {
     setError(null); setOk(null); setCargando(true); setRep(null); setArchivoB64(null);
@@ -2114,7 +2091,7 @@ function CuadreFacturas() {
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "No se pudo guardar.");
       const cl = d.clientes ? ` Base de clientes: ${d.clientes.nuevos} nuevo(s), ${d.clientes.actualizados} ya registrado(s).` : "";
-      setOk(`Importado ${d.desde} → ${d.hasta}: ${d.ingresos} ingreso(s), ${d.cxc} CXC, ${d.rpp} RPP, ${d.dias} día(s) de tickets. Ticket promedio ${fEUR(d.ticketPromedio)}.${cl}`);
+      setOk(`Importado ${d.desde} → ${d.hasta}: ${d.ingresos} ingreso(s), ${d.cxc} CXC, ${d.rpp} RPP, ${d.dias} día(s) de tickets. Ticket promedio ${fmtArchivo(d.ticketPromedio)}.${cl}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error");
     } finally { setGuardando(false); }
@@ -2128,7 +2105,7 @@ function CuadreFacturas() {
       {!rep ? (
         <div className="text-center py-4">
           <p className="font-display text-[11px] tracking-[0.3em] uppercase text-cacao-mute mb-1">Importar por factura</p>
-          <p className="text-sm text-cacao-soft mb-4 font-serif italic max-w-xl mx-auto">Sube el <strong>“Reporte Detallado por Factura”</strong> (Excel .xlsx/.xls o CSV). De un solo archivo salen Ingresos (por método, con IVA), CXC, RPP y el ticket promedio, fechados por la <strong>fecha de orden</strong>. Verás el desglose y con “Guardar” se carga todo.</p>
+          <p className="text-sm text-cacao-soft mb-4 font-serif italic max-w-xl mx-auto">Sube el reporte detallado por factura del POS (Excel o CSV). Los montos se muestran como vienen en el archivo, sin convertirlos. Las ventas que cuentan en Semana y en el estado de cuenta siguen siendo las de Cocina.</p>
           <p className="text-[11px] text-cacao-mute mb-3">En iOS: en Numbers usa Compartir → Exportar → Excel (o CSV). En Windows: Excel directo.</p>
           <label className="inline-block rounded-lg bg-cacao text-white px-5 py-2.5 text-xs uppercase tracking-widest hover:bg-terracotta cursor-pointer">
             {cargando ? "Leyendo…" : "Elegir archivo (Excel o CSV)"}
@@ -2138,7 +2115,7 @@ function CuadreFacturas() {
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
-            <span className="font-display text-[10px] tracking-[0.25em] uppercase text-cacao-mute">Período {rep.desde} → {rep.hasta} · {rep.totales.tickets} facturas</span>
+            <span className="font-display text-[10px] tracking-[0.25em] uppercase text-cacao-mute">Período {rep.desde} → {rep.hasta} · {rep.totales.tickets} facturas · montos del archivo</span>
             <div className="flex items-center gap-2">
               {confirmando ? (
                 <>
@@ -2163,10 +2140,10 @@ function CuadreFacturas() {
 
           {/* KPIs del reporte */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <MiniKpi titulo="Ticket promedio" valor={fEUR(rep.totales.ticketPromedioBruto)} sub={`${rep.totales.tickets} tickets · neto ${fEUR(rep.totales.ticketPromedioNeto)}`} />
-            <MiniKpi titulo="Ingresos (dinero real)" valor={fEUR(rep.totales.ingresoBruto)} sub={`neto ${fEUR(rep.totales.ingresoNeto)}`} />
-            <MiniKpi titulo="CXC (crédito)" valor={fEUR(rep.totales.cxcBruto)} sub={`neto ${fEUR(rep.totales.cxcNeto)}`} />
-            <MiniKpi titulo="RPP (cortesías)" valor={fEUR(rep.totales.rppBruto)} sub={`neto ${fEUR(rep.totales.rppNeto)}`} />
+            <MiniKpi titulo="Ticket promedio" valor={fmtArchivo(rep.totales.ticketPromedioBruto)} sub={`${rep.totales.tickets} tickets · neto ${fmtArchivo(rep.totales.ticketPromedioNeto)}`} />
+            <MiniKpi titulo="Ingresos (dinero real)" valor={fmtArchivo(rep.totales.ingresoBruto)} sub={`neto ${fmtArchivo(rep.totales.ingresoNeto)}`} />
+            <MiniKpi titulo="CXC (crédito)" valor={fmtArchivo(rep.totales.cxcBruto)} sub={`neto ${fmtArchivo(rep.totales.cxcNeto)}`} />
+            <MiniKpi titulo="RPP (cortesías)" valor={fmtArchivo(rep.totales.rppBruto)} sub={`neto ${fmtArchivo(rep.totales.rppNeto)}`} />
           </div>
 
           {/* Desglose por método de pago (como el Detallado por Forma de Pago) */}
@@ -2182,13 +2159,13 @@ function CuadreFacturas() {
                       <td className="py-1 px-3 text-cacao whitespace-nowrap">{m.metodo}</td>
                       <td className="py-1 px-3 text-cacao-soft">{m.categoria === "INGRESO" ? "Ingreso" : m.categoria === "CXC" ? "Crédito (CXC)" : "Cortesía (RPP)"}</td>
                       <td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{m.tickets}</td>
-                      <td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fEUR(m.neto)}</td>
-                      <td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fEUR(m.iva)}</td>
-                      <td className="py-1 px-3 text-right tabular-nums text-cacao">{fEUR(m.monto)}</td>
+                      <td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fmtArchivo(m.neto)}</td>
+                      <td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fmtArchivo(m.iva)}</td>
+                      <td className="py-1 px-3 text-right tabular-nums text-cacao">{fmtArchivo(m.monto)}</td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot><tr className="border-t-2 border-marfil font-medium"><td className="py-1 px-3 text-cacao" colSpan={3}>Total</td><td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fEUR(rep.totales.totalNeto)}</td><td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fEUR(rep.totales.totalBruto - rep.totales.totalNeto)}</td><td className="py-1 px-3 text-right tabular-nums text-cacao">{fEUR(rep.totales.totalBruto)}</td></tr></tfoot>
+                <tfoot><tr className="border-t-2 border-marfil font-medium"><td className="py-1 px-3 text-cacao" colSpan={3}>Total</td><td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fmtArchivo(rep.totales.totalNeto)}</td><td className="py-1 px-3 text-right tabular-nums text-cacao-soft">{fmtArchivo(rep.totales.totalBruto - rep.totales.totalNeto)}</td><td className="py-1 px-3 text-right tabular-nums text-cacao">{fmtArchivo(rep.totales.totalBruto)}</td></tr></tfoot>
               </table>
               </div>
             </div>
@@ -2199,7 +2176,7 @@ function CuadreFacturas() {
             <div className="rounded-xl ring-1 ring-marfil overflow-hidden">
               <div className="px-3 py-2 bg-marfil-soft font-display text-[10px] tracking-[0.25em] uppercase text-cacao-mute flex items-center justify-between">
                 <span>Cuentas por cobrar (crédito) · {rep.cxcDetalle.length} cliente{rep.cxcDetalle.length === 1 ? "" : "s"}</span>
-                <span className="text-cacao">{fEUR(rep.totales.cxcBruto)}</span>
+                <span className="text-cacao">{fmtArchivo(rep.totales.cxcBruto)}</span>
               </div>
               <div className="max-h-72 overflow-y-auto">
                 <table className="w-full text-xs">
@@ -2207,7 +2184,7 @@ function CuadreFacturas() {
                     {rep.cxcDetalle.map((c) => (
                       <tr key={c.cliente} className="border-t border-marfil">
                         <td className="py-1.5 px-3 text-cacao">{c.cliente}<span className="text-cacao-mute"> · {c.docs.length} doc{c.docs.length === 1 ? "" : "s"} ({c.docs.map((d) => d.ref).filter(Boolean).join(", ")})</span></td>
-                        <td className="py-1.5 px-3 text-right tabular-nums text-cacao whitespace-nowrap">{fEUR(c.total)}</td>
+                        <td className="py-1.5 px-3 text-right tabular-nums text-cacao whitespace-nowrap">{fmtArchivo(c.total)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2232,7 +2209,7 @@ function CuadreFacturas() {
                     <div key={m.nro} className="px-3 py-2">
                       <div className="flex items-center justify-between gap-2 text-[12px]">
                         <span className="text-cacao min-w-0 truncate">{fmtFecha(m.fecha)} · {m.cliente || m.nro || "factura"}</span>
-                        <span className={`tabular-nums whitespace-nowrap ${cuadra ? "text-[#2F4A1F]" : "text-[#7A2419]"}`}>Total {fEUR(m.total)}{cuadra ? " ✓" : ` · suma ${fEUR(suma)}`}</span>
+                        <span className={`tabular-nums whitespace-nowrap ${cuadra ? "text-[#2F4A1F]" : "text-[#7A2419]"}`}>Total {fmtArchivo(m.total)}{cuadra ? " ✓" : ` · suma ${fmtArchivo(suma)}`}</span>
                       </div>
                       <div className="mt-1 flex flex-wrap gap-2">
                         {m.metodos.map((met) => (
@@ -2408,7 +2385,7 @@ function IngresosMes() {
       const r = await fetch("/api/admin/recalcular-iva", { method: "POST" });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || "No se pudo recalcular el IVA.");
-      setMsg(`IVA separado (${d.ivaPct}%) en ${d.ajustados} ingresos de Xetux.`);
+      setMsg(`IVA separado (${d.ivaPct}%) en ${d.ajustados} ingresos ya cargados.`);
       recargar();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo recalcular el IVA.");
@@ -2417,13 +2394,11 @@ function IngresosMes() {
     }
   }
 
-  // Los ingresos vienen en distintas monedas reales: Setux en euros, los
-  // alquileres de inquilinos en dólares, etc. No se fuerzan a una sola: se
-  // totaliza POR MONEDA para no distorsionar con tasas inventadas.
-  const ORDEN_MONEDA = ["EUR", "USD", "Bs"];
+  // Otros ingresos (no son las ventas). Se totalizan por moneda.
+  const ORDEN_MONEDA = ["USD", "Bs", "EUR"];
   const totalesPorMoneda: Record<string, number> = {};
   for (const e of ingresos) {
-    const k = e.moneda || "EUR";
+    const k = e.moneda || "USD";
     totalesPorMoneda[k] = (totalesPorMoneda[k] ?? 0) + (e.monto ?? 0);
   }
   const monedasPresentes = ORDEN_MONEDA.filter((k) => (totalesPorMoneda[k] ?? 0) > 0.005)
@@ -2440,7 +2415,7 @@ function IngresosMes() {
       : up === "DOLAR" || up === "DÓLAR" || up === "EFECTIVO"
         ? "Efectivo"
         : e.metodo;
-    const k = e.moneda || "EUR";
+    const k = e.moneda || "USD";
     (porMetodo[metodo] ??= {})[k] = (porMetodo[metodo][k] ?? 0) + (e.monto ?? 0);
   }
   // Ordena de mayor a menor por el total del método (sumando sus monedas).
@@ -2462,7 +2437,7 @@ function IngresosMes() {
       .map(([fecha, items]) => {
         const totales: Record<string, number> = {};
         for (const e of items) {
-          const k = e.moneda || "EUR";
+          const k = e.moneda || "USD";
           totales[k] = (totales[k] ?? 0) + (e.monto ?? 0);
         }
         const monedas = ORDEN_MONEDA.filter((k) => (totales[k] ?? 0) > 0.005)
@@ -2509,9 +2484,10 @@ function IngresosMes() {
       {error && <div className="rounded-lg bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-3 text-sm text-[#7A2419]">{error}</div>}
       {msg && <div className="rounded-lg bg-[#F1F4ED] ring-1 ring-[#C9D6BC] p-3 text-sm text-[#2F4A1F]">{msg}</div>}
 
+      {ingresos.some((e) => (e.moneda || "USD") === "EUR") && (
       <div className="rounded-2xl bg-white ring-1 ring-marfil p-4 flex flex-wrap items-end gap-3">
         <div>
-          <label className="block font-display text-[10px] tracking-[0.2em] uppercase text-cacao-mute mb-1">Tasa €→USD</label>
+          <label className="block font-display text-[10px] tracking-[0.2em] uppercase text-cacao-mute mb-1">Tasa de euros viejos</label>
           <div className="flex items-center gap-1 text-sm text-cacao">
             1 € =
             <input inputMode="decimal" value={tasaInput} onChange={(e) => setTasaInput(e.target.value)} className="w-20 border border-marfil rounded-lg px-2 py-2 text-sm text-cacao text-center" />
@@ -2520,8 +2496,9 @@ function IngresosMes() {
         </div>
         <button type="button" onClick={guardarTasa} disabled={guardandoTasa} className="rounded-lg bg-cacao text-white px-4 py-2 text-xs uppercase tracking-widest hover:bg-terracotta disabled:bg-marfil disabled:text-cacao-mute">{guardandoTasa ? "Guardando…" : "Guardar tasa"}</button>
         <button type="button" onClick={recalcularUSD} disabled={recalculando} className="rounded-lg ring-1 ring-marfil text-cacao px-4 py-2 text-xs uppercase tracking-widest hover:bg-marfil-soft disabled:text-cacao-mute">{recalculando ? "Recalculando…" : "Recalcular cargados"}</button>
-        <p className="text-[11px] text-cacao-mute flex-1 min-w-[12rem]">Tasa fija para pasar euros a dólares. Cámbiala cuando haga falta y dale “Recalcular” para aplicarla a todo lo ya cargado.</p>
+        <p className="text-[11px] text-cacao-mute flex-1 min-w-[12rem]">Solo para ingresos viejos anotados en euros. Las ventas del restaurante ya están en dólares.</p>
       </div>
+      )}
 
       <div className="rounded-2xl bg-white ring-1 ring-marfil p-4 flex flex-wrap items-end gap-3">
         <div>
@@ -2542,38 +2519,27 @@ function IngresosMes() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-2xl bg-[#0F0F0F] text-[#EDE7E0] ring-1 ring-[#0F0F0F] p-4">
-          <div className="font-display text-[9px] tracking-[0.25em] uppercase text-[#9A938B]">Total del mes</div>
-          {monedasPresentes.length === 0 ? (
-            <div className="text-lg font-medium mt-1">—</div>
-          ) : (
-            <div className="mt-1 space-y-0.5">
-              {monedasPresentes.map((k) => (
-                <div key={k} className="text-lg font-medium leading-tight">{fmtMonto(totalesPorMoneda[k], k)}</div>
-              ))}
-            </div>
-          )}
-          {monedasPresentes.length > 1 && <div className="text-[10px] text-[#9A938B] mt-1.5">Cada moneda por separado.</div>}
-          {/* Ingreso: total y comparación con Cocina, juntos arriba */}
-          <div className="mt-2 pt-2 border-t border-[#333]">
-            <div className="text-[9px] tracking-[0.2em] uppercase text-[#9A938B]">Ventas de Cocina</div>
-            <div className="text-sm font-medium leading-tight mt-0.5">{fmtUsdBs(ventasMes[mes] ?? 0, tasaUsdBs)}</div>
-            <div className="text-[10px] text-[#9A938B] mt-0.5">Esta es la venta del mes, en dólares. El libro de abajo no se suma al estado de cuenta.</div>
-          </div>
-          {/* No es ingreso: al fondo */}
+          <div className="font-display text-[9px] tracking-[0.25em] uppercase text-[#9A938B]">Ventas del mes</div>
+          <div className="text-lg font-medium leading-tight mt-1">{fmtUsdBs(ventasMes[mes] ?? 0, tasaUsdBs)}</div>
+          <div className="text-[10px] text-[#9A938B] mt-1.5">Las de Cocina, en dólares. Es el mismo número del estado de cuenta y del análisis.</div>
           {ivaMes > 0 && (
             <div className="mt-3 pt-2 border-t border-[#444]">
-              <div className="text-[9px] tracking-[0.2em] uppercase text-[#7C766E]">No es ingreso</div>
-              <div className="flex justify-between text-[13px] mt-1">
-                <span className="text-[#9A938B]">IVA</span>
-                <span className="text-[#EDE7E0]">{fmtMonto(ivaMes, "EUR")}</span>
-              </div>
+              <div className="text-[9px] tracking-[0.2em] uppercase text-[#7C766E]">IVA anotado aparte</div>
+              <div className="text-[13px] mt-1">{fmtMonto(ivaMes, ingresos.some((e) => (e.moneda || "USD") === "EUR") ? "EUR" : "USD")}</div>
             </div>
           )}
         </div>
         <div className="sm:col-span-2 rounded-2xl bg-white ring-1 ring-marfil p-4">
+          <div className="font-display text-[9px] tracking-[0.25em] uppercase text-cacao-mute mb-1">Otros ingresos</div>
+          <p className="text-[11px] text-cacao-mute mb-2">Un reintegro o un alquiler. No se suman a las ventas del restaurante.</p>
+          {monedasPresentes.length > 0 && (
+            <div className="mb-2 text-sm font-medium text-cacao">
+              {monedasPresentes.map((k) => fmtMonto(totalesPorMoneda[k], k)).join(" · ")}
+            </div>
+          )}
           <div className="font-display text-[9px] tracking-[0.25em] uppercase text-cacao-mute mb-2">Por método de pago</div>
           {desglose.length === 0 ? (
-            <p className="text-sm text-cacao-soft italic font-serif">Sin ingresos este mes.</p>
+            <p className="text-sm text-cacao-soft italic font-serif">Sin otros ingresos este mes.</p>
           ) : (
             <ul className="space-y-1">
               {desglose.map(([nombre, porMoneda]) => (
@@ -2593,7 +2559,11 @@ function IngresosMes() {
         {cargando ? (
           <p className="p-5 text-cacao-soft italic font-serif">Cargando…</p>
         ) : ingresos.length === 0 ? (
-          <p className="p-8 text-center text-cacao-soft italic font-serif">No hay ingresos en {nombreMes(mes)}.</p>
+          <div className="p-8 text-center">
+            <p className="text-cacao-soft italic font-serif">No hay otros ingresos en {nombreMes(mes)}.</p>
+            <p className="mx-auto mt-2 max-w-md text-sm text-cacao-soft">Las ventas del día se anotan en Cocina. Acá solo entra plata que no es una venta.</p>
+            <a href="/cocina/ventas" className="mt-3 inline-flex rounded-full bg-cacao px-4 py-2 text-sm text-white hover:bg-terracotta">Ir a Cocina → Ventas</a>
+          </div>
         ) : (
           ingresosPorFecha.map((g, idx) => {
             const abierto = diasAbiertos[g.fecha] ?? idx === 0;
@@ -2666,7 +2636,7 @@ function FormIngreso({
     pagador: inicial?.pagador ?? "",
     concepto: inicial?.concepto ?? "",
     monto: inicial?.monto != null ? String(inicial.monto) : "",
-    moneda: inicial?.moneda ?? "Bs",
+    moneda: inicial?.moneda ?? "USD",
     tasa: inicial?.tasa != null ? String(inicial.tasa) : "",
     metodo: inicial?.metodo ?? "Transferencia",
     factura: inicial?.factura ?? "",
@@ -2898,23 +2868,24 @@ function SeccionEstado() {
         ]);
         const de = await re.json();
         if (a) {
+          if (!re.ok) setEgresos([]);
+          else setEgresos(de.egresos ?? []);
           const mapa = new Map<string, number>();
           let total = 0;
           for (const v of ventas) {
-            const usd = v.totalUsd ?? 0;
+            const usd = montoVenta(v);
             total += usd;
             const nombre = v.recetaNombre || "Sin plato";
             mapa.set(nombre, (mapa.get(nombre) ?? 0) + usd);
           }
           setVentasUsd(total);
           setPorPlato([...mapa.entries()].sort((x, z) => z[1] - x[1]));
-          setEgresos(de.egresos ?? []);
           setTasasBcv(tb);
           setTasaHoy(tasaAct && tasaAct.usdBs > 0 ? tasaAct.usdBs : null);
           setCompras(cp);
         }
-      } catch {
-        if (a) setError("No se pudo cargar el estado de cuenta.");
+      } catch (e) {
+        if (a) setError(e instanceof Error ? e.message : "No se pudo cargar el estado de cuenta.");
       } finally {
         if (a) setCargando(false);
       }
@@ -2924,35 +2895,32 @@ function SeccionEstado() {
 
   // Las compras de insumos (Cocina) son egresos en $ (precio canónico en USD).
   // Se suman al Estado de Cuenta como egresos, categoría "Insumos (Cocina)".
+  const tasasDia = tasasBcv.map((t) => ({ fecha: t.fecha, usdBs: t.usdBs, eurBs: t.eurBs }));
   const comprasEgreso: Egreso[] = compras
-    .filter((c) => (c.precioTotalUsd ?? 0) > 0.005)
-    .map((c) => ({
-      id: c.id, fecha: c.fecha, concepto: "Compra de insumos", categoria_id: null,
-      categoria_nombre: "Insumos (Cocina)", clasificacion: "variable",
-      proveedor_id: null, proveedor_nombre: null,
-      monto: c.precioTotalUsd, moneda: "USD", tasa: null, monto_usd: c.precioTotalUsd,
-      metodo: c.modalidadPago ?? null, factura: null, nota: null, solicitud_linea_id: null,
-    }) as unknown as Egreso);
-  const egresosAll: Egreso[] = [...egresos, ...comprasEgreso];
+    .filter((c) => usdDeCompra(c) > 0.005)
+    .map((c) => {
+      const usd = usdDeCompra(c);
+      return {
+        id: c.id, fecha: c.fecha, concepto: "Compra de insumos", categoria_id: null,
+        categoria_nombre: "Insumos (Cocina)", clasificacion: "variable",
+        proveedor_id: null, proveedor_nombre: null,
+        monto: usd, moneda: "USD", tasa: null, monto_usd: usd,
+        metodo: c.modalidadPago ?? null, factura: null, nota: null, solicitud_linea_id: null,
+      } as unknown as Egreso;
+    });
+  // Insumos y cortesías no se suman otra vez: los insumos entran por Compras
+  // y la cortesía no es plata que salió. Solo cuentan los gastos ya pagados.
+  const egresosOperativos = egresos.filter(
+    (e) => e.pagada !== false && !esCategoriaInsumos(e.categoria_nombre) && !esCategoriaCortesia(e.categoria_nombre),
+  );
+  const egresosAll: Egreso[] = [...egresosOperativos, ...comprasEgreso];
 
-  // Egresos a USD con el equivalente ya guardado (monto_usd). Si un euro no
-  // lo tiene, se pasa con el cruce BCV del día (eur_bs ÷ usd_bs).
-  const crossMap = new Map<string, number>();
-  let ultimoCross = 0;
   let tasaMes: number | null = null;
   for (const t of tasasBcv) {
     if (t.usdBs > 0) tasaMes = t.usdBs;
-    if (t.eurBs != null && t.usdBs > 0) { const c = t.eurBs / t.usdBs; crossMap.set(t.fecha, c); ultimoCross = c; }
   }
   const tasaUsdBs = tasaMes && tasaMes > 0 ? tasaMes : tasaHoy;
-  const crossDe = (fecha: string): number => crossMap.get(fecha) ?? ultimoCross;
-  const enUSD = (e: Egreso): number => {
-    if (e.monto_usd != null) return e.monto_usd;
-    const mon = e.moneda || "USD";
-    if (mon === "USD") return e.monto ?? 0;
-    if (mon === "EUR" && crossDe(e.fecha) > 0) return (e.monto ?? 0) * crossDe(e.fecha);
-    return 0;
-  };
+  const enUSD = (e: Egreso): number => usdDeEgreso(e, tasasDia);
   const ingUni = ventasUsd;
   const egrUni = egresosAll.reduce((s, e) => s + enUSD(e), 0);
   const balUni = ingUni - egrUni;
@@ -2998,7 +2966,7 @@ function SeccionEstado() {
                 <DesgloseUnico titulo="Ventas por plato" filas={porPlato} moneda="USD" />
                 <DesgloseUnico titulo="Egresos por categoría" filas={catUni(egresosAll)} moneda="USD" />
               </div>
-              <p className="text-[11px] text-cacao-soft italic">Los ingresos salen de las ventas de Cocina, en dólares. El libro anterior de ingresos no se suma. Los egresos en bolívares o euros usan el equivalente en dólares de cada pago.</p>
+              <p className="text-[11px] text-cacao-soft italic">Los ingresos son las ventas de Cocina, en dólares: el mismo número que Semana, Análisis e Históricos para este mes. Los egresos suman los gastos ya pagados y las compras de insumos (con flete). Un gasto en bolívares se pasa a dólares con la tasa BCV de su fecha.</p>
             </>
           )}
 
@@ -3420,7 +3388,7 @@ function SeccionCuentasCobrar() {
         {cargando ? (
           <p className="p-5 text-cacao-soft italic font-serif">Cargando…</p>
         ) : deudores.length === 0 && aFavor.length === 0 ? (
-          <p className="p-8 text-center text-cacao-soft italic font-serif">No hay clientes con saldo pendiente. Importa el reporte detallado de Xetux para empezar.</p>
+          <p className="p-8 text-center text-cacao-soft italic font-serif">No hay clientes con saldo pendiente.</p>
         ) : (
           <ul className="divide-y divide-marfil">
             {[...deudores, ...aFavor, ...(verSaldados ? saldados : [])].map((c) => {
@@ -3854,6 +3822,7 @@ function SeccionHistorico() {
         ]);
         const [dh, dc] = await Promise.all([rh.json(), rc.json()]);
         if (!a) return;
+        if (!rh.ok) throw new Error(typeof dh.error === "string" ? dh.error : "No se pudo cargar el histórico.");
         const ms: MesHist[] = dh.meses ?? [];
         setMeses(ms);
         setMonedas(["USD"]);
@@ -3868,8 +3837,8 @@ function SeccionHistorico() {
         const ultimo = ms.length ? ms[ms.length - 1].mes : mesActualISO();
         setObsMes(ultimo);
         setObsTexto(observaciones[ultimo] ?? "");
-      } catch {
-        if (a) setError("No se pudo cargar el histórico.");
+      } catch (e) {
+        if (a) setError(e instanceof Error ? e.message : "No se pudo cargar el histórico.");
       } finally {
         if (a) setCargando(false);
       }
@@ -3942,7 +3911,7 @@ function SeccionHistorico() {
       )}
 
       {conMovim.length === 0 ? (
-        <p className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft italic font-serif">Aún no hay suficientes datos en {moneda} para el histórico. Registra ingresos y egresos y aquí verás la evolución.</p>
+        error ? null : <p className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft italic font-serif">Aún no hay suficientes datos en {moneda} para el histórico. Cuando haya ventas en Cocina, aquí verás la evolución mes a mes.</p>
       ) : (
         <>
           {/* Indicadores */}

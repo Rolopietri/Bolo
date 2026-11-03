@@ -31,7 +31,7 @@ const TARJETAS: {
     descripcion:
       "Subes el reporte de cierre de tu sistema de caja y Bolo carga las ventas solo.",
     ejemplo:
-      "Exportas el cierre del día de Xetux o Setux en CSV o PDF y lo subes.",
+      "Exportas el cierre del día en Excel o CSV y lo subes.",
   },
 ];
 
