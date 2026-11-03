@@ -13,6 +13,7 @@
     "test:facturas": "node --no-warnings scripts/check-facturas.mjs",
     "test:reposicion": "node --no-warnings scripts/check-reposicion.mjs",
     "test:stock": "node --no-warnings scripts/check-stock-liviano.mjs",
+    "test:semana": "node --no-warnings scripts/check-semana.mjs",
     "seed:cocina-demo": "node scripts/seed-cocina-demo.mjs"
   },
   "dependencies": {
