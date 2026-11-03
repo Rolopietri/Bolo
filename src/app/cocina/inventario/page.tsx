@@ -29,7 +29,7 @@ const SUBMODULOS: MenuItem[] = [
     href: "/cocina/ventas",
     label: "Ventas",
     Icon: ReceiptIcon,
-    desc: "Regístralas a mano o impórtalas desde Xetux — descuenta stock automáticamente.",
+    desc: "Regístralas a mano o impórtalas desde el POS — descuenta stock automáticamente.",
   },
   {
     href: "/cocina/pedido",

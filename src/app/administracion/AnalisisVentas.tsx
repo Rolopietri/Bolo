@@ -10,6 +10,8 @@ import { Plegable } from "@/components/Plegable";
 import type { Venta, Receta, Insumo } from "@/lib/types";
 import { categoriaRecetaLabel, categoriaInsumoLabel } from "@/lib/types";
 import { listVentasRango, normPos } from "@/lib/data/ventas";
+import { hoyCaracas } from "@/lib/cierre-caja";
+import { montoVenta } from "@/lib/semana";
 import { listRecetas, setRecetaCategoria, calcularCostoReceta } from "@/lib/data/recetas";
 import { listInsumos, setInsumoCategoria } from "@/lib/data/cocina";
 import { listCategoriasProducto, createCategoriaProducto, renameCategoriaProducto, deleteCategoriaProducto, setCategoriaExcluirRanking, type CategoriaProducto } from "@/lib/data/categorias";
@@ -53,18 +55,20 @@ function diaCorto(iso: string): string {
 
 type Preset = "dia" | "semana" | "mes" | "rango";
 
-// Rango de fechas para cada preset (mes = mes actual por defecto).
+function restarDiasISO(iso: string, dias: number): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const dt = new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  dt.setUTCDate(dt.getUTCDate() - dias);
+  return dt.toISOString().slice(0, 10);
+}
+
+// Rango de fechas para cada preset, en el calendario de Caracas.
+// "semana" son los últimos 7 días (hoy incluido), no la semana lunes-domingo.
 function rangoDePreset(preset: Preset): { desde: string; hasta: string } {
-  const hoy = new Date();
-  if (preset === "dia") return { desde: isoLocal(hoy), hasta: isoLocal(hoy) };
-  if (preset === "semana") {
-    const d = new Date(hoy);
-    d.setDate(d.getDate() - 6);
-    return { desde: isoLocal(d), hasta: isoLocal(hoy) };
-  }
-  // mes actual
-  const primero = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-  return { desde: isoLocal(primero), hasta: isoLocal(hoy) };
+  const hoy = hoyCaracas();
+  if (preset === "dia") return { desde: hoy, hasta: hoy };
+  if (preset === "semana") return { desde: restarDiasISO(hoy, 6), hasta: hoy };
+  return { desde: `${hoy.slice(0, 8)}01`, hasta: hoy };
 }
 
 // Normaliza un nombre de categoría para AGRUPAR: sin acentos, en minúsculas y
@@ -291,8 +295,8 @@ export function AnalisisVentas() {
   }, [rangoPrev.desde, rangoPrev.hasta]);
 
   // Total de Cocina del rango (todas las ventas, sin filtros de cat/producto).
-  const cocinaTotalRango = useMemo(() => ventas.reduce((s, v) => s + (v.totalUsd ?? 0), 0), [ventas]);
-  const prevTotalMonto = useMemo(() => ventasPrev.reduce((s, v) => s + (v.totalUsd ?? 0), 0), [ventasPrev]);
+  const cocinaTotalRango = useMemo(() => ventas.reduce((s, v) => s + montoVenta(v), 0), [ventas]);
+  const prevTotalMonto = useMemo(() => ventasPrev.reduce((s, v) => s + montoVenta(v), 0), [ventasPrev]);
 
   const catPorReceta = useMemo(() => {
     const m = new Map<string, string>();
@@ -367,7 +371,7 @@ export function AnalisisVentas() {
           grpKey: grp.key,
           grpLabel: grp.label,
           unidades,
-          monto: v.totalUsd ?? 0,
+          monto: montoVenta(v),
           costo,
         };
       }),

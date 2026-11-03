@@ -601,7 +601,7 @@ export function VentasClient() {
   const pestanas = (
     [
       ajustes.ventasManual ? { v: "registrar" as const, l: "Registro manual" } : null,
-      ajustes.ventasPos ? { v: "importar" as const, l: "Importar Xetux" } : null,
+      ajustes.ventasPos ? { v: "importar" as const, l: "Importar POS" } : null,
       ajustes.ventasPos ? { v: "clasificacion" as const, l: "Clasificación POS" } : null,
       { v: "historial" as const, l: "Historial" },
     ] as ({ v: Tab; l: string } | null)[]
@@ -695,10 +695,10 @@ export function VentasClient() {
         <div className="space-y-4">
           <section className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3">
             <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">
-              Importar cierre de Xetux
+              Importar cierre del POS
             </h2>
             <p className="text-xs text-cacao-soft italic font-serif">
-              Sube el archivo de Xetux tal cual — acepta <strong>Excel</strong>{" "}
+              Sube el archivo del POS tal cual — acepta <strong>Excel</strong>{" "}
               (.xls/.xlsx) o CSV, y lo analiza solo. También puedes pegar el
               contenido. El sistema busca columnas tipo{" "}
               <strong>Producto</strong> y <strong>Cantidad</strong>.
@@ -716,7 +716,7 @@ export function VentasClient() {
               <p className="text-xs text-[#2F4A1F] -mt-1">Fecha tomada del nombre del archivo ({fmtFecha(fechaDeArchivo)}). Ajústala si no corresponde al día de las ventas.</p>
             )}
             <label className="text-sm text-cacao block">
-              Archivo de Xetux (Excel .xls/.xlsx o CSV)
+              Archivo del POS (Excel .xls/.xlsx o CSV)
               <input
                 type="file"
                 accept=".csv,text/csv,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -867,7 +867,7 @@ export function VentasClient() {
                 </div>
                 <p className="text-[11px] text-cacao-mute mt-1.5">
                   Revisa los totales de abajo y elige el que cuadre con tu
-                  reporte. En el &ldquo;detallado por producto&rdquo; de Xetux es{" "}
+                  reporte. En el detallado por producto del POS suele ser{" "}
                   <strong>total de línea</strong>.
                 </p>
                 {!montoEsTotal && (
@@ -876,7 +876,7 @@ export function VentasClient() {
                     <span>
                       Estás interpretando la columna como{" "}
                       <strong>precio por unidad</strong>: el sistema la
-                      multiplicará por la cantidad. En el reporte de Xetux por
+                      multiplicará por la cantidad. En el reporte del POS por
                       producto casi siempre es <strong>total de línea</strong>.
                       Confirma que los totales de abajo cuadren con tu reporte
                       antes de importar.
@@ -1052,7 +1052,7 @@ export function VentasClient() {
           {clasifsOrdenadas.length === 0 ? (
             <p className="font-serif italic text-cacao-soft text-sm">
               Todavía no hay ítems clasificados. Se crean al importar un cierre
-              de Xetux (clasificando los que salen en ámbar).
+              del POS (clasificando los que salen en ámbar).
             </p>
           ) : (
             <ul className="divide-y divide-marfil">
@@ -1370,7 +1370,7 @@ export function VentasClient() {
                               </div>
                               <div className="text-xs text-cacao-soft mt-0.5">
                                 {v.fuente === "xetux_csv"
-                                  ? "Importado Xetux"
+                                  ? "Importado del POS"
                                   : "Manual"}
                               </div>
                             </div>

@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { esCategoriaCortesia, esCategoriaInsumos, usdDeCompra, usdDeEgreso, type TasaDia } from "@/lib/admin/cuadre";
 import { tokenValido, ADMIN_COOKIE } from "@/lib/admin-auth";
 import { createServiceClient } from "@/lib/supabase/admin-service";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,8 +17,16 @@ type FilaEgr = {
   monto: number | null;
   monto_usd: number | null;
   categoria_nombre: string | null;
+  pagada?: boolean | null;
 };
-type FilaVenta = { fecha: string | null; total_usd: number | null; receta_nombre: string | null };
+type FilaVenta = {
+  fecha: string | null;
+  total_usd: number | null;
+  precio_unitario_usd: number | null;
+  cantidad: number | null;
+  receta_nombre: string | null;
+};
+type FilaCompra = { fecha: string | null; precio_total_usd: number | null; flete_usd: number | null };
 type Tasa = { fecha: string; usd_bs: number | null; eur_bs: number | null };
 
 const n = (v: unknown) => (v == null ? 0 : Number(v) || 0);
@@ -24,11 +34,20 @@ const r2 = (x: number) => Math.round(x * 100) / 100;
 
 // GET → histórico mensual en USD.
 // Ingresos: solo public.ventas (Cocina), sin mermas. No se suma admin_ingreso.
-// Egresos: admin_egreso pasado a USD (monto_usd, o el cruce BCV si falta).
+// Egresos: gastos pagados (sin Insumos ni Cortesías, para no contarlos dos
+// veces) más las compras de Cocina con su flete. Misma regla que el Estado.
 export async function GET(req: NextRequest) {
   if (!autorizado(req)) return NextResponse.json({ error: "no autorizado" }, { status: 401 });
-  const sb = createServiceClient();
-  if (!sb) return NextResponse.json({ error: "servidor no configurado" }, { status: 500 });
+  // Ventas, compras y tasas las lee la sesión (el mismo acceso que Semana).
+  // Los egresos de Administración siguen por service role: esa tabla no tiene
+  // política de lectura para el usuario. Si la clave no está, el histórico
+  // igual muestra ventas y compras.
+  const sb = await createSupabaseServerClient();
+  const {
+    data: { user },
+  } = await sb.auth.getUser();
+  if (!user) return NextResponse.json({ error: "no autorizado" }, { status: 401 });
+  const sbEgresos = createServiceClient();
 
   async function paginar<T>(
     leer: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
@@ -46,46 +65,39 @@ export async function GET(req: NextRequest) {
   }
 
   let ventas: FilaVenta[];
-  let egresos: FilaEgr[];
+  let egresos: FilaEgr[] = [];
+  let compras: FilaCompra[];
   let tasas: Tasa[];
   try {
-    [ventas, egresos, tasas] = await Promise.all([
+    [ventas, compras, tasas] = await Promise.all([
       paginar<FilaVenta>((from, to) =>
-        sb.from("ventas").select("fecha, total_usd, receta_nombre").eq("es_merma", false).range(from, to) as PromiseLike<{ data: FilaVenta[] | null; error: { message: string } | null }>,
+        sb.from("ventas").select("fecha, total_usd, precio_unitario_usd, cantidad, receta_nombre").eq("es_merma", false).range(from, to) as PromiseLike<{ data: FilaVenta[] | null; error: { message: string } | null }>,
       ),
-      paginar<FilaEgr>((from, to) =>
-        sb.from("admin_egreso").select("fecha, moneda, monto, monto_usd, categoria_nombre").range(from, to) as PromiseLike<{ data: FilaEgr[] | null; error: { message: string } | null }>,
+      paginar<FilaCompra>((from, to) =>
+        sb.from("compras").select("fecha, precio_total_usd, flete_usd").range(from, to) as PromiseLike<{ data: FilaCompra[] | null; error: { message: string } | null }>,
       ),
       paginar<Tasa>((from, to) =>
         sb.from("tasa_bcv").select("fecha, usd_bs, eur_bs").range(from, to) as PromiseLike<{ data: Tasa[] | null; error: { message: string } | null }>,
       ),
     ]);
+    if (sbEgresos) {
+      egresos = await paginar<FilaEgr>((from, to) =>
+        sbEgresos.from("admin_egreso").select("fecha, moneda, monto, monto_usd, categoria_nombre, pagada").range(from, to) as PromiseLike<{ data: FilaEgr[] | null; error: { message: string } | null }>,
+      );
+    }
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 500 });
   }
 
-  const crossMap = new Map<string, number>();
-  let ultimoCross = 1;
+  const tasasDia: TasaDia[] = tasas.map((t) => ({
+    fecha: t.fecha,
+    usdBs: n(t.usd_bs),
+    eurBs: t.eur_bs == null ? null : n(t.eur_bs),
+  }));
   let tasaUsdBs: number | null = null;
-  const tasasOrd = [...tasas].sort((a, b) => a.fecha.localeCompare(b.fecha));
-  for (const t of tasasOrd) {
-    const usd = n(t.usd_bs);
-    const eur = n(t.eur_bs);
-    if (usd > 0) tasaUsdBs = usd;
-    if (eur > 0 && usd > 0) {
-      crossMap.set(t.fecha, eur / usd);
-      ultimoCross = eur / usd;
-    }
+  for (const t of [...tasasDia].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (t.usdBs > 0) tasaUsdBs = t.usdBs;
   }
-  const crossDe = (fecha: string | null) => (fecha && crossMap.get(fecha)) || ultimoCross;
-
-  const usdEgreso = (e: FilaEgr): number => {
-    if (e.monto_usd != null && Number.isFinite(Number(e.monto_usd))) return n(e.monto_usd);
-    const mon = e.moneda || "USD";
-    if (mon === "USD") return n(e.monto);
-    if (mon === "EUR") return n(e.monto) * crossDe(e.fecha);
-    return 0;
-  };
 
   const meses = new Map<string, { mes: string; ingresos: Record<string, number>; egresos: Record<string, number> }>();
   const celda = (mes: string) => {
@@ -97,7 +109,10 @@ export async function GET(req: NextRequest) {
   for (const v of ventas) {
     if (!v.fecha) continue;
     const mes = v.fecha.slice(0, 7);
-    const usd = n(v.total_usd);
+    const usd =
+      v.total_usd != null && Number.isFinite(Number(v.total_usd))
+        ? n(v.total_usd)
+        : n(v.precio_unitario_usd) * n(v.cantidad);
     const reg = celda(mes);
     reg.ingresos.USD = (reg.ingresos.USD ?? 0) + usd;
     const plato = (v.receta_nombre || "").trim() || "Sin plato";
@@ -105,10 +120,17 @@ export async function GET(req: NextRequest) {
     porPlato.set(key, (porPlato.get(key) ?? 0) + usd);
   }
   for (const e of egresos) {
-    if (!e.fecha) continue;
+    if (!e.fecha || e.pagada === false) continue;
+    if (esCategoriaInsumos(e.categoria_nombre) || esCategoriaCortesia(e.categoria_nombre)) continue;
     const mes = e.fecha.slice(0, 7);
     const reg = celda(mes);
-    reg.egresos.USD = (reg.egresos.USD ?? 0) + usdEgreso(e);
+    reg.egresos.USD = (reg.egresos.USD ?? 0) + usdDeEgreso(e, tasasDia);
+  }
+  for (const c of compras) {
+    if (!c.fecha) continue;
+    const mes = c.fecha.slice(0, 7);
+    const reg = celda(mes);
+    reg.egresos.USD = (reg.egresos.USD ?? 0) + usdDeCompra({ precioTotalUsd: n(c.precio_total_usd), fleteUsd: n(c.flete_usd) });
   }
 
   const lista = [...meses.values()]

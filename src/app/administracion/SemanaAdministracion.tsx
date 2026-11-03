@@ -4,9 +4,9 @@
 // Lee ventas (public.ventas), costo de receta, compras y bajas de inventario.
 // No escribe nada.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { CalendarIcon, ChevronIcon } from "@/components/icons";
+import { CalendarIcon, ChevronIcon, WarningIcon } from "@/components/icons";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { extractError } from "@/lib/data/error";
 import { EstadoCajaPill } from "@/app/cocina/ventas/EstadoCajaPill";
@@ -15,7 +15,7 @@ import { getTasaBcvPorFecha, listComprasRango, listInsumos } from "@/lib/data/co
 import { calcularCostoReceta, listRecetas } from "@/lib/data/recetas";
 import { listPerdidasRango } from "@/lib/data/stock-movimientos";
 import { listVentasRango } from "@/lib/data/ventas";
-import { hoyCaracas, resumenCajaSemana, type ResumenCajaSemana } from "@/lib/cierre-caja";
+import { compararCaja, diasEntre, hoyCaracas, resumenCajaSemana, type EstadoCaja, type ResumenCajaSemana } from "@/lib/cierre-caja";
 import { fmtBs, fmtUsd } from "@/lib/moneda";
 import {
   armarSemana,
@@ -35,10 +35,25 @@ import type { Insumo, Receta, Venta } from "@/lib/types";
 
 type TasaVista = { fecha: string; usdBs: number };
 
+type DiaVista = {
+  fecha: string;
+  ventasUsd: number;
+  estado: EstadoCaja | "futuro";
+};
+
+const DIA_CORTO = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"] as const;
+
+function diaCorto(iso: string): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  const dow = new Date(Date.UTC(y || 0, (m || 1) - 1, d || 1)).getUTCDay();
+  return DIA_CORTO[dow] ?? "";
+}
+
 export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => void }) {
   const [lunes, setLunes] = useState(() => lunesSemanaActual());
   const [resumen, setResumen] = useState<ResumenSemana | null>(null);
   const [caja, setCaja] = useState<ResumenCajaSemana | null>(null);
+  const [dias, setDias] = useState<DiaVista[]>([]);
   const [cajaAviso, setCajaAviso] = useState<string | null>(null);
   const [tasa, setTasa] = useState<TasaVista | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -102,11 +117,12 @@ export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => vo
           const dia = v.fecha.slice(0, 10);
           ventasUsdPorDia[dia] = (ventasUsdPorDia[dia] ?? 0) + montoVenta(v);
         }
+        const hoy = hoyCaracas();
         setCaja(
           resumenCajaSemana({
             desde: esta.desde,
             hasta: esta.hasta,
-            hoy: hoyCaracas(),
+            hoy,
             cierres: cierresRes.rows.map((c) => ({
               fecha: c.fecha,
               tasaUsdBs: c.tasaUsdBs,
@@ -115,12 +131,29 @@ export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => vo
             ventasUsdPorDia,
           }),
         );
+        const porCierre = new Map(cierresRes.rows.map((c) => [c.fecha.slice(0, 10), c]));
+        setDias(
+          diasEntre(esta.desde, esta.hasta).map((fecha) => {
+            const ventasUsd = ventasUsdPorDia[fecha] ?? 0;
+            if (fecha > hoy) return { fecha, ventasUsd, estado: "futuro" as const };
+            const cierre = porCierre.get(fecha);
+            if (!cierre) return { fecha, ventasUsd, estado: "vacio" as const };
+            const comp = compararCaja({
+              lineas: cierre.lineas,
+              tasaUsdBs: cierre.tasaUsdBs,
+              ventasUsd,
+              hayRegistro: true,
+            });
+            return { fecha, ventasUsd, estado: comp.estado };
+          }),
+        );
         setCajaAviso(cierresRes.aviso);
         setTasa(tasaBcv && tasaBcv.usdBs > 0 ? { fecha: tasaBcv.fecha, usdBs: tasaBcv.usdBs } : null);
       } catch (e) {
         if (!cancel) {
           setResumen(null);
           setCaja(null);
+          setDias([]);
           setCajaAviso(null);
           setError(extractError(e, "No se pudo armar la semana"));
         }
@@ -189,7 +222,7 @@ export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => vo
           Cargando la semana…
         </div>
       ) : resumen ? (
-        <VistaSemana resumen={resumen} tasa={tasa} caja={caja} cajaAviso={cajaAviso} onVerCierres={onVerCierres} />
+        <VistaSemana resumen={resumen} tasa={tasa} caja={caja} cajaAviso={cajaAviso} dias={dias} onVerCierres={onVerCierres} />
       ) : null}
     </div>
   );
@@ -228,73 +261,118 @@ function VistaSemana({
   tasa,
   caja,
   cajaAviso,
+  dias,
   onVerCierres,
 }: {
   resumen: ResumenSemana;
   tasa: TasaVista | null;
   caja: ResumenCajaSemana | null;
   cajaAviso: string | null;
+  dias: DiaVista[];
   onVerCierres?: () => void;
 }) {
   const r = resumen;
+  const foodAlto = r.foodCostPct != null && r.foodCostPct > 0.35;
+  const alertas: { texto: string }[] = [];
+  if (caja && (caja.estado === "sobra" || caja.estado === "falta")) {
+    alertas.push({ texto: `La caja de los días con cierre ${caja.estado === "sobra" ? "sobra" : "falta"}: ${caja.titulo}.` });
+  }
+  if (caja && caja.diasSinCierre > 0) {
+    alertas.push({
+      texto:
+        caja.diasSinCierre === 1
+          ? "Hay 1 día de esta semana sin cierre de caja."
+          : `Hay ${caja.diasSinCierre} días de esta semana sin cierre de caja.`,
+    });
+  }
+  if (foodAlto) {
+    alertas.push({
+      texto: `Food cost teórico ${fmtPct(r.foodCostPct)}. Por encima de 35% conviene revisar porciones o precios.`,
+    });
+  }
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Ventas</h2>
-              <p className="mt-1 font-cinzel text-2xl tabular-nums text-cacao sm:text-3xl">{fmtUsd(r.ventasUsd)}</p>
-              <p className="mt-0.5 text-sm tabular-nums text-cacao-soft">
-                {tasa ? fmtBs(r.ventasUsd * tasa.usdBs) : "Sin tasa BCV para mostrar bolívares"}
-              </p>
-            </div>
-            <Variacion ratio={r.variacionVentas} actual={r.ventasUsd} anterior={r.ventasAnteriorUsd} />
-          </div>
-          <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-cacao">
-            <span>
-              {fmtCant(r.platos)} {palabraPlato(r.platos)}
-            </span>
-            <Variacion ratio={r.variacionPlatos} actual={r.platos} anterior={r.platosAnterior} compacto />
-          </p>
-          <p className="mt-1 text-xs text-cacao-mute">
-            Semana anterior: {fmtUsd(r.ventasAnteriorUsd)} · {fmtCant(r.platosAnterior)} {palabraPlato(r.platosAnterior)}
-          </p>
-          {tasa && (
-            <p className="mt-2 text-[11px] text-cacao-mute">
-              BCV del {fmtFecha(tasa.fecha)}: {fmtBs(tasa.usdBs)} por $1
-            </p>
-          )}
-          {!r.hayVentas && <VacioVentas />}
-        </section>
-
-        <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5">
-          <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Utilidad estimada</h2>
-          <p className={`mt-1 font-cinzel text-2xl tabular-nums sm:text-3xl ${tonoMonto(r.utilidadUsd)}`}>
-            {fmtUsd(r.utilidadUsd)}
-          </p>
-          {tasa && (
-            <p className="mt-0.5 text-sm tabular-nums text-cacao-soft">{fmtBs(r.utilidadUsd * tasa.usdBs)}</p>
-          )}
-          <ul className="mt-3 space-y-1 text-sm">
-            <FilaCuenta label="Ventas" val={fmtUsd(r.ventasUsd)} />
-            <FilaCuenta label="− Food cost teórico" val={fmtUsd(r.foodCostUsd)} tenue />
-            <FilaCuenta label="− Pérdidas" val={fmtUsd(r.perdidasUsd)} tenue />
-            <li className="flex items-baseline justify-between gap-3 border-t border-marfil pt-1">
-              <span className="font-medium text-cacao">Utilidad estimada</span>
-              <span className={`tabular-nums font-medium ${tonoMonto(r.utilidadUsd)}`}>{fmtUsd(r.utilidadUsd)}</span>
+      {alertas.length > 0 && (
+        <ul className="space-y-2">
+          {alertas.map((a) => (
+            <li key={a.texto} className="flex items-start gap-2 rounded-2xl bg-[#FBF3E4] px-4 py-3 text-sm text-[#8A5A12] ring-1 ring-[#E6D3A8]">
+              <WarningIcon className="mt-0.5 size-4 shrink-0" />
+              <span>
+                {a.texto}{" "}
+                {onVerCierres ? (
+                  <button type="button" onClick={onVerCierres} className="underline decoration-dotted">
+                    Ver cierres
+                  </button>
+                ) : (
+                  <Link href="/administracion?seccion=cierre" className="underline decoration-dotted">
+                    Ver cierres
+                  </Link>
+                )}
+              </span>
             </li>
-          </ul>
-          <p className="mt-3 text-[11px] leading-relaxed text-cacao-mute">
-            Todavía no incluye gastos fijos (alquiler, nómina, servicios). Esos entran después.
-          </p>
-          {r.platosSinCosto > 0 && (
-            <p className="mt-1 text-[11px] leading-relaxed text-cacao-soft">
-              Faltó el costo de {fmtCant(r.platosSinCosto)} {palabraPlato(r.platosSinCosto)} ({fmtUsd(r.ventasSinCostoUsd)} de ventas). Esos no restan, así que la utilidad puede verse más alta.
-            </p>
-          )}
-        </section>
+          ))}
+        </ul>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Tarjeta
+          titulo="Ventas"
+          valor={fmtUsd(r.ventasUsd)}
+          sub={tasa ? fmtBs(r.ventasUsd * tasa.usdBs) : "Sin tasa BCV"}
+          extra={
+            <div className="flex flex-wrap items-center gap-2 text-xs text-cacao">
+              <span>
+                {fmtCant(r.platos)} {palabraPlato(r.platos)}
+              </span>
+              <Variacion ratio={r.variacionVentas} actual={r.ventasUsd} anterior={r.ventasAnteriorUsd} compacto />
+            </div>
+          }
+        />
+        <Tarjeta
+          titulo="Food cost"
+          valor={fmtPct(r.foodCostPct)}
+          sub={fmtUsd(r.foodCostUsd)}
+          tono={foodAlto ? "alerta" : r.foodCostPct != null && r.foodCostPct > 0 ? "bien" : undefined}
+          extra={
+            <span className="text-[11px] text-cacao-mute">{foodAlto ? "Alto" : r.hayVentas ? "En rango" : "Sin ventas"}</span>
+          }
+        />
+        <Tarjeta titulo="Compras" valor={fmtUsd(r.comprasUsd)} sub={r.fleteUsd > 0.005 ? `incluye flete ${fmtUsd(r.fleteUsd)}` : "insumos de la semana"} />
+        <Tarjeta
+          titulo="Caja"
+          valor={caja?.cobradoUsd != null ? fmtUsd(caja.cobradoUsd) : "—"}
+          sub={caja ? caja.titulo : "Sin datos"}
+          extra={caja && caja.estado !== "vacio" ? <EstadoCajaPill estado={caja.estado} titulo={caja.titulo} /> : null}
+        />
       </div>
+
+      <GraficoDias dias={dias} />
+
+      {!r.hayVentas && <VacioVentas />}
+
+      <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5">
+        <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Utilidad de la comida</h2>
+        <p className={`mt-1 font-cinzel text-2xl tabular-nums sm:text-3xl ${tonoMonto(r.utilidadUsd)}`}>{fmtUsd(r.utilidadUsd)}</p>
+        {tasa && <p className="mt-0.5 text-sm tabular-nums text-cacao-soft">{fmtBs(r.utilidadUsd * tasa.usdBs)}</p>}
+        <ul className="mt-3 max-w-md space-y-1 text-sm">
+          <FilaCuenta label="Ventas" val={fmtUsd(r.ventasUsd)} />
+          <FilaCuenta label="− Food cost teórico" val={fmtUsd(r.foodCostUsd)} tenue />
+          <FilaCuenta label="− Pérdidas" val={fmtUsd(r.perdidasUsd)} tenue />
+          <li className="flex items-baseline justify-between gap-3 border-t border-marfil pt-1">
+            <span className="font-medium text-cacao">Utilidad de la comida</span>
+            <span className={`tabular-nums font-medium ${tonoMonto(r.utilidadUsd)}`}>{fmtUsd(r.utilidadUsd)}</span>
+          </li>
+        </ul>
+        <p className="mt-3 text-[11px] leading-relaxed text-cacao-mute">
+          Es el margen de lo vendido (receta y pérdidas). El balance de caja, con compras y gastos, está en Estado de cuenta. Semana anterior: {fmtUsd(r.ventasAnteriorUsd)}.
+          {tasa ? ` BCV del ${fmtFecha(tasa.fecha)}: ${fmtBs(tasa.usdBs)} por $1.` : ""}
+        </p>
+        {r.platosSinCosto > 0 && (
+          <p className="mt-1 text-[11px] leading-relaxed text-cacao-soft">
+            Faltó el costo de {fmtCant(r.platosSinCosto)} {palabraPlato(r.platosSinCosto)} ({fmtUsd(r.ventasSinCostoUsd)} de ventas). Esos no restan, así que la utilidad puede verse más alta.
+          </p>
+        )}
+      </section>
 
       <CajaDeLaSemana caja={caja} aviso={cajaAviso} onVerCierres={onVerCierres} />
 
@@ -399,6 +477,70 @@ function VistaSemana({
   );
 }
 
+function Tarjeta({
+  titulo,
+  valor,
+  sub,
+  extra,
+  tono,
+}: {
+  titulo: string;
+  valor: string;
+  sub?: string;
+  extra?: ReactNode;
+  tono?: "bien" | "alerta";
+}) {
+  const color = tono === "bien" ? "text-[#2F4A1F]" : tono === "alerta" ? "text-[#8A5A12]" : "text-cacao";
+  return (
+    <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil">
+      <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">{titulo}</h2>
+      <p className={`mt-1 font-cinzel text-xl tabular-nums sm:text-2xl ${color}`}>{valor}</p>
+      {sub && <p className="mt-0.5 text-xs tabular-nums text-cacao-soft">{sub}</p>}
+      {extra && <div className="mt-2">{extra}</div>}
+    </section>
+  );
+}
+
+function puntoEstado(estado: DiaVista["estado"]): string {
+  if (estado === "cuadra") return "bg-[#2F4A1F]";
+  if (estado === "sobra") return "bg-[#C4892A]";
+  if (estado === "falta") return "bg-[#7A2419]";
+  if (estado === "futuro") return "bg-transparent";
+  return "bg-cacao-mute";
+}
+
+function GraficoDias({ dias }: { dias: DiaVista[] }) {
+  const max = Math.max(...dias.map((d) => d.ventasUsd), 1);
+  if (dias.length === 0) return null;
+  return (
+    <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5">
+      <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Ventas por día</h2>
+      <div className="mt-3 flex items-end gap-1.5 sm:gap-3">
+        {dias.map((d) => {
+          const alto = d.ventasUsd > 0 ? Math.max((d.ventasUsd / max) * 100, 8) : 0;
+          return (
+            <div key={d.fecha} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+              <span className="h-4 text-[10px] tabular-nums text-cacao-mute">{d.ventasUsd > 0 ? Math.round(d.ventasUsd) : ""}</span>
+              <div className="flex h-28 w-full items-end">
+                <div
+                  className="w-full rounded-t bg-terracotta"
+                  style={{ height: `${alto}%`, opacity: d.estado === "futuro" ? 0.25 : 1 }}
+                  title={`${d.fecha}: ${fmtUsd(d.ventasUsd)}`}
+                />
+              </div>
+              <span className="text-[10px] uppercase text-cacao-mute">{diaCorto(d.fecha)}</span>
+              <span className={`size-1.5 rounded-full ${puntoEstado(d.estado)}`} aria-hidden />
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[11px] leading-relaxed text-cacao-mute">
+        Lunes a domingo. El punto bajo el día: verde cuadra, ámbar sobra, rojo falta, gris sin cierre.
+      </p>
+    </section>
+  );
+}
+
 function CajaDeLaSemana({
   caja,
   aviso,
@@ -489,7 +631,8 @@ function Variacion({
   compacto?: boolean;
 }) {
   if (ratio == null) {
-    const texto = actual <= 0.0005 && anterior <= 0.0005 ? "sin cambio" : "sin base";
+    if (compacto) return null;
+    const texto = actual <= 0.0005 && anterior <= 0.0005 ? "sin cambio" : "sin semana previa";
     return <span className="text-xs text-cacao-mute">{texto}</span>;
   }
   const sube = ratio > 0;

@@ -15,7 +15,9 @@
     "test:stock": "node --no-warnings scripts/check-stock-liviano.mjs",
     "test:semana": "node --no-warnings scripts/check-semana.mjs",
     "test:cierre": "node --no-warnings scripts/check-cierre.mjs",
-    "seed:cocina-demo": "node scripts/seed-cocina-demo.mjs"
+    "seed:cocina-demo": "node scripts/seed-cocina-demo.mjs",
+    "seed:prueba-semana": "node --env-file=.env.local scripts/seed-prueba-semana.mjs",
+    "seed:prueba-semana:limpiar": "node --env-file=.env.local scripts/limpiar-prueba-semana.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.69.0",

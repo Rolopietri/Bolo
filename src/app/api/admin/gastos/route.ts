@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { usdDeEgreso, type TasaDia } from "@/lib/admin/cuadre";
 import { tokenValido, ADMIN_COOKIE } from "@/lib/admin-auth";
 import { createServiceClient } from "@/lib/supabase/admin-service";
 import { getTasaEurUsd } from "@/lib/admin/tasa";
@@ -53,12 +54,19 @@ export async function GET(req: NextRequest) {
     if (eur > 0 && usd > 0) { const c = eur / usd; crossMap.set(t.fecha, c); ultimoCross = c; }
   }
   const crossDe = (fecha: string | null) => (fecha && crossMap.get(fecha)) || ultimoCross || tasa;
+  const tasasDia: TasaDia[] = ((tbData ?? []) as { fecha: string; usd_bs: number | null; eur_bs: number | null }[]).map((t) => ({
+    fecha: t.fecha,
+    usdBs: n(t.usd_bs),
+    eurBs: t.eur_bs == null ? null : n(t.eur_bs),
+  }));
   // Egreso a €: los EUR tal cual; los demás con su monto_usd ÷ cruce BCV del día.
+  // Se conserva para el desglose viejo. La utilidad usa los dólares de abajo.
   const eurDe = (e: EgRow) => {
-    if ((e.moneda ?? "EUR") === "EUR") return n(e.monto);
+    if ((e.moneda ?? "USD") === "EUR") return n(e.monto);
     const c = crossDe(e.fecha);
     return c > 0 ? n(e.monto_usd) / c : n(e.monto_usd);
   };
+  const usdDe = (e: EgRow) => usdDeEgreso(e, tasasDia);
   const esCortesia = (e: EgRow) => norm(e.categoria_nombre).includes("cortesia");
   const esInsumo = (e: EgRow) => norm(e.categoria_nombre) === "insumos";
   const esFijo = (e: EgRow) => norm(e.clasificacion) === "fija" || norm(e.clasificacion) === "fijo";
@@ -83,12 +91,11 @@ export async function GET(req: NextRequest) {
   const items = rows.filter((e) => !esCortesia(e) && !esInsumo(e)).map((e) => ({
     id: e.id, fecha: e.fecha, concepto: e.concepto ?? null, proveedor: e.proveedor_nombre ?? null,
     categoria: e.categoria_nombre || "Otros", categoria_id: e.categoria_id ?? null,
-    usd: r2((e.moneda ?? "EUR") === "EUR" ? n(e.monto) * crossDe(e.fecha) : n(e.monto_usd)),
-    moneda: e.moneda ?? "EUR", monto: n(e.monto),
+    usd: r2(usdDe(e)),
+    moneda: e.moneda ?? "USD", monto: n(e.monto),
   })).sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? ""));
   let fijos = 0, variables = 0, insumosEgreso = 0, cortesias = 0;
   let fijosUsd = 0, variablesUsd = 0, insumosEgresoUsd = 0, cortesiasUsd = 0;
-  const usdDe = (e: EgRow) => ((e.moneda ?? "EUR") === "EUR" ? n(e.monto) * crossDe(e.fecha) : n(e.monto_usd));
   const porCat = new Map<string, { categoria: string; clasificacion: string; eur: number; usd: number }>();
   for (const e of rows) {
     const eur = eurDe(e);
