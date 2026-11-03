@@ -9,10 +9,13 @@ import Link from "next/link";
 import { CalendarIcon, ChevronIcon } from "@/components/icons";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { extractError } from "@/lib/data/error";
+import { EstadoCajaPill } from "@/app/cocina/ventas/EstadoCajaPill";
+import { esFaltaTablaCierre, listCierresRango } from "@/lib/data/cierre-caja";
 import { getTasaBcvPorFecha, listComprasRango, listInsumos } from "@/lib/data/cocina";
 import { calcularCostoReceta, listRecetas } from "@/lib/data/recetas";
 import { listPerdidasRango } from "@/lib/data/stock-movimientos";
 import { listVentasRango } from "@/lib/data/ventas";
+import { hoyCaracas, resumenCajaSemana, type ResumenCajaSemana } from "@/lib/cierre-caja";
 import { fmtBs, fmtUsd } from "@/lib/moneda";
 import {
   armarSemana,
@@ -32,9 +35,11 @@ import type { Insumo, Receta, Venta } from "@/lib/types";
 
 type TasaVista = { fecha: string; usdBs: number };
 
-export function SemanaAdministracion() {
+export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => void }) {
   const [lunes, setLunes] = useState(() => lunesSemanaActual());
   const [resumen, setResumen] = useState<ResumenSemana | null>(null);
+  const [caja, setCaja] = useState<ResumenCajaSemana | null>(null);
+  const [cajaAviso, setCajaAviso] = useState<string | null>(null);
   const [tasa, setTasa] = useState<TasaVista | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,22 +48,35 @@ export function SemanaAdministracion() {
   const semana = semanaDesdeLunes(lunes);
   const tope = lunesSemanaActual();
   const esActual = lunes >= tope;
+  const [lunesVisto, setLunesVisto] = useState(lunes);
+  if (lunes !== lunesVisto) {
+    setLunesVisto(lunes);
+    setCargando(true);
+    setError(null);
+  }
 
   useEffect(() => {
     const esta = semanaDesdeLunes(lunes);
     const previa = semanaDesdeLunes(moverSemana(lunes, -1));
     let cancel = false;
-    setCargando(true);
-    setError(null);
     (async () => {
       try {
-        const [ventas, compras, perdidas, recetas, insumos, tasaBcv] = await Promise.all([
+        const [ventas, compras, perdidas, recetas, insumos, tasaBcv, cierresRes] = await Promise.all([
           listVentasRango(previa.desde, esta.hasta),
           listComprasRango(esta.desde, esta.hasta),
           listPerdidasRango(esta.desde, esta.hasta),
           listRecetas(),
           listInsumos(),
           getTasaBcvPorFecha(esta.hasta),
+          listCierresRango(esta.desde, esta.hasta).then(
+            (rows) => ({ rows, aviso: null as string | null }),
+            (e: unknown) => ({
+              rows: [],
+              aviso: esFaltaTablaCierre(e)
+                ? "El cierre de caja todavía no está en la base. Hay que aplicar la migración cierre_caja."
+                : "No se pudo leer la caja. El resto de la semana sí está al día.",
+            }),
+          ),
         ]);
         if (cancel) return;
         const catalogo = catalogoCostos(recetas, insumos);
@@ -79,10 +97,31 @@ export function SemanaAdministracion() {
             perdidasSinPrecio: perd.sinPrecio,
           }),
         );
+        const ventasUsdPorDia: Record<string, number> = {};
+        for (const v of deEsta) {
+          const dia = v.fecha.slice(0, 10);
+          ventasUsdPorDia[dia] = (ventasUsdPorDia[dia] ?? 0) + montoVenta(v);
+        }
+        setCaja(
+          resumenCajaSemana({
+            desde: esta.desde,
+            hasta: esta.hasta,
+            hoy: hoyCaracas(),
+            cierres: cierresRes.rows.map((c) => ({
+              fecha: c.fecha,
+              tasaUsdBs: c.tasaUsdBs,
+              lineas: c.lineas,
+            })),
+            ventasUsdPorDia,
+          }),
+        );
+        setCajaAviso(cierresRes.aviso);
         setTasa(tasaBcv && tasaBcv.usdBs > 0 ? { fecha: tasaBcv.fecha, usdBs: tasaBcv.usdBs } : null);
       } catch (e) {
         if (!cancel) {
           setResumen(null);
+          setCaja(null);
+          setCajaAviso(null);
           setError(extractError(e, "No se pudo armar la semana"));
         }
       } finally {
@@ -136,7 +175,11 @@ export function SemanaAdministracion() {
         <ErrorCarga
           que="la semana"
           detalle={error}
-          onReintentar={() => setIntento((n) => n + 1)}
+          onReintentar={() => {
+            setCargando(true);
+            setError(null);
+            setIntento((n) => n + 1);
+          }}
           reintentando={cargando}
         />
       )}
@@ -146,7 +189,7 @@ export function SemanaAdministracion() {
           Cargando la semana…
         </div>
       ) : resumen ? (
-        <VistaSemana resumen={resumen} tasa={tasa} />
+        <VistaSemana resumen={resumen} tasa={tasa} caja={caja} cajaAviso={cajaAviso} onVerCierres={onVerCierres} />
       ) : null}
     </div>
   );
@@ -180,7 +223,19 @@ function aLinea(v: Venta, catalogo: CostoCatalogo): LineaSemana {
   };
 }
 
-function VistaSemana({ resumen, tasa }: { resumen: ResumenSemana; tasa: TasaVista | null }) {
+function VistaSemana({
+  resumen,
+  tasa,
+  caja,
+  cajaAviso,
+  onVerCierres,
+}: {
+  resumen: ResumenSemana;
+  tasa: TasaVista | null;
+  caja: ResumenCajaSemana | null;
+  cajaAviso: string | null;
+  onVerCierres?: () => void;
+}) {
   const r = resumen;
   return (
     <div className="space-y-4">
@@ -240,6 +295,8 @@ function VistaSemana({ resumen, tasa }: { resumen: ResumenSemana; tasa: TasaVist
           )}
         </section>
       </div>
+
+      <CajaDeLaSemana caja={caja} aviso={cajaAviso} onVerCierres={onVerCierres} />
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5">
         <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Platos más vendidos</h2>
@@ -339,6 +396,67 @@ function VistaSemana({ resumen, tasa }: { resumen: ResumenSemana; tasa: TasaVist
         )}
       </section>
     </div>
+  );
+}
+
+function CajaDeLaSemana({
+  caja,
+  aviso,
+  onVerCierres,
+}: {
+  caja: ResumenCajaSemana | null;
+  aviso: string | null;
+  onVerCierres?: () => void;
+}) {
+  const vacia = !caja || caja.estado === "vacio";
+  return (
+    <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Caja de la semana</h2>
+        {caja && !vacia && <EstadoCajaPill estado={caja.estado} titulo={caja.titulo} />}
+      </div>
+      {aviso ? (
+        <p className="mt-3 text-sm text-cacao-soft">{aviso}</p>
+      ) : vacia ? (
+        <div className="mt-3">
+          <p className="font-serif italic text-cacao-soft">Esta semana no hay cierres de caja.</p>
+          <p className="mt-1 text-sm text-cacao-soft">
+            Cuando anotes el efectivo, el pago móvil y el punto, aquí ves lo cobrado y si cuadra con las ventas.
+          </p>
+        </div>
+      ) : caja ? (
+        <>
+          {caja.cobradoUsd != null && (
+            <p className="mt-1 font-cinzel text-2xl tabular-nums text-cacao">{fmtUsd(caja.cobradoUsd)}</p>
+          )}
+          <p className="mt-1 text-sm leading-relaxed text-cacao-soft">{caja.detalle}</p>
+          {caja.porMetodo.length > 0 && (
+            <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+              {caja.porMetodo.map((m) => (
+                <li key={`${m.metodo}-${m.moneda}`} className="text-sm text-cacao">
+                  <span className="text-cacao-mute">{m.label}. </span>
+                  <span className="tabular-nums">{m.moneda === "USD" ? fmtUsd(m.monto) : fmtBs(m.monto)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+        {onVerCierres ? (
+          <button type="button" onClick={onVerCierres} className="text-sm text-cacao underline decoration-dotted">
+            Ver los cierres
+          </button>
+        ) : (
+          <Link href="/administracion?seccion=cierre" className="text-sm text-cacao underline decoration-dotted">
+            Ver los cierres
+          </Link>
+        )}
+        <Link href="/cocina/ventas/cierre" className="text-sm text-cacao underline decoration-dotted">
+          Anotar el de hoy
+        </Link>
+      </div>
+    </section>
   );
 }
 

@@ -191,7 +191,10 @@ export function RegistroPlatos({ recetas, fecha, onFecha, onGuardado }: Props) {
       </div>
 
       <p className="text-[12px] text-cacao-mute">
-        El cierre de caja (cuánto entró en efectivo, pago móvil o punto, en dólares o bolívares) se anota en un paso siguiente. Ejemplo: Efectivo $120, Pago Móvil Bs 4.500, Punto Bs 3.200.
+        El cierre de caja va justo debajo: efectivo, pago móvil, punto y el resto.{" "}
+        <a href="#cierre-caja" className="text-cacao underline decoration-dotted">
+          Ir al cierre
+        </a>
       </p>
     </section>
   );

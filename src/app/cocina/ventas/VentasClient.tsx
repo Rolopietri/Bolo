@@ -14,6 +14,7 @@ import { getTasaBcvActual, listProveedores, listInsumos } from "@/lib/data/cocin
 import { leerAjustesVentas, type AjustesVentas } from "@/lib/data/ajustes-ventas";
 import { fmtUsd, fmtUsdBs } from "@/lib/moneda";
 import { ComoRegistras } from "./ComoRegistras";
+import { CierreCajaForm } from "./CierreCajaForm";
 import { RegistroPlatos } from "./RegistroPlatos";
 import {
   listVentasDiasCompletos,
@@ -124,6 +125,7 @@ export function VentasClient() {
 
   // Registro manual por plato
   const [mFecha, setMFecha] = useState(todayISO());
+  const [revVentas, setRevVentas] = useState(0);
 
   // Importar
   const [iFecha, setIFecha] = useState(todayISO());
@@ -666,12 +668,26 @@ export function VentasClient() {
       </div>
 
       {tabVisible === "registrar" && ajustes.ventasManual && (
-        <RegistroPlatos
-          recetas={recetasVendibles}
-          fecha={mFecha}
-          onFecha={setMFecha}
-          onGuardado={() => { void recargarHistorial(); }}
-        />
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <a
+              href="#cierre-caja"
+              className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao"
+            >
+              Ir al cierre de caja
+            </a>
+          </div>
+          <RegistroPlatos
+            recetas={recetasVendibles}
+            fecha={mFecha}
+            onFecha={setMFecha}
+            onGuardado={() => {
+              void recargarHistorial();
+              setRevVentas((n) => n + 1);
+            }}
+          />
+          <CierreCajaForm fecha={mFecha} onFecha={setMFecha} mostrarFecha={false} revision={revVentas} />
+        </div>
       )}
 
       {/* TAB: Importar */}
