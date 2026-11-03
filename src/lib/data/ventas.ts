@@ -14,6 +14,7 @@ import type {
 } from "@/lib/types";
 import { convertirParaCosto } from "@/lib/units";
 import { stockLibre } from "@/lib/types";
+import { montoVenta } from "@/lib/semana";
 
 type Row = {
   id: string;
@@ -215,6 +216,50 @@ export async function listVentasRango(
     if (rows.length < PAGE) break;
   }
   return filas.map(rowToVenta);
+}
+
+/**
+ * USD de ventas (sin mermas) por día, entre dos fechas inclusive.
+ * Sirve para comparar el cierre de caja sin traer el detalle de cada plato.
+ */
+export async function totalesVentasPorDia(
+  desde: string,
+  hasta: string,
+): Promise<Record<string, number>> {
+  const sb = createSupabaseBrowserClient();
+  const out: Record<string, number> = {};
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("ventas")
+      .select("fecha, total_usd, precio_unitario_usd, cantidad")
+      .eq("es_merma", false)
+      .gte("fecha", desde)
+      .lte("fecha", hasta)
+      .order("fecha", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows =
+      (data as {
+        fecha: string | null;
+        total_usd: number | string | null;
+        precio_unitario_usd: number | string | null;
+        cantidad: number | string | null;
+      }[]) ?? [];
+    for (const r of rows) {
+      if (!r.fecha) continue;
+      const dia = String(r.fecha).slice(0, 10);
+      const total = r.total_usd === null || r.total_usd === undefined ? null : Number(r.total_usd);
+      const precio =
+        r.precio_unitario_usd === null || r.precio_unitario_usd === undefined
+          ? null
+          : Number(r.precio_unitario_usd);
+      const cantidad = r.cantidad === null || r.cantidad === undefined ? 0 : Number(r.cantidad);
+      out[dia] = (out[dia] ?? 0) + montoVenta({ totalUsd: total, precioUnitarioUsd: precio, cantidad });
+    }
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
 /** Solo mermas de producción (pérdidas internas de algo pre-producido). */

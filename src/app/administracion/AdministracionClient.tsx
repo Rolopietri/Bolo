@@ -12,12 +12,14 @@ import { fmtUsdBs } from "@/lib/moneda";
 import { leerAjustesVentas } from "@/lib/data/ajustes-ventas";
 import type { TasaBcv, Compra, Proveedor as ProveedorCocina, Insumo } from "@/lib/types";
 import { AnalisisAdministrativo } from "./AnalisisAdministrativo";
+import { CierreCajaAdmin } from "./CierreCajaAdmin";
 import { SemanaAdministracion } from "./SemanaAdministracion";
 import { ChevronIcon, CalendarIcon } from "@/components/icons";
 
-type Seccion = "semana" | "proveedores" | "solicitudes" | "ingresos" | "analisis-ventas" | "cobrar" | "egresos" | "estado" | "historico";
+type Seccion = "semana" | "cierre" | "proveedores" | "solicitudes" | "ingresos" | "analisis-ventas" | "cobrar" | "egresos" | "estado" | "historico";
 const SECCIONES: { id: Seccion; label: string; grupo?: string }[] = [
   { id: "semana", label: "Semana" },
+  { id: "cierre", label: "Cierre de caja" },
   { id: "estado", label: "Estado de Cuenta" },
   { id: "ingresos", label: "Ingresos" },
   { id: "egresos", label: "Egresos" },
@@ -28,15 +30,36 @@ const SECCIONES: { id: Seccion; label: string; grupo?: string }[] = [
   { id: "solicitudes", label: "Generar solicitud de pagos", grupo: "Proveedores" },
 ];
 
-export function AdministracionClient() {
-  // Sin contraseña propia: Administración se abre directo. Ya estás dentro de
-  // bolo con tu sesión, y el login normal (middleware) protege /api/admin/*.
-  return <Panel />;
+function seccionDesdeQuery(valor: string | null): Seccion {
+  const validas: Seccion[] = [
+    "semana",
+    "cierre",
+    "proveedores",
+    "solicitudes",
+    "ingresos",
+    "analisis-ventas",
+    "cobrar",
+    "egresos",
+    "estado",
+    "historico",
+  ];
+  return valor && (validas as string[]).includes(valor) ? (valor as Seccion) : "semana";
 }
 
-function Panel() {
-  const [seccion, setSeccion] = useState<Seccion>("semana");
+export function AdministracionClient({ seccionInicial = null }: { seccionInicial?: string | null }) {
+  // Sin contraseña propia: Administración se abre directo. Ya estás dentro de
+  // bolo con tu sesión, y el login normal (middleware) protege /api/admin/*.
+  return <Panel inicial={seccionDesdeQuery(seccionInicial)} />;
+}
+
+function Panel({ inicial }: { inicial: Seccion }) {
+  const [seccion, setSeccion] = useState<Seccion>(inicial);
+  const [inicialVista, setInicialVista] = useState(inicial);
   const [menuAbierto, setMenuAbierto] = useState(false);
+  if (inicial !== inicialVista) {
+    setInicialVista(inicial);
+    setSeccion(inicial);
+  }
   const menu = SECCIONES.filter((s) => s.id !== "cobrar" && s.id !== "solicitudes");
   const actual = SECCIONES.find((s) => s.id === seccion) ?? menu[0];
 
@@ -74,7 +97,10 @@ function Panel() {
                       )}
                       <button
                         type="button"
-                        onClick={() => setSeccion(s.id)}
+                        onClick={() => {
+                          setSeccion(s.id);
+                          setMenuAbierto(false);
+                        }}
                         className={`block w-full text-left rounded-lg px-2 py-2 text-sm ${seccion === s.id ? "bg-cacao text-white" : "text-cacao hover:bg-marfil-soft"} ${s.grupo ? "pl-4" : ""}`}
                       >
                         {s.label}
@@ -90,7 +116,14 @@ function Panel() {
       </div>
 
       {seccion === "semana" ? (
-        <SemanaAdministracion />
+        <SemanaAdministracion
+          onVerCierres={() => {
+            setSeccion("cierre");
+            setMenuAbierto(false);
+          }}
+        />
+      ) : seccion === "cierre" ? (
+        <CierreCajaAdmin />
       ) : seccion === "proveedores" ? (
         <SeccionProveedores />
       ) : seccion === "solicitudes" ? (

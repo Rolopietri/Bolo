@@ -16,8 +16,8 @@ export default function VentasPage() {
               Ventas del día
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft">
-              Anota los platos del día o sube el cierre del POS. Las dos formas
-              guardan en el mismo libro y el stock se descuenta solo.
+              Anota los platos del día y el cierre de caja, o sube el cierre del
+              POS. Las ventas quedan en el mismo libro y el stock se descuenta solo.
             </p>
           </div>
           <Link
