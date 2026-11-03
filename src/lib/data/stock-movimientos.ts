@@ -7,10 +7,11 @@
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { hoyISO } from "@/lib/ui";
-import type {
-  StockMovimiento,
-  TipoMovimientoStock,
-  CapaStock,
+import {
+  TIPOS_PERDIDA,
+  type StockMovimiento,
+  type TipoMovimientoStock,
+  type CapaStock,
 } from "@/lib/types";
 
 type Row = {
@@ -55,6 +56,35 @@ export async function listMovimientos(
   const { data, error } = await q;
   if (error) throw error;
   return (data as Row[]).map(rowToMov);
+}
+
+/** Bajas manuales de inventario entre dos fechas inclusive (YYYY-MM-DD).
+ *  Solo los tipos de pérdida (no el conteo ni la compra). Pagina el tope de 1000. */
+export async function listPerdidasRango(desde: string, hasta: string): Promise<StockMovimiento[]> {
+  const sb = createSupabaseBrowserClient();
+  const tipos = TIPOS_PERDIDA.map((t) => t.value);
+  const PAGE = 1000;
+  const out: StockMovimiento[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await sb
+      .from("stock_movimientos")
+      .select("*")
+      .in("tipo", tipos)
+      .gte("fecha", desde)
+      .lte("fecha", hasta)
+      .order("fecha", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const rows = (data as Row[]) ?? [];
+    for (const r of rows) {
+      const mov = rowToMov(r);
+      mov.fecha = String(r.fecha ?? "").slice(0, 10);
+      out.push(mov);
+    }
+    if (rows.length < PAGE) break;
+  }
+  return out;
 }
 
 export type PerdidaInput = {

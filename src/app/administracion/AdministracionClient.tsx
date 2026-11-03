@@ -12,10 +12,12 @@ import { fmtUsdBs } from "@/lib/moneda";
 import { leerAjustesVentas } from "@/lib/data/ajustes-ventas";
 import type { TasaBcv, Compra, Proveedor as ProveedorCocina, Insumo } from "@/lib/types";
 import { AnalisisAdministrativo } from "./AnalisisAdministrativo";
+import { SemanaAdministracion } from "./SemanaAdministracion";
 import { ChevronIcon, CalendarIcon } from "@/components/icons";
 
-type Seccion = "proveedores" | "solicitudes" | "ingresos" | "analisis-ventas" | "cobrar" | "egresos" | "estado" | "historico";
+type Seccion = "semana" | "proveedores" | "solicitudes" | "ingresos" | "analisis-ventas" | "cobrar" | "egresos" | "estado" | "historico";
 const SECCIONES: { id: Seccion; label: string; grupo?: string }[] = [
+  { id: "semana", label: "Semana" },
   { id: "estado", label: "Estado de Cuenta" },
   { id: "ingresos", label: "Ingresos" },
   { id: "egresos", label: "Egresos" },
@@ -33,7 +35,7 @@ export function AdministracionClient() {
 }
 
 function Panel() {
-  const [seccion, setSeccion] = useState<Seccion>("estado");
+  const [seccion, setSeccion] = useState<Seccion>("semana");
   const [menuAbierto, setMenuAbierto] = useState(false);
   const menu = SECCIONES.filter((s) => s.id !== "cobrar" && s.id !== "solicitudes");
   const actual = SECCIONES.find((s) => s.id === seccion) ?? menu[0];
@@ -87,7 +89,9 @@ function Panel() {
         </div>
       </div>
 
-      {seccion === "proveedores" ? (
+      {seccion === "semana" ? (
+        <SemanaAdministracion />
+      ) : seccion === "proveedores" ? (
         <SeccionProveedores />
       ) : seccion === "solicitudes" ? (
         <SeccionSolicitudes />
