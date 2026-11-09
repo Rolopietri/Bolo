@@ -719,7 +719,7 @@ export function AnalisisCompras() {
                 const items = (gastos?.items ?? []).filter((it) => it.categoria === egDrill.label);
                 return (
                   <>
-                    <p className="text-[11px] text-cacao-mute mb-2">{items.length} egreso(s). Cambia la categoría en cualquier fila para reclasificarlo (se guarda al instante).</p>
+                    <p className="text-[11px] text-cacao-mute mb-2">{items.length} movimiento(s). Un gasto fijo se edita en Gastos fijos. Un egreso se reclasifica aquí y se guarda al instante.</p>
                     <div className="rounded-xl ring-1 ring-marfil overflow-hidden max-h-[26rem] overflow-y-auto">
                       <table className="w-full text-xs">
                         <thead className="sticky top-0 bg-white"><tr className="text-cacao-mute uppercase tracking-widest text-left"><th className="py-1.5 px-2 font-normal">Fecha</th><th className="py-1.5 px-2 font-normal">Concepto / Proveedor</th><th className="py-1.5 px-2 font-normal text-right">Monto</th><th className="py-1.5 px-2 font-normal">Categoría</th></tr></thead>
@@ -731,10 +731,14 @@ export function AnalisisCompras() {
                               <td className="py-1 px-2 text-cacao min-w-0">{it.proveedor || it.concepto || "—"}</td>
                               <td className="py-1 px-2 text-right tabular-nums text-cacao">{fUSD(it.usd)}</td>
                               <td className="py-1 px-2">
-                                <select defaultValue={it.categoria_id ?? ""} disabled={reasignando === it.id || catsEg.length === 0} onChange={(e) => reasignarEgreso(it.id, e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-xs bg-white disabled:opacity-50">
-                                  <option value="" disabled>{reasignando === it.id ? "Guardando…" : "Elegir…"}</option>
-                                  {catsEg.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                                </select>
+                                {it.id.startsWith("fijo:") ? (
+                                  <span className="text-cacao-soft">Gasto fijo</span>
+                                ) : (
+                                  <select defaultValue={it.categoria_id ?? ""} disabled={reasignando === it.id || catsEg.length === 0} onChange={(e) => reasignarEgreso(it.id, e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-xs bg-white disabled:opacity-50">
+                                    <option value="" disabled>{reasignando === it.id ? "Guardando…" : "Elegir…"}</option>
+                                    {catsEg.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                                  </select>
+                                )}
                               </td>
                             </tr>
                           ))}

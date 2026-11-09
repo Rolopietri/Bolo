@@ -15,6 +15,7 @@
  *   node --env-file=.env.local scripts/seed-prueba-semana.mjs --dry-run
  */
 import { pathToFileURL } from "node:url";
+import { GASTOS_PRUEBA } from "../src/lib/gastos-fijos.ts";
 import { limpiar } from "./limpiar-prueba-semana.mjs";
 
 const MARCA = "seed-prueba-semana";
@@ -154,6 +155,10 @@ async function main() {
   console.log(`Ventas 7 días: $${ventasUsd.toFixed(2)}`);
   console.log(`Compras: harina $${precioHarina.toFixed(2)} + carne $${precioCarne.toFixed(2)} + flete $${FLETE_CARNE_USD.toFixed(2)}`);
   console.log(`Pérdida cebolla: $${valorPerdida.toFixed(2)} · Gas: $${EGRESO_GAS_USD.toFixed(2)}`);
+  const fijosMes = GASTOS_PRUEBA.reduce((s, g) => s + g.monto, 0);
+  console.log("Gastos fijos (cada mes, desde el 1 oct):");
+  for (const g of GASTOS_PRUEBA) console.log(`  ${g.titulo}: $${g.monto.toFixed(2)}`);
+  console.log(`  Mes completo: $${fijosMes.toFixed(2)} · semana 2–8 nov (7/30): $${(fijosMes * 7 / 30).toFixed(2)}`);
 
   if (dry) {
     console.log("Dry-run: no se escribió nada.");
@@ -285,6 +290,25 @@ async function main() {
     fecha_pago: "2026-10-30",
   });
   if (egErr) throw new Error(`egreso: ${egErr.message}`);
+
+  const filasFijas = GASTOS_PRUEBA.map((g) => ({
+    categoria: g.categoria,
+    monto: g.monto,
+    moneda: g.moneda,
+    tasa: null,
+    monto_usd: g.monto,
+    fecha: g.fecha,
+    nota: `${g.titulo} (prueba) ${MARCA}`,
+    recurrente: g.recurrente,
+  }));
+  const { error: gfErr } = await sb.from("admin_gasto_fijo").insert(filasFijas);
+  if (gfErr) {
+    const msg = gfErr.message ?? "";
+    if (gfErr.code === "42P01" || gfErr.code === "PGRST205" || /does not exist|schema cache|admin_gasto_fijo/i.test(msg)) {
+      throw new Error("Falta la tabla admin_gasto_fijo. Aplica supabase/admin-gastos-fijos.sql y vuelve a correr el seed.");
+    }
+    throw new Error(`gastos fijos: ${msg}`);
+  }
 
   const ids = [harina.id, carne.id, cebolla.id];
   const { data: despues, error: stErr } = await sb.from("insumos").select("nombre, stock_actual").in("id", ids);

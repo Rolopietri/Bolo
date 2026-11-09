@@ -16,6 +16,7 @@ import { calcularCostoReceta, listRecetas } from "@/lib/data/recetas";
 import { listPerdidasRango } from "@/lib/data/stock-movimientos";
 import { listVentasRango } from "@/lib/data/ventas";
 import { compararCaja, diasEntre, hoyCaracas, resumenCajaSemana, type EstadoCaja, type ResumenCajaSemana } from "@/lib/cierre-caja";
+import { CRITERIO_SEMANA, gastoDesdeFila, resumirGastos, restarGastos, type FilaGasto, type GastoFijo } from "@/lib/gastos-fijos";
 import { fmtBs, fmtUsd } from "@/lib/moneda";
 import {
   armarSemana,
@@ -49,13 +50,15 @@ function diaCorto(iso: string): string {
   return DIA_CORTO[dow] ?? "";
 }
 
-export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => void }) {
+export function SemanaAdministracion({ onVerCierres, onVerGastos }: { onVerCierres?: () => void; onVerGastos?: () => void }) {
   const [lunes, setLunes] = useState(() => lunesSemanaActual());
   const [resumen, setResumen] = useState<ResumenSemana | null>(null);
   const [caja, setCaja] = useState<ResumenCajaSemana | null>(null);
   const [dias, setDias] = useState<DiaVista[]>([]);
   const [cajaAviso, setCajaAviso] = useState<string | null>(null);
   const [tasa, setTasa] = useState<TasaVista | null>(null);
+  const [gastos, setGastos] = useState<GastoFijo[]>([]);
+  const [gastosPendiente, setGastosPendiente] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
@@ -76,13 +79,33 @@ export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => vo
     let cancel = false;
     (async () => {
       try {
-        const [ventas, compras, perdidas, recetas, insumos, tasaBcv, cierresRes] = await Promise.all([
+        const [ventas, compras, perdidas, recetas, insumos, tasaBcv, gastosRes, cierresRes] = await Promise.all([
           listVentasRango(previa.desde, esta.hasta),
           listComprasRango(esta.desde, esta.hasta),
           listPerdidasRango(esta.desde, esta.hasta),
           listRecetas(),
           listInsumos(),
           getTasaBcvPorFecha(esta.hasta),
+          fetch("/api/admin/gastos-fijos", { cache: "no-store" })
+            .then(async (r) => {
+              const d = await r.json().catch(() => ({}));
+              if (!r.ok) return { gastos: [] as GastoFijo[], pendiente: false };
+              const lista = ((d.gastos ?? []) as GastoFijo[])
+                .map((g) => gastoDesdeFila({
+                  id: g.id,
+                  categoria: g.categoria,
+                  monto: g.monto,
+                  moneda: g.moneda,
+                  tasa: g.tasa,
+                  monto_usd: g.montoUsd,
+                  fecha: g.fecha,
+                  nota: g.nota,
+                  recurrente: g.recurrente,
+                }))
+                .filter((g): g is GastoFijo => g != null);
+              return { gastos: lista, pendiente: !!d.pendiente };
+            })
+            .catch(() => ({ gastos: [] as GastoFijo[], pendiente: false })),
           listCierresRango(esta.desde, esta.hasta).then(
             (rows) => ({ rows, aviso: null as string | null }),
             (e: unknown) => ({
@@ -148,6 +171,8 @@ export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => vo
           }),
         );
         setCajaAviso(cierresRes.aviso);
+        setGastos(gastosRes.gastos);
+        setGastosPendiente(gastosRes.pendiente);
         setTasa(tasaBcv && tasaBcv.usdBs > 0 ? { fecha: tasaBcv.fecha, usdBs: tasaBcv.usdBs } : null);
       } catch (e) {
         if (!cancel) {
@@ -155,6 +180,8 @@ export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => vo
           setCaja(null);
           setDias([]);
           setCajaAviso(null);
+          setGastos([]);
+          setGastosPendiente(false);
           setError(extractError(e, "No se pudo armar la semana"));
         }
       } finally {
@@ -222,7 +249,17 @@ export function SemanaAdministracion({ onVerCierres }: { onVerCierres?: () => vo
           Cargando la semana…
         </div>
       ) : resumen ? (
-        <VistaSemana resumen={resumen} tasa={tasa} caja={caja} cajaAviso={cajaAviso} dias={dias} onVerCierres={onVerCierres} />
+        <VistaSemana
+          resumen={resumen}
+          tasa={tasa}
+          caja={caja}
+          cajaAviso={cajaAviso}
+          dias={dias}
+          onVerCierres={onVerCierres}
+          onVerGastos={onVerGastos}
+          gastos={resumirGastos(gastos, semana.desde, semana.hasta)}
+          gastosPendiente={gastosPendiente}
+        />
       ) : null}
     </div>
   );
@@ -263,6 +300,9 @@ function VistaSemana({
   cajaAviso,
   dias,
   onVerCierres,
+  onVerGastos,
+  gastos,
+  gastosPendiente,
 }: {
   resumen: ResumenSemana;
   tasa: TasaVista | null;
@@ -270,8 +310,12 @@ function VistaSemana({
   cajaAviso: string | null;
   dias: DiaVista[];
   onVerCierres?: () => void;
+  onVerGastos?: () => void;
+  gastos: { totalUsd: number; porCategoria: FilaGasto[] };
+  gastosPendiente: boolean;
 }) {
   const r = resumen;
+  const corte = restarGastos(r.utilidadUsd, gastos.totalUsd);
   const foodAlto = r.foodCostPct != null && r.foodCostPct > 0.35;
   const alertas: { texto: string }[] = [];
   if (caja && (caja.estado === "sobra" || caja.estado === "falta")) {
@@ -351,22 +395,59 @@ function VistaSemana({
       {!r.hayVentas && <VacioVentas />}
 
       <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5">
-        <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Utilidad de la comida</h2>
-        <p className={`mt-1 font-cinzel text-2xl tabular-nums sm:text-3xl ${tonoMonto(r.utilidadUsd)}`}>{fmtUsd(r.utilidadUsd)}</p>
-        {tasa && <p className="mt-0.5 text-sm tabular-nums text-cacao-soft">{fmtBs(r.utilidadUsd * tasa.usdBs)}</p>}
+        <h2 className="text-[10px] uppercase tracking-widest text-cacao-mute">Utilidad estimada</h2>
+        <div className="mt-2 grid gap-3 sm:grid-cols-2">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-cacao-mute">Antes de gastos fijos</p>
+            <p className={`mt-1 font-cinzel text-2xl tabular-nums sm:text-3xl ${tonoMonto(corte.antes)}`}>{fmtUsd(corte.antes)}</p>
+            {tasa && <p className="mt-0.5 text-sm tabular-nums text-cacao-soft">{fmtBs(corte.antes * tasa.usdBs)}</p>}
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-cacao-mute">Después de gastos fijos</p>
+            <p className={`mt-1 font-cinzel text-2xl tabular-nums sm:text-3xl ${tonoMonto(corte.despues)}`}>{fmtUsd(corte.despues)}</p>
+            {tasa && <p className="mt-0.5 text-sm tabular-nums text-cacao-soft">{fmtBs(corte.despues * tasa.usdBs)}</p>}
+          </div>
+        </div>
         <ul className="mt-3 max-w-md space-y-1 text-sm">
           <FilaCuenta label="Ventas" val={fmtUsd(r.ventasUsd)} />
           <FilaCuenta label="− Food cost teórico" val={fmtUsd(r.foodCostUsd)} tenue />
           <FilaCuenta label="− Pérdidas" val={fmtUsd(r.perdidasUsd)} tenue />
           <li className="flex items-baseline justify-between gap-3 border-t border-marfil pt-1">
-            <span className="font-medium text-cacao">Utilidad de la comida</span>
-            <span className={`tabular-nums font-medium ${tonoMonto(r.utilidadUsd)}`}>{fmtUsd(r.utilidadUsd)}</span>
+            <span className="font-medium text-cacao">Utilidad estimada</span>
+            <span className={`tabular-nums font-medium ${tonoMonto(corte.antes)}`}>{fmtUsd(corte.antes)}</span>
+          </li>
+          <FilaCuenta label="− Gastos fijos de la semana" val={fmtUsd(corte.gastosUsd)} tenue />
+          {gastos.porCategoria.map((c) => (
+            <FilaCuenta key={c.categoria} label={`· ${c.label}`} val={fmtUsd(c.usd)} tenue />
+          ))}
+          <li className="flex items-baseline justify-between gap-3 border-t border-marfil pt-1">
+            <span className="font-medium text-cacao">Después de gastos fijos</span>
+            <span className={`tabular-nums font-medium ${tonoMonto(corte.despues)}`}>{fmtUsd(corte.despues)}</span>
           </li>
         </ul>
-        <p className="mt-3 text-[11px] leading-relaxed text-cacao-mute">
-          Es el margen de lo vendido (receta y pérdidas). El balance de caja, con compras y gastos, está en Estado de cuenta. Semana anterior: {fmtUsd(r.ventasAnteriorUsd)}.
+        <p className="mt-3 text-[11px] leading-relaxed text-cacao-mute">{CRITERIO_SEMANA}</p>
+        <p className="mt-2 text-[11px] leading-relaxed text-cacao-mute">
+          La de antes es el margen de lo vendido (receta y pérdidas). Las compras de la semana no entran aquí: el balance de caja está en Estado de cuenta, con el monto entero del mes. Semana anterior: {fmtUsd(r.ventasAnteriorUsd)}.
           {tasa ? ` BCV del ${fmtFecha(tasa.fecha)}: ${fmtBs(tasa.usdBs)} por $1.` : ""}
         </p>
+        {corte.gastosUsd <= 0.005 && (
+          <div className="mt-3 rounded-xl bg-marfil-soft px-3 py-3">
+            <p className="font-serif italic text-cacao-soft">
+              {gastosPendiente
+                ? "Los gastos fijos todavía no están en la base. Cuando se aplique la migración, aquí se descuenta el alquiler y la nómina de la semana."
+                : "Esta semana no hay gastos fijos. Anota el alquiler, la nómina o los servicios y verás la utilidad después de descontarlos."}
+            </p>
+            {onVerGastos ? (
+              <button type="button" onClick={onVerGastos} className="mt-2 text-sm text-cacao underline decoration-dotted">
+                Ir a Gastos fijos
+              </button>
+            ) : (
+              <Link href="/administracion?seccion=gastos" className="mt-2 inline-block text-sm text-cacao underline decoration-dotted">
+                Ir a Gastos fijos
+              </Link>
+            )}
+          </div>
+        )}
         {r.platosSinCosto > 0 && (
           <p className="mt-1 text-[11px] leading-relaxed text-cacao-soft">
             Faltó el costo de {fmtCant(r.platosSinCosto)} {palabraPlato(r.platosSinCosto)} ({fmtUsd(r.ventasSinCostoUsd)} de ventas). Esos no restan, así que la utilidad puede verse más alta.

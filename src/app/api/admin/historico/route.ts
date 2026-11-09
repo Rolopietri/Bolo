@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { esCategoriaCortesia, esCategoriaInsumos, usdDeCompra, usdDeEgreso, type TasaDia } from "@/lib/admin/cuadre";
 import { tokenValido, ADMIN_COOKIE } from "@/lib/admin-auth";
+import { egresoCubiertoPorFijo, gastoDesdeFila, rangoMes, resumirGastos, type GastoFijo } from "@/lib/gastos-fijos";
 import { createServiceClient } from "@/lib/supabase/admin-service";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -17,6 +18,7 @@ type FilaEgr = {
   monto: number | null;
   monto_usd: number | null;
   categoria_nombre: string | null;
+  clasificacion?: string | null;
   pagada?: boolean | null;
 };
 type FilaVenta = {
@@ -68,6 +70,8 @@ export async function GET(req: NextRequest) {
   let egresos: FilaEgr[] = [];
   let compras: FilaCompra[];
   let tasas: Tasa[];
+  let gastosFijos: GastoFijo[] = [];
+  let gastosFijosPendiente = false;
   try {
     [ventas, compras, tasas] = await Promise.all([
       paginar<FilaVenta>((from, to) =>
@@ -82,8 +86,22 @@ export async function GET(req: NextRequest) {
     ]);
     if (sbEgresos) {
       egresos = await paginar<FilaEgr>((from, to) =>
-        sbEgresos.from("admin_egreso").select("fecha, moneda, monto, monto_usd, categoria_nombre, pagada").range(from, to) as PromiseLike<{ data: FilaEgr[] | null; error: { message: string } | null }>,
+        sbEgresos.from("admin_egreso").select("fecha, moneda, monto, monto_usd, categoria_nombre, clasificacion, pagada").range(from, to) as PromiseLike<{ data: FilaEgr[] | null; error: { message: string } | null }>,
       );
+      const gf = await sbEgresos.from("admin_gasto_fijo").select("id, categoria, monto, moneda, tasa, monto_usd, fecha, nota, recurrente");
+      if (gf.error) {
+        const code = (gf.error as { code?: string }).code ?? "";
+        const msg = gf.error.message ?? "";
+        if (code === "42P01" || code === "PGRST205" || /does not exist|schema cache|admin_gasto_fijo/i.test(msg)) {
+          gastosFijosPendiente = true;
+        } else {
+          throw new Error(gf.error.message);
+        }
+      } else {
+        gastosFijos = (gf.data ?? [])
+          .map((row) => gastoDesdeFila(row as Parameters<typeof gastoDesdeFila>[0]))
+          .filter((g): g is GastoFijo => g != null);
+      }
     }
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "error" }, { status: 500 });
@@ -122,9 +140,42 @@ export async function GET(req: NextRequest) {
   for (const e of egresos) {
     if (!e.fecha || e.pagada === false) continue;
     if (esCategoriaInsumos(e.categoria_nombre) || esCategoriaCortesia(e.categoria_nombre)) continue;
+    if (egresoCubiertoPorFijo({ fecha: e.fecha, categoria: e.categoria_nombre, clasificacion: e.clasificacion }, gastosFijos)) continue;
     const mes = e.fecha.slice(0, 7);
     const reg = celda(mes);
     reg.egresos.USD = (reg.egresos.USD ?? 0) + usdDeEgreso(e, tasasDia);
+  }
+  const gastosFijosPorMes: { mes: string; clave: string; usd: number }[] = [];
+  if (gastosFijos.length > 0) {
+    const hoyMes = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Caracas",
+      year: "numeric",
+      month: "2-digit",
+    }).format(new Date()).slice(0, 7);
+    const inicio = gastosFijos.map((g) => g.fecha.slice(0, 7)).sort()[0] ?? hoyMes;
+    let tope = hoyMes;
+    for (const m of meses.keys()) if (m > tope) tope = m;
+    let y = Number(inicio.slice(0, 4));
+    let mo = Number(inicio.slice(5, 7));
+    let guard = 0;
+    while (`${y}-${String(mo).padStart(2, "0")}` <= tope && guard < 36) {
+      const mes = `${y}-${String(mo).padStart(2, "0")}`;
+      const rango = rangoMes(mes);
+      const resumen = resumirGastos(gastosFijos, rango.desde, rango.hasta);
+      if (resumen.totalUsd > 0.004) {
+        const reg = celda(mes);
+        reg.egresos.USD = (reg.egresos.USD ?? 0) + resumen.totalUsd;
+        for (const c of resumen.porCategoria) {
+          gastosFijosPorMes.push({ mes, clave: c.label, usd: c.usd });
+        }
+      }
+      mo += 1;
+      if (mo > 12) {
+        mo = 1;
+        y += 1;
+      }
+      guard += 1;
+    }
   }
   for (const c of compras) {
     if (!c.fecha) continue;
@@ -146,7 +197,8 @@ export async function GET(req: NextRequest) {
     monedas: ["USD"],
     // El cierre por método de pago no vive en ventas; llega en un paso posterior.
     porMetodo: [],
-    porCategoria: [],
+    porCategoria: gastosFijosPorMes,
+    gastosFijosPendiente,
     porPlato: [...porPlato.entries()].map(([key, usd]) => {
       const [mes, clave] = key.split("||");
       return { mes, clave, usd: r2(usd) };

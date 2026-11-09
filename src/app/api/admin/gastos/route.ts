@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { usdDeEgreso, type TasaDia } from "@/lib/admin/cuadre";
 import { tokenValido, ADMIN_COOKIE } from "@/lib/admin-auth";
+import { egresoCubiertoPorFijo, etiquetaCategoria, gastoDesdeFila, resumirGastos, usdEnRango, type GastoFijo } from "@/lib/gastos-fijos";
 import { createServiceClient } from "@/lib/supabase/admin-service";
 import { getTasaEurUsd } from "@/lib/admin/tasa";
 
@@ -78,22 +79,45 @@ export async function GET(req: NextRequest) {
     if (!con.error) return con;
     return sb.from("admin_egreso").select(cols).gte("fecha", d0).lte("fecha", d1);
   };
-  const [cur, prev] = await Promise.all([
+  const [cur, prev, gf] = await Promise.all([
     selEg("id, concepto, proveedor_nombre, categoria_id, fecha, monto, moneda, monto_usd, categoria_nombre, clasificacion", desde, hasta),
     selEg("fecha, monto, moneda, monto_usd, categoria_nombre, clasificacion", prevDesde, prevHasta),
+    sb.from("admin_gasto_fijo").select("id, categoria, monto, moneda, tasa, monto_usd, fecha, nota, recurrente"),
   ]);
   if (cur.error) return NextResponse.json({ error: cur.error.message }, { status: 500 });
+  const tablaFijosAusente = !!gf.error && ((gf.error.code ?? "") === "42P01" || (gf.error.code ?? "") === "PGRST205" || /does not exist|schema cache|admin_gasto_fijo/i.test(gf.error.message ?? ""));
+  if (gf.error && !tablaFijosAusente) return NextResponse.json({ error: gf.error.message }, { status: 500 });
+  const gastosFijos = ((gf.data ?? []) as Parameters<typeof gastoDesdeFila>[0][])
+    .map((row) => gastoDesdeFila(row))
+    .filter((g): g is GastoFijo => g != null);
+  const cubierto = (e: EgRow) => egresoCubiertoPorFijo({ fecha: e.fecha, categoria: e.categoria_nombre, clasificacion: e.clasificacion }, gastosFijos);
 
   // Caja real: solo cuentan los egresos pagados (pagada != false). Los pendientes
   // (cuentas por pagar) no son gasto hasta que se pagan.
   const rows = ((cur.data ?? []) as unknown as EgRow[]).filter((e) => e.pagada !== false);
   // Egresos individuales (sin insumos ni cortesías) para el detalle por rubro.
-  const items = rows.filter((e) => !esCortesia(e) && !esInsumo(e)).map((e) => ({
+  const items = rows.filter((e) => !esCortesia(e) && !esInsumo(e) && !cubierto(e)).map((e) => ({
     id: e.id, fecha: e.fecha, concepto: e.concepto ?? null, proveedor: e.proveedor_nombre ?? null,
     categoria: e.categoria_nombre || "Otros", categoria_id: e.categoria_id ?? null,
     usd: r2(usdDe(e)),
     moneda: e.moneda ?? "USD", monto: n(e.monto),
-  })).sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? ""));
+  }));
+  for (const g of gastosFijos) {
+    const usd = usdEnRango(g, desde, hasta);
+    if (usd <= 0.004) continue;
+    items.push({
+      id: `fijo:${g.id}`,
+      fecha: g.fecha,
+      concepto: g.nota || (g.recurrente ? `${etiquetaCategoria(g.categoria)} (cada mes)` : etiquetaCategoria(g.categoria)),
+      proveedor: null,
+      categoria: etiquetaCategoria(g.categoria),
+      categoria_id: null,
+      usd,
+      moneda: g.moneda,
+      monto: g.monto,
+    });
+  }
+  items.sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? ""));
   let fijos = 0, variables = 0, insumosEgreso = 0, cortesias = 0;
   let fijosUsd = 0, variablesUsd = 0, insumosEgresoUsd = 0, cortesiasUsd = 0;
   const porCat = new Map<string, { categoria: string; clasificacion: string; eur: number; usd: number }>();
@@ -102,6 +126,7 @@ export async function GET(req: NextRequest) {
     const usd = usdDe(e);
     if (esCortesia(e)) { cortesias += eur; cortesiasUsd += usd; continue; }
     if (esInsumo(e)) { insumosEgreso += eur; insumosEgresoUsd += usd; continue; }
+    if (cubierto(e)) continue;
     if (esFijo(e)) { fijos += eur; fijosUsd += usd; } else { variables += eur; variablesUsd += usd; }
     const key = norm(e.categoria_nombre) || "otros";
     const cell = porCat.get(key) ?? { categoria: e.categoria_nombre || "Otros", clasificacion: esFijo(e) ? "fija" : "variable", eur: 0, usd: 0 };
@@ -109,10 +134,28 @@ export async function GET(req: NextRequest) {
   }
   let pFijos = 0, pVariables = 0, pFijosUsd = 0, pVariablesUsd = 0;
   for (const e of (prev.data ?? []) as unknown as EgRow[]) {
-    if (e.pagada === false || esCortesia(e) || esInsumo(e)) continue;
+    if (e.pagada === false || esCortesia(e) || esInsumo(e) || cubierto(e)) continue;
     if (esFijo(e)) { pFijos += eurDe(e); pFijosUsd += usdDe(e); }
     else { pVariables += eurDe(e); pVariablesUsd += usdDe(e); }
   }
+  const enEur = (usd: number, fecha: string) => {
+    const c = crossDe(fecha);
+    return c > 0 ? usd / c : usd;
+  };
+  const actualFijos = resumirGastos(gastosFijos, desde, hasta);
+  fijos += enEur(actualFijos.totalUsd, hasta);
+  fijosUsd += actualFijos.totalUsd;
+  for (const cat of actualFijos.porCategoria) {
+    porCat.set(`fijo:${cat.categoria}`, {
+      categoria: cat.label,
+      clasificacion: "fija",
+      eur: enEur(cat.usd, hasta),
+      usd: cat.usd,
+    });
+  }
+  const prevFijos = resumirGastos(gastosFijos, prevDesde, prevHasta);
+  pFijos += enEur(prevFijos.totalUsd, prevHasta);
+  pFijosUsd += prevFijos.totalUsd;
 
   return NextResponse.json({
     desde, hasta,
