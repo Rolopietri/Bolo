@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { esCategoriaCortesia, esCategoriaInsumos, usdDeCompra, usdDeEgreso } from "@/lib/admin/cuadre";
+import { egresoCubiertoPorFijo, rangoMes, resumirGastos, type GastoFijo } from "@/lib/gastos-fijos";
 import { listVentasRango, totalesVentasPorMes } from "@/lib/data/ventas";
 import { listTasasBcvRango, listComprasRango, listComprasEgresoMes, listComprasPendientes, listProveedores, listInsumos, marcarCompraPagada, marcarFacturaPagada, getTasaBcvPorFecha, getTasaBcvActual } from "@/lib/data/cocina";
 import { fmtUsdBs } from "@/lib/moneda";
@@ -16,15 +17,17 @@ import { leerAjustesVentas } from "@/lib/data/ajustes-ventas";
 import type { TasaBcv, Compra, Proveedor as ProveedorCocina, Insumo } from "@/lib/types";
 import { AnalisisAdministrativo } from "./AnalisisAdministrativo";
 import { CierreCajaAdmin } from "./CierreCajaAdmin";
+import { GastosFijosAdmin } from "./GastosFijosAdmin";
 import { SemanaAdministracion } from "./SemanaAdministracion";
 import { ChevronIcon, CalendarIcon } from "@/components/icons";
 
-type Seccion = "semana" | "cierre" | "proveedores" | "solicitudes" | "ingresos" | "analisis-ventas" | "cobrar" | "egresos" | "estado" | "historico";
+type Seccion = "semana" | "cierre" | "proveedores" | "solicitudes" | "ingresos" | "analisis-ventas" | "cobrar" | "egresos" | "gastos" | "estado" | "historico";
 const SECCIONES: { id: Seccion; label: string; grupo?: string }[] = [
   { id: "semana", label: "Semana" },
   { id: "estado", label: "Estado de cuenta" },
   { id: "ingresos", label: "Ingresos" },
   { id: "egresos", label: "Egresos" },
+  { id: "gastos", label: "Gastos fijos" },
   { id: "analisis-ventas", label: "Análisis" },
   { id: "historico", label: "Históricos" },
   { id: "cierre", label: "Cierre de caja" },
@@ -43,6 +46,7 @@ function seccionDesdeQuery(valor: string | null): Seccion {
     "analisis-ventas",
     "cobrar",
     "egresos",
+    "gastos",
     "estado",
     "historico",
   ];
@@ -92,6 +96,7 @@ function Panel({ inicial }: { inicial: Seccion }) {
       {seccion === "semana" ? (
         <SemanaAdministracion
           onVerCierres={() => setSeccion("cierre")}
+          onVerGastos={() => setSeccion("gastos")}
         />
       ) : seccion === "cierre" ? (
         <CierreCajaAdmin />
@@ -103,6 +108,8 @@ function Panel({ inicial }: { inicial: Seccion }) {
         <SeccionCuentasCobrar />
       ) : seccion === "egresos" ? (
         <SeccionEgresos />
+      ) : seccion === "gastos" ? (
+        <GastosFijosAdmin />
       ) : seccion === "ingresos" ? (
         <SeccionIngresos />
       ) : seccion === "analisis-ventas" ? (
@@ -2847,6 +2854,8 @@ function SeccionEstado() {
   const [ventasUsd, setVentasUsd] = useState(0);
   const [porPlato, setPorPlato] = useState<[string, number][]>([]);
   const [egresos, setEgresos] = useState<Egreso[]>([]);
+  const [gastosFijos, setGastosFijos] = useState<GastoFijo[]>([]);
+  const [gastosPendiente, setGastosPendiente] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tasasBcv, setTasasBcv] = useState<TasaBcv[]>([]);
@@ -2859,17 +2868,21 @@ function SeccionEstado() {
       try {
         const [y, m] = mes.split("-").map((x) => parseInt(x, 10));
         const finMes = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-        const [ventas, re, tb, cp, tasaAct] = await Promise.all([
+        const [ventas, re, rg, tb, cp, tasaAct] = await Promise.all([
           listVentasRango(`${mes}-01`, finMes).catch(() => []),
           fetch(`/api/admin/egresos?mes=${mes}`, { cache: "no-store" }),
+          fetch("/api/admin/gastos-fijos", { cache: "no-store" }),
           listTasasBcvRango(`${mes}-01`, finMes).catch(() => [] as TasaBcv[]),
           listComprasRango(`${mes}-01`, finMes).catch(() => [] as Compra[]),
           getTasaBcvActual().catch(() => null),
         ]);
         const de = await re.json();
+        const dg = await rg.json().catch(() => ({}));
         if (a) {
           if (!re.ok) setEgresos([]);
           else setEgresos(de.egresos ?? []);
+          setGastosFijos(rg.ok ? (dg.gastos ?? []) : []);
+          setGastosPendiente(rg.ok ? !!dg.pendiente : false);
           const mapa = new Map<string, number>();
           let total = 0;
           for (const v of ventas) {
@@ -2911,9 +2924,11 @@ function SeccionEstado() {
   // Insumos y cortesías no se suman otra vez: los insumos entran por Compras
   // y la cortesía no es plata que salió. Solo cuentan los gastos ya pagados.
   const egresosOperativos = egresos.filter(
-    (e) => e.pagada !== false && !esCategoriaInsumos(e.categoria_nombre) && !esCategoriaCortesia(e.categoria_nombre),
+    (e) => e.pagada !== false && !esCategoriaInsumos(e.categoria_nombre) && !esCategoriaCortesia(e.categoria_nombre)
+      && !egresoCubiertoPorFijo({ fecha: e.fecha, categoria: e.categoria_nombre, clasificacion: e.clasificacion }, gastosFijos),
   );
   const egresosAll: Egreso[] = [...egresosOperativos, ...comprasEgreso];
+  const fijosMes = resumirGastos(gastosFijos, rangoMes(mes).desde, rangoMes(mes).hasta);
 
   let tasaMes: number | null = null;
   for (const t of tasasBcv) {
@@ -2922,7 +2937,8 @@ function SeccionEstado() {
   const tasaUsdBs = tasaMes && tasaMes > 0 ? tasaMes : tasaHoy;
   const enUSD = (e: Egreso): number => usdDeEgreso(e, tasasDia);
   const ingUni = ventasUsd;
-  const egrUni = egresosAll.reduce((s, e) => s + enUSD(e), 0);
+  const egrCaja = egresosAll.reduce((s, e) => s + enUSD(e), 0);
+  const egrUni = egrCaja + fijosMes.totalUsd;
   const balUni = ingUni - egrUni;
   const catUni = (arr: Egreso[]): [string, number][] => {
     const o: Record<string, number> = {};
@@ -2965,14 +2981,22 @@ function SeccionEstado() {
               <div className="grid gap-4 lg:grid-cols-2">
                 <DesgloseUnico titulo="Ventas por plato" filas={porPlato} moneda="USD" />
                 <DesgloseUnico titulo="Egresos por categoría" filas={catUni(egresosAll)} moneda="USD" />
+                <DesgloseUnico
+                  titulo="Gastos fijos"
+                  filas={fijosMes.porCategoria.map((c) => [c.label, c.usd])}
+                  moneda="USD"
+                  vacio={gastosPendiente
+                    ? "Falta aplicar la migración de gastos fijos. Cuando esté, el alquiler y la nómina salen aquí y bajan el balance."
+                    : "Todavía no hay gastos fijos este mes. Anótalos en Gastos fijos y el balance los descuenta."}
+                />
               </div>
-              <p className="text-[11px] text-cacao-soft italic">Los ingresos son las ventas de Cocina, en dólares: el mismo número que Semana, Análisis e Históricos para este mes. Los egresos suman los gastos ya pagados y las compras de insumos (con flete). Un gasto en bolívares se pasa a dólares con la tasa BCV de su fecha.</p>
+              <p className="text-[11px] text-cacao-soft italic">Los ingresos son las ventas de Cocina, en dólares: el mismo número que Semana, Análisis e Históricos para este mes. Los egresos suman los gastos ya pagados, las compras de insumos (con flete) y los gastos fijos del mes. Un gasto en bolívares se pasa a dólares con la tasa BCV de su fecha. Si el mismo gasto fijo ya estaba anotado como egreso fijo de esa categoría, se cuenta una sola vez. Un egreso variable, como el gas de un día, sigue aparte.</p>
             </>
           )}
 
-          {ventasUsd <= 0.005 && egresosAll.length === 0 && (
+          {ventasUsd <= 0.005 && egresosAll.length === 0 && fijosMes.totalUsd <= 0.005 && (
             <p className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft italic font-serif">
-              Sin movimientos en {nombreMes(mes)}. Anota las ventas en Cocina y los egresos, y aquí verás el balance.
+              Sin movimientos en {nombreMes(mes)}. Anota las ventas en Cocina, los egresos y los gastos fijos, y aquí verás el balance.
             </p>
           )}
         </>
@@ -2981,7 +3005,7 @@ function SeccionEstado() {
   );
 }
 
-function DesgloseUnico({ titulo, filas, moneda }: { titulo: string; filas: [string, number][]; moneda: string }) {
+function DesgloseUnico({ titulo, filas, moneda, vacio }: { titulo: string; filas: [string, number][]; moneda: string; vacio?: string }) {
   const total = filas.reduce((s, [, v]) => s + v, 0);
   return (
     <section className="rounded-2xl bg-white ring-1 ring-marfil overflow-hidden">
@@ -2989,7 +3013,7 @@ function DesgloseUnico({ titulo, filas, moneda }: { titulo: string; filas: [stri
         <span>{titulo}</span><span className="text-cacao tabular-nums normal-case tracking-normal">{fmtMonto(total, moneda)}</span>
       </div>
       {filas.length === 0 ? (
-        <p className="p-4 text-sm text-cacao-soft italic font-serif">Nada este mes.</p>
+        <p className="p-4 text-sm text-cacao-soft italic font-serif">{vacio ?? "Nada este mes."}</p>
       ) : (
         <ul className="divide-y divide-marfil">
           {filas.map(([nombre, v]) => (
@@ -3803,6 +3827,9 @@ function SeccionHistorico() {
   const [moneda, setMoneda] = useState<string>("USD");
   const [tasaUsdBs, setTasaUsdBs] = useState<number | null>(null);
   const [porCategoria, setPorCategoria] = useState<{ mes: string; clave: string; usd: number }[]>([]);
+  const [gastosFijos, setGastosFijos] = useState<{ mes: string; clave: string; usd: number }[]>([]);
+  const [gastosPendiente, setGastosPendiente] = useState(false);
+  const [mesFijos, setMesFijos] = useState<string>("");
   const [periodoTorta, setPeriodoTorta] = useState<string>("todo");
   const [obs, setObs] = useState<Record<string, string>>({});
   const [obsMes, setObsMes] = useState<string>("");
@@ -3829,6 +3856,11 @@ function SeccionHistorico() {
         setMoneda("USD");
         setTasaUsdBs(typeof dh.tasaUsdBs === "number" && dh.tasaUsdBs > 0 ? dh.tasaUsdBs : null);
         setPorCategoria(dh.porPlato ?? []);
+        const fijosHist = (dh.porCategoria ?? []) as { mes: string; clave: string; usd: number }[];
+        setGastosFijos(fijosHist);
+        setGastosPendiente(!!dh.gastosFijosPendiente);
+        const ultimoFijo = fijosHist.length ? fijosHist.map((r) => r.mes).sort().at(-1) ?? "" : "";
+        setMesFijos(ultimoFijo);
         const observaciones: Record<string, string> = {};
         for (const [k, v] of Object.entries((dc.config ?? {}) as Record<string, string>)) {
           if (k.startsWith("obs_") && v) observaciones[k.slice(4)] = v;
@@ -3992,7 +4024,9 @@ function SeccionHistorico() {
         </>
       )}
 
-      {/* Observaciones del mes */}
+          <GastosFijosHistorico filas={gastosFijos} mes={mesFijos} onMes={setMesFijos} pendiente={gastosPendiente} />
+
+          {/* Observaciones del mes */}
       <div className="rounded-2xl bg-white ring-1 ring-marfil p-4 space-y-2">
         <div className="flex items-center justify-between gap-2">
           <label className="font-display text-[10px] tracking-[0.2em] uppercase text-cacao-mute">Observación del mes</label>
@@ -4016,6 +4050,53 @@ function SeccionHistorico() {
         <button type="button" onClick={guardarObs} disabled={guardandoObs} className="rounded-lg bg-cacao text-white px-4 py-2 text-xs uppercase tracking-widest hover:bg-terracotta disabled:bg-marfil disabled:text-cacao-mute">{guardandoObs ? "Guardando…" : "Guardar observación"}</button>
       </div>
     </div>
+  );
+}
+
+function GastosFijosHistorico({
+  filas,
+  mes,
+  onMes,
+  pendiente,
+}: {
+  filas: { mes: string; clave: string; usd: number }[];
+  mes: string;
+  onMes: (mes: string) => void;
+  pendiente: boolean;
+}) {
+  const meses = [...new Set(filas.map((f) => f.mes))].sort((a, b) => b.localeCompare(a));
+  const delMes = filas.filter((f) => f.mes === mes);
+  const total = delMes.reduce((s, f) => s + f.usd, 0);
+  return (
+    <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-display text-[10px] uppercase tracking-[0.2em] text-cacao-mute">Gastos fijos por categoría</h2>
+        {meses.length > 0 && (
+          <select value={mes} onChange={(e) => onMes(e.target.value)} className="rounded-lg border border-marfil bg-white px-2 py-1.5 text-sm text-cacao">
+            {meses.map((m) => <option key={m} value={m}>{nombreMes(m)}</option>)}
+          </select>
+        )}
+      </div>
+      {pendiente ? (
+        <p className="font-serif text-sm italic text-cacao-soft">Falta aplicar la migración de gastos fijos. Cuando esté, aquí ves alquiler, nómina y servicios, y el balance del mes coincide con Estado de cuenta.</p>
+      ) : delMes.length === 0 ? (
+        <p className="font-serif text-sm italic text-cacao-soft">Este mes no tiene gastos fijos. Anótalos en Gastos fijos y el egreso del mes los incluye, igual que en Estado de cuenta.</p>
+      ) : (
+        <>
+          <ul className="divide-y divide-marfil">
+            {delMes.map((f) => (
+              <li key={f.clave} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <span className="text-cacao-soft">{f.clave}</span>
+                <span className="tabular-nums text-cacao">{fmtMonto(f.usd, "USD")}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-cacao-mute">
+            Total del mes {fmtMonto(total, "USD")}. Ya está dentro de los egresos de arriba, así que el balance cuadra con Estado de cuenta. No se vuelve a sumar un egreso fijo de la misma categoría.
+          </p>
+        </>
+      )}
+    </section>
   );
 }
 

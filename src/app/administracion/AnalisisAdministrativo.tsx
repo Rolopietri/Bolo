@@ -150,7 +150,7 @@ function ResumenUtilidad() {
             {(gastos?.cortesiasUsd ?? 0) > 0.005 && (
               <p className="text-[11px] text-cacao-mute mt-3">Informativo: cortesías {fmtUsd(gastos?.cortesiasUsd ?? 0)} — venta regalada, no entra en la utilidad.</p>
             )}
-            <p className="text-[11px] text-cacao-mute mt-3">Ventas de Cocina, en dólares. {tasaUsdBs ? `Equivalente BCV: ${fmtBs(1 * tasaUsdBs)} por $1.` : "Sin tasa BCV para mostrar bolívares."} El libro viejo de ingresos no se suma.</p>
+            <p className="text-[11px] text-cacao-mute mt-3">Ventas de Cocina, en dólares. {tasaUsdBs ? `Equivalente BCV: ${fmtBs(1 * tasaUsdBs)} por $1.` : "Sin tasa BCV para mostrar bolívares."} El libro viejo de ingresos no se suma. Los gastos fijos mensuales se prorratean por los días del rango: un mes completo coincide con Estado de cuenta. Si ese gasto ya estaba como egreso fijo de la misma categoría, entra una sola vez.</p>
           </section>
 
           {/* Guard de fuente / doble conteo */}

@@ -2,7 +2,7 @@
  * Borra solo la tanda de `scripts/seed-prueba-semana.mjs`.
  *
  * Reconoce las filas por la marca «seed-prueba-semana» en la nota.
- * No toca ventas, compras, cierres ni egresos que no lleven esa marca.
+ * No toca ventas, compras, cierres, egresos ni gastos fijos que no lleven esa marca.
  *
  * Los triggers reponen el stock de las ventas y revierten las compras.
  * La pérdida se devuelve con borrar_movimiento_stock. Si al revertir una
@@ -16,7 +16,7 @@ import { pathToFileURL } from "node:url";
 const MARCA = "seed-prueba-semana";
 
 export async function limpiar(sb) {
-  const borrado = { ventas: 0, perdidas: 0, compras: 0, cierres: 0, egresos: 0, precios: 0 };
+  const borrado = { ventas: 0, perdidas: 0, compras: 0, cierres: 0, egresos: 0, gastosFijos: 0, precios: 0 };
 
   const { data: ventas, error: vErr } = await sb.from("ventas").select("id").ilike("notas", `%${MARCA}%`);
   if (vErr) throw new Error(`ventas: ${vErr.message}`);
@@ -105,6 +105,19 @@ export async function limpiar(sb) {
     const { error } = await sb.from("admin_egreso").delete().in("id", egresos.map((r) => r.id));
     if (error) throw new Error(`borrar egresos: ${error.message}`);
     borrado.egresos = egresos.length;
+  }
+
+  const { data: fijos, error: fErr } = await sb.from("admin_gasto_fijo").select("id").ilike("nota", `%${MARCA}%`);
+  if (fErr) {
+    const code = fErr.code ?? "";
+    const msg = fErr.message ?? "";
+    if (code !== "42P01" && code !== "PGRST205" && !/does not exist|schema cache|admin_gasto_fijo/i.test(msg)) {
+      throw new Error(`gastos fijos: ${msg}`);
+    }
+  } else if (fijos?.length) {
+    const { error } = await sb.from("admin_gasto_fijo").delete().in("id", fijos.map((r) => r.id));
+    if (error) throw new Error(`borrar gastos fijos: ${error.message}`);
+    borrado.gastosFijos = fijos.length;
   }
 
   return borrado;

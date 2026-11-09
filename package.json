@@ -14,6 +14,7 @@
     "test:reposicion": "node --no-warnings scripts/check-reposicion.mjs",
     "test:stock": "node --no-warnings scripts/check-stock-liviano.mjs",
     "test:semana": "node --no-warnings scripts/check-semana.mjs",
+    "test:gastos": "node --no-warnings scripts/check-gastos.mjs",
     "test:cierre": "node --no-warnings scripts/check-cierre.mjs",
     "seed:cocina-demo": "node scripts/seed-cocina-demo.mjs",
     "seed:prueba-semana": "node --env-file=.env.local scripts/seed-prueba-semana.mjs",
