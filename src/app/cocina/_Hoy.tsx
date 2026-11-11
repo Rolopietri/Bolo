@@ -7,10 +7,7 @@ import {
   BookIcon,
   CartIcon,
   ChartIcon,
-  CheckIcon,
-  ChevronIcon,
   ClipboardIcon,
-  WarningIcon,
 } from "@/components/icons";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { extractError } from "@/lib/data/error";
@@ -27,8 +24,8 @@ import {
   type ConteosHoy,
   type InsumoHoy,
   type ItemChecklist,
-  type TonoHoy,
 } from "./_hoy";
+import { AnilloListas } from "./_AnilloListas";
 
 type Icono = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -336,83 +333,15 @@ export function Hoy() {
             }}
           />
         )}
-        <ul className="mt-3 divide-y divide-marfil overflow-hidden rounded-2xl bg-white ring-1 ring-marfil">
-          {items.map((item) => (
-            <li key={item.id}>
-              <FilaChecklist item={item} cargando={!carga} />
-            </li>
-          ))}
-        </ul>
+        <AnilloListas
+          items={items}
+          modo={carga ? "datos" : error ? "error" : "cargando"}
+        />
       </section>
 
     </div>
   );
 }
-
-function FilaChecklist({ item, cargando }: { item: ItemChecklist; cargando: boolean }) {
-  const tono: TonoHoy | "cargando" = cargando ? "cargando" : item.tono;
-  return (
-    <Link
-      href={item.href}
-      data-guia={item.dataGuia}
-      className="group flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-marfil-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-terracotta sm:gap-4 sm:px-5"
-    >
-      <Marca tono={tono} />
-      <span className="min-w-0 flex-1">
-        <span className="block font-cinzel text-lg leading-tight text-cacao group-hover:text-terracotta">
-          {item.titulo}
-        </span>
-        <span className="mt-0.5 block text-sm leading-snug text-cacao-soft">{item.detalle}</span>
-      </span>
-      {!cargando && <Pastilla tono={item.tono} etiqueta={item.etiqueta} />}
-      <ChevronIcon className="size-5 shrink-0 text-cacao-mute transition group-hover:translate-x-0.5 group-hover:text-terracotta" />
-    </Link>
-  );
-}
-
-function Marca({ tono }: { tono: TonoHoy | "cargando" }) {
-  if (tono === "listo") {
-    return (
-      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700">
-        <CheckIcon className="size-4" />
-      </span>
-    );
-  }
-  if (tono === "atencion") {
-    return (
-      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-red-100 text-red-700">
-        <WarningIcon className="size-4" />
-      </span>
-    );
-  }
-  const punto = tono === "cargando" ? "bg-cacao-mute" : "bg-terracotta";
-  const fondo = tono === "cargando" ? "bg-marfil-light" : "bg-naranja-soft/80";
-  return (
-    <span className={`grid size-8 shrink-0 place-items-center rounded-full ${fondo}`}>
-      <span className={`size-2 rounded-full ${punto}`} aria-hidden />
-    </span>
-  );
-}
-
-function Pastilla({ tono, etiqueta }: { tono: TonoHoy; etiqueta: string }) {
-  const estilo =
-    tono === "listo"
-      ? "bg-emerald-50 text-emerald-800 ring-emerald-200"
-      : tono === "atencion"
-        ? "bg-red-50 text-red-800 ring-red-200"
-        : "bg-naranja-soft/80 text-terracotta-deep ring-naranja-soft";
-  const punto =
-    tono === "listo" ? "bg-emerald-500" : tono === "atencion" ? "bg-red-500" : "bg-terracotta";
-  return (
-    <span
-      className={`hidden shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest ring-1 sm:inline-flex ${estilo}`}
-    >
-      <span className={`size-1.5 rounded-full ${punto}`} aria-hidden />
-      {etiqueta}
-    </span>
-  );
-}
-
 
 function cuentaAlerta(n: number, uno: string, varios: string): string {
   return `${n.toLocaleString("es-VE")} ${n === 1 ? uno : varios}`;

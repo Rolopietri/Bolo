@@ -18,6 +18,19 @@ import { stockLibre } from "@/lib/types";
  * - Atención si hay agotados o bajos. Falta si no hay insumos, o si hay
  *   insumos sin mínimo y ninguno en alerta. Listo si todos los que tienen
  *   mínimo están por encima.
+ *
+ * Anillo de Hoy (icono de las 5 secciones). El orden, desde arriba y en
+ * sentido horario, es el de checklistHoy: Proveedores, Insumos, Recetas,
+ * Compras y Stock. La fila de stock se titula «Stock y alertas»; en el
+ * anillo se muestra como «Stock».
+ *
+ * Un segmento está completo (verde) solo si esa fila ya está en «Listo»:
+ * no hace falta hacer nada. «Falta» y «Atención» quedan en gris. Para Stock
+ * eso significa que el segmento se pone verde únicamente cuando hay insumos,
+ * todos tienen mínimo y ninguno está agotado ni bajo.
+ *
+ * El círculo central cuenta cuántas filas están en «Listo»:
+ * 0 a 2 → rojo, 3 a 4 → amarillo, 5 → verde.
  */
 
 export type TonoHoy = "listo" | "falta" | "atencion";
@@ -223,6 +236,50 @@ export function introHoy(c: ConteosHoy): string {
 
 export function tituloChecklist(items: ItemChecklist[]): string {
   return items.every((i) => i.tono === "listo") ? "Hoy está en orden" : "Qué falta";
+}
+
+export type TonoCentroHoy = "rojo" | "amarillo" | "verde";
+
+/** Completa hoy = la fila del checklist ya está en «Listo». */
+export function seccionCompletaHoy(item: ItemChecklist): boolean {
+  return item.tono === "listo";
+}
+
+/** Nombre corto en el anillo. Stock usa el título largo en la fila. */
+export function nombreSeccionAnillo(item: Pick<ItemChecklist, "id" | "titulo">): string {
+  if (item.id === "stock") return "Stock";
+  return item.titulo;
+}
+
+export function tonoCentroHoy(completas: number): TonoCentroHoy {
+  if (completas >= 5) return "verde";
+  if (completas >= 3) return "amarillo";
+  return "rojo";
+}
+
+export function resumenListasHoy(items: ItemChecklist[]): {
+  total: number;
+  completas: number;
+  tono: TonoCentroHoy;
+} {
+  const completas = items.filter(seccionCompletaHoy).length;
+  return { total: items.length, completas, tono: tonoCentroHoy(completas) };
+}
+
+export function textoConteoListas(completas: number, total: number): string {
+  return `${completas.toLocaleString("es-VE")} de ${total.toLocaleString("es-VE")} listas`;
+}
+
+/** Texto para el lector de pantalla: el conteo y, si aplica, qué falta. */
+export function descripcionAnilloHoy(items: ItemChecklist[]): string {
+  const { completas, total } = resumenListasHoy(items);
+  const conteo = textoConteoListas(completas, total);
+  const pendientes = items.filter((item) => !seccionCompletaHoy(item)).map(nombreSeccionAnillo);
+  if (pendientes.length === 0) return `${conteo}. Todo está listo hoy.`;
+  const ultima = pendientes[pendientes.length - 1];
+  const lista =
+    pendientes.length === 1 ? ultima : `${pendientes.slice(0, -1).join(", ")} y ${ultima}`;
+  return `${conteo}. Aún falta: ${lista}.`;
 }
 
 /** Clasifica insumos activos. Misma regla que la pantalla de alertas. */
