@@ -26,7 +26,10 @@ export type InsumoStock = {
   id: string;
   nombre: string;
   activo: boolean;
-  /** Categoría de compra ya limpia, o "Sin categoría". */
+  /**
+   * Categoría de compra, cruda o ya agrupada. `lineaStock` la normaliza
+   * a un grupo de restaurante (ver `grupoCategoriaStock`).
+   */
   categoria: string;
   unidadBase: string;
   stockTotal: number;
@@ -95,6 +98,7 @@ export type EstimacionDias =
 export type LineaStock = {
   id: string;
   nombre: string;
+  /** Grupo de restaurante, o "Sin categoría". No es el texto crudo de la base. */
   categoria: string;
   unidadBase: string;
   libre: number;
@@ -104,6 +108,8 @@ export type LineaStock = {
   estado: EstadoStock;
   /** null si no hay un costo usable. El 0 es un stock vacío con costo conocido. */
   valorUsd: number | null;
+  /** USD por unidad base. null si el insumo no tiene un costo usable. */
+  costoUnitarioUsd: number | null;
   dias: EstimacionDias;
   seAgotaPronto: boolean;
 };
@@ -162,9 +168,190 @@ export function clasificarStock(libre: number, minimo: number | null): EstadoSto
   return "ok";
 }
 
+/**
+ * Grupos cortos para leer el stock de un restaurante. El texto guardado en
+ * la base no se modifica: esto solo decide cómo se muestra y cómo se suma
+ * el valor. Mayúsculas, acentos y sinónimos caen en el mismo grupo.
+ *
+ *   Proteínas                  carne, pollo, pescado, huevos, embutidos
+ *   Lácteos                    lacteo, leche, queso, yogurt, crema
+ *   Vegetales y frutas         vegetal, verdura, fruta, "Frutas & Vegetales"
+ *   Secos y granos             secos, granos, harinas, abarrotes, aceites,
+ *                              panadería, condimentos, salsas
+ *   Bebidas                    bebidas, café, té, jugos, refrescos
+ *   Limpieza y desechables     limpieza, aseo, desechables, empaques
+ *   Otros                      lo que tiene nombre y no entra arriba (snacks…)
+ *   Sin categoría              vacío, o "sin categoría" / "sin clasificar"
+ *
+ * Si el texto contiene varias pistas ("lácteos y huevos"), gana la frase
+ * más larga. Un grupo ya normalizado vuelve a sí mismo.
+ */
+export const GRUPOS_CATEGORIA_STOCK = [
+  "Proteínas",
+  "Lácteos",
+  "Vegetales y frutas",
+  "Secos y granos",
+  "Bebidas",
+  "Limpieza y desechables",
+  "Otros",
+] as const;
+
+export type GrupoCategoriaStock = (typeof GRUPOS_CATEGORIA_STOCK)[number];
+
+export const SIN_CATEGORIA_STOCK = "Sin categoría";
+
+const ALIAS_GRUPO: Record<string, GrupoCategoriaStock> = {
+  proteina: "Proteínas",
+  proteinas: "Proteínas",
+  carne: "Proteínas",
+  carnes: "Proteínas",
+  ave: "Proteínas",
+  aves: "Proteínas",
+  pollo: "Proteínas",
+  pescado: "Proteínas",
+  pescados: "Proteínas",
+  marisco: "Proteínas",
+  mariscos: "Proteínas",
+  huevo: "Proteínas",
+  huevos: "Proteínas",
+  embutido: "Proteínas",
+  embutidos: "Proteínas",
+  charcuteria: "Proteínas",
+  fiambre: "Proteínas",
+  fiambres: "Proteínas",
+
+  lacteo: "Lácteos",
+  lacteos: "Lácteos",
+  leche: "Lácteos",
+  leches: "Lácteos",
+  queso: "Lácteos",
+  quesos: "Lácteos",
+  yogurt: "Lácteos",
+  yogur: "Lácteos",
+  yogures: "Lácteos",
+  mantequilla: "Lácteos",
+  crema: "Lácteos",
+  cremas: "Lácteos",
+
+  vegetal: "Vegetales y frutas",
+  vegetales: "Vegetales y frutas",
+  verdura: "Vegetales y frutas",
+  verduras: "Vegetales y frutas",
+  fruta: "Vegetales y frutas",
+  frutas: "Vegetales y frutas",
+  hortaliza: "Vegetales y frutas",
+  hortalizas: "Vegetales y frutas",
+  hierba: "Vegetales y frutas",
+  hierbas: "Vegetales y frutas",
+  produce: "Vegetales y frutas",
+  "frutas y vegetales": "Vegetales y frutas",
+  "vegetales y frutas": "Vegetales y frutas",
+  "frutas y verduras": "Vegetales y frutas",
+  "verduras y frutas": "Vegetales y frutas",
+
+  seco: "Secos y granos",
+  secos: "Secos y granos",
+  grano: "Secos y granos",
+  granos: "Secos y granos",
+  "secos y granos": "Secos y granos",
+  "granos y secos": "Secos y granos",
+  abarrotes: "Secos y granos",
+  despensa: "Secos y granos",
+  cereal: "Secos y granos",
+  cereales: "Secos y granos",
+  harina: "Secos y granos",
+  harinas: "Secos y granos",
+  pan: "Secos y granos",
+  panaderia: "Secos y granos",
+  pasta: "Secos y granos",
+  pastas: "Secos y granos",
+  arroz: "Secos y granos",
+  legumbre: "Secos y granos",
+  legumbres: "Secos y granos",
+  aceite: "Secos y granos",
+  aceites: "Secos y granos",
+  azucar: "Secos y granos",
+  condimento: "Secos y granos",
+  condimentos: "Secos y granos",
+  especia: "Secos y granos",
+  especias: "Secos y granos",
+  "condimentos y especias": "Secos y granos",
+  salsa: "Secos y granos",
+  salsas: "Secos y granos",
+  aderezo: "Secos y granos",
+  aderezos: "Secos y granos",
+  "salsas y aderezos": "Secos y granos",
+
+  bebida: "Bebidas",
+  bebidas: "Bebidas",
+  refresco: "Bebidas",
+  refrescos: "Bebidas",
+  jugo: "Bebidas",
+  jugos: "Bebidas",
+  gaseosa: "Bebidas",
+  gaseosas: "Bebidas",
+  cafe: "Bebidas",
+  te: "Bebidas",
+  "cafe y te": "Bebidas",
+  agua: "Bebidas",
+  licor: "Bebidas",
+  licores: "Bebidas",
+
+  limpieza: "Limpieza y desechables",
+  aseo: "Limpieza y desechables",
+  higiene: "Limpieza y desechables",
+  desechable: "Limpieza y desechables",
+  desechables: "Limpieza y desechables",
+  descartable: "Limpieza y desechables",
+  descartables: "Limpieza y desechables",
+  empaque: "Limpieza y desechables",
+  empaques: "Limpieza y desechables",
+  quimico: "Limpieza y desechables",
+  quimicos: "Limpieza y desechables",
+  "limpieza y desechables": "Limpieza y desechables",
+
+  otro: "Otros",
+  otros: "Otros",
+  varias: "Otros",
+  varios: "Otros",
+  snack: "Otros",
+  snacks: "Otros",
+};
+
+const ALIAS_POR_LARGO = Object.entries(ALIAS_GRUPO).sort((a, b) => b[0].length - a[0].length);
+
+function claveCategoria(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/&/g, " y ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function fraseEntera(clave: string, frase: string): boolean {
+  const re = new RegExp(`(?:^| )${frase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?: |$)`);
+  return re.test(clave);
+}
+
+/** Grupo de restaurante para una categoría de compra. No escribe en la base. */
+export function grupoCategoriaStock(categoria: string | null | undefined): string {
+  const clave = claveCategoria(categoria ?? "");
+  if (!clave || clave === "sin categoria" || clave === "sin clasificar" || clave === "sin clasificacion") {
+    return SIN_CATEGORIA_STOCK;
+  }
+  const exacto = ALIAS_GRUPO[clave];
+  if (exacto) return exacto;
+  for (const [alias, grupo] of ALIAS_POR_LARGO) {
+    if (fraseEntera(clave, alias)) return grupo;
+  }
+  return "Otros";
+}
+
 export function categoriaVisible(categoria: string | null | undefined): string {
-  const t = categoria?.trim();
-  return t ? t : "Sin categoría";
+  return grupoCategoriaStock(categoria);
 }
 
 /**
@@ -383,7 +570,7 @@ export function lineaStock(i: InsumoStock, consumo?: ConsumoInsumo): LineaStock 
   return {
     id: i.id,
     nombre: i.nombre,
-    categoria: i.categoria || "Sin categoría",
+    categoria: grupoCategoriaStock(i.categoria),
     unidadBase: i.unidadBase,
     libre,
     comprometido: i.stockComprometido > 0 ? i.stockComprometido : 0,
@@ -391,6 +578,7 @@ export function lineaStock(i: InsumoStock, consumo?: ConsumoInsumo): LineaStock 
     minimo: i.stockMinimo,
     estado,
     valorUsd: valorStockUsd(fisico, costo),
+    costoUnitarioUsd: costo,
     dias,
     seAgotaPronto: seAgotaPronto(dias),
   };
@@ -430,13 +618,65 @@ export function armarStock(
   return { lineas, resumen };
 }
 
+const ORDEN_GRUPO = new Map<string, number>(
+  GRUPOS_CATEGORIA_STOCK.map((g, i) => [g, i]),
+);
+ORDEN_GRUPO.set(SIN_CATEGORIA_STOCK, GRUPOS_CATEGORIA_STOCK.length + 1);
+
 export function categoriasDe(lineas: LineaStock[]): string[] {
   const set = new Set(lineas.map((l) => l.categoria));
   return [...set].sort((a, b) => {
-    if (a === "Sin categoría") return 1;
-    if (b === "Sin categoría") return -1;
+    const oa = ORDEN_GRUPO.get(a) ?? GRUPOS_CATEGORIA_STOCK.length;
+    const ob = ORDEN_GRUPO.get(b) ?? GRUPOS_CATEGORIA_STOCK.length;
+    if (oa !== ob) return oa - ob;
     return a.localeCompare(b, "es");
   });
+}
+
+export type GrupoValorStock = {
+  grupo: string;
+  valorUsd: number;
+  /** Parte del valor que sí tiene costo, de 0 a 100. */
+  porcentaje: number;
+  lineas: LineaStock[];
+};
+
+/** Dónde está la plata, por grupo. Solo grupos con valor, de mayor a menor. */
+export function valorPorGrupo(lineas: LineaStock[]): GrupoValorStock[] {
+  const map = new Map<string, LineaStock[]>();
+  for (const l of lineas) {
+    const arr = map.get(l.categoria) ?? [];
+    arr.push(l);
+    map.set(l.categoria, arr);
+  }
+  let total = 0;
+  const borrador: GrupoValorStock[] = [];
+  for (const [grupo, ls] of map) {
+    const valorUsd = ls.reduce((s, l) => s + (l.valorUsd != null && l.valorUsd > 0 ? l.valorUsd : 0), 0);
+    if (!(valorUsd > 0)) continue;
+    total += valorUsd;
+    borrador.push({
+      grupo,
+      valorUsd,
+      porcentaje: 0,
+      lineas: [...ls].sort(
+        (a, b) => (b.valorUsd ?? -1) - (a.valorUsd ?? -1) || a.nombre.localeCompare(b.nombre, "es"),
+      ),
+    });
+  }
+  for (const g of borrador) {
+    g.porcentaje = total > 0 ? (g.valorUsd / total) * 100 : 0;
+  }
+  borrador.sort((a, b) => b.valorUsd - a.valorUsd || a.grupo.localeCompare(b.grupo, "es"));
+  return borrador;
+}
+
+/** Agotados y bajo el mínimo: lo que entra en Para pedir. */
+export function losQueHayQuePedir(lineas: LineaStock[]): LineaStock[] {
+  return ordenarLineas(
+    lineas.filter((l) => l.estado === "agotado" || l.estado === "bajo"),
+    "estado",
+  );
 }
 
 export function filtrarLineas(lineas: LineaStock[], f: FiltroStock): LineaStock[] {
