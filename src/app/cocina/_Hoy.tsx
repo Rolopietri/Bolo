@@ -13,7 +13,6 @@ import {
   WarningIcon,
 } from "@/components/icons";
 import { ErrorCarga } from "@/components/ErrorCarga";
-import { displayCantidad } from "@/lib/units";
 import { extractError } from "@/lib/data/error";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { BcvRateBanner } from "./BcvRateBanner";
@@ -25,7 +24,6 @@ import {
   resumirStock,
   saludoDelDia,
   tituloChecklist,
-  type AlertaStock,
   type ConteosHoy,
   type InsumoHoy,
   type ItemChecklist,
@@ -111,11 +109,8 @@ const FILAS_BASE: ItemChecklist[] = [
   },
 ];
 
-const MAX_ALERTAS = 4;
-
 type Carga = {
   conteos: ConteosHoy;
-  alertas: AlertaStock[];
 };
 
 function num(v: unknown): number {
@@ -196,7 +191,6 @@ async function cargarHoy(): Promise<Carga> {
       bajos: stock.conteos.bajos,
       sinMinimo: stock.conteos.sinMinimo,
     },
-    alertas: stock.alertas,
   };
 }
 
@@ -292,10 +286,13 @@ export function Hoy() {
                 data-guia={a.dataGuia}
                 className="group flex h-full flex-col gap-3 rounded-2xl bg-marfil-soft p-4 ring-1 ring-marfil transition-colors hover:bg-white hover:ring-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta sm:p-5"
               >
-                <span className="flex items-center justify-between gap-2">
-                  <span className="grid size-11 place-items-center rounded-full bg-naranja-soft/70 text-terracotta transition-colors group-hover:bg-terracotta group-hover:text-white">
+                <span className="flex items-center justify-between gap-3">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-full bg-naranja-soft/70 text-terracotta transition-colors group-hover:bg-terracotta group-hover:text-white">
                     <a.Icon className="size-5" />
                   </span>
+                  {a.href === "/cocina/inventario/stock" && carga && (
+                    <SemaforoStock conteos={carga.conteos} />
+                  )}
                   {a.href === "/cocina/pedido" && faltantes > 0 && (
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-red-800 ring-1 ring-red-200">
                       <span className="size-1.5 rounded-full bg-red-500" aria-hidden />
@@ -348,15 +345,6 @@ export function Hoy() {
         </ul>
       </section>
 
-      <AlertasStock
-        cargando={!carga && !error}
-        error={!!error}
-        insumos={carga?.conteos.insumos ?? 0}
-        agotados={carga?.conteos.agotados ?? 0}
-        bajos={carga?.conteos.bajos ?? 0}
-        sinMinimo={carga?.conteos.sinMinimo ?? 0}
-        alertas={carga?.alertas ?? []}
-      />
     </div>
   );
 }
@@ -425,171 +413,45 @@ function Pastilla({ tono, etiqueta }: { tono: TonoHoy; etiqueta: string }) {
   );
 }
 
-function AlertasStock({
-  cargando,
-  error,
-  insumos,
-  agotados,
-  bajos,
-  sinMinimo,
-  alertas,
-}: {
-  cargando: boolean;
-  error: boolean;
-  insumos: number;
-  agotados: number;
-  bajos: number;
-  sinMinimo: number;
-  alertas: AlertaStock[];
-}) {
-  const visibles = alertas.slice(0, MAX_ALERTAS);
-  const resto = alertas.length - visibles.length;
-  return (
-    <section aria-label="Alertas de stock">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">Alertas de stock</h2>
-        <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {!cargando && !error && agotados + bajos > 0 && (
-            <Link
-              href="/cocina/pedido"
-              className="text-xs font-semibold uppercase tracking-widest text-terracotta hover:underline"
-            >
-              Armar pedido
-            </Link>
-          )}
-          <Link
-            href="/cocina/insumos?vista=alertas"
-            className="text-xs font-semibold uppercase tracking-widest text-cacao-soft hover:text-terracotta"
-          >
-            Ver alertas
-          </Link>
-        </span>
-      </div>
 
-      {cargando ? (
-        <p className="mt-3 rounded-2xl bg-white px-5 py-6 text-sm text-cacao-soft ring-1 ring-marfil">
-          Revisando el stock…
-        </p>
-      ) : error ? (
-        <p className="mt-3 rounded-2xl bg-white px-5 py-6 text-sm text-cacao-soft ring-1 ring-marfil">
-          No se pudo revisar el stock.{" "}
-          <Link href="/cocina/insumos?vista=alertas" className="font-semibold text-terracotta hover:underline">
-            Abrir alertas
-          </Link>
-        </p>
-      ) : insumos === 0 ? (
-        <p className="mt-3 rounded-2xl bg-white px-5 py-6 text-sm text-cacao-soft ring-1 ring-marfil">
-          Todavía no hay insumos para vigilar.{" "}
-          <Link href="/cocina/insumos" className="font-semibold text-terracotta hover:underline">
-            Cargar insumos
-          </Link>
-        </p>
-      ) : (
-        <div className="mt-3 overflow-hidden rounded-2xl bg-white ring-1 ring-marfil">
-          <div className="flex flex-wrap gap-2 border-b border-marfil px-4 py-3 sm:px-5">
-            <Conteo
-              href="/cocina/insumos?vista=alertas"
-              n={agotados}
-              etiqueta={agotados === 1 ? "agotado" : "agotados"}
-              punto="bg-red-500"
-              tono="bg-red-50 text-red-800 ring-red-200"
-            />
-            <Conteo
-              href="/cocina/insumos?vista=alertas"
-              n={bajos}
-              etiqueta={bajos === 1 ? "bajo" : "bajos"}
-              punto="bg-amber-500"
-              tono="bg-amber-50 text-amber-900 ring-amber-200"
-            />
-            <Conteo
-              href="/cocina/insumos"
-              n={sinMinimo}
-              etiqueta="sin mínimo"
-              punto="bg-stone-400"
-              tono="bg-stone-50 text-cacao-soft ring-stone-200"
-            />
-          </div>
-          {visibles.length === 0 ? (
-            <div className="flex items-start gap-3 px-4 py-5 sm:px-5">
-              <span className="grid size-8 shrink-0 place-items-center rounded-full bg-emerald-100 text-emerald-700">
-                <CheckIcon className="size-4" />
-              </span>
-              <p className="text-sm text-cacao-soft">
-                {sinMinimo > 0
-                  ? "Nadie está bajo el mínimo. Los que no tienen mínimo no avisan todavía."
-                  : "Ningún insumo está agotado ni por debajo del mínimo."}
-              </p>
-            </div>
-          ) : (
-            <ul className="divide-y divide-marfil">
-              {visibles.map((a) => (
-                <li key={a.id}>
-                  <Link
-                    href="/cocina/insumos?vista=alertas"
-                    className="flex items-center justify-between gap-3 px-4 py-3.5 hover:bg-marfil-soft sm:px-5"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium text-cacao">{a.nombre}</span>
-                      <span className="mt-0.5 block text-xs text-cacao-soft">
-                        {displayCantidad(a.libre, a.unidadBase)} libres · mínimo{" "}
-                        {displayCantidad(a.minimo, a.unidadBase)}
-                        {a.comprometido > 0 ? " · hay reserva" : ""}
-                      </span>
-                    </span>
-                    <span
-                      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest ring-1 ${
-                        a.clase === "agotado"
-                          ? "bg-red-50 text-red-800 ring-red-200"
-                          : "bg-amber-50 text-amber-900 ring-amber-200"
-                      }`}
-                    >
-                      <span
-                        className={`size-1.5 rounded-full ${a.clase === "agotado" ? "bg-red-500" : "bg-amber-500"}`}
-                        aria-hidden
-                      />
-                      {a.clase === "agotado" ? "Agotado" : "Bajo"}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-          {resto > 0 && (
-            <div className="border-t border-marfil px-4 py-3 sm:px-5">
-              <Link
-                href="/cocina/insumos?vista=alertas"
-                className="text-sm font-semibold text-terracotta hover:underline"
-              >
-                Ver {resto === 1 ? "la otra alerta" : `las otras ${resto.toLocaleString("es-VE")} alertas`}
-              </Link>
-            </div>
-          )}
-        </div>
-      )}
-    </section>
-  );
+function cuentaAlerta(n: number, uno: string, varios: string): string {
+  return `${n.toLocaleString("es-VE")} ${n === 1 ? uno : varios}`;
 }
 
-function Conteo({
-  href,
-  n,
-  etiqueta,
-  punto,
-  tono,
-}: {
-  href: string;
-  n: number;
-  etiqueta: string;
-  punto: string;
-  tono: string;
-}) {
+/** Los tres conteos que antes estaban en Alertas de stock, en el mismo orden. */
+function SemaforoStock({ conteos }: { conteos: ConteosHoy }) {
+  const items = [
+    {
+      corto: "Agotado",
+      frase: cuentaAlerta(conteos.agotados, "agotado", "agotados"),
+      n: conteos.agotados,
+      tono: "bg-[#FDECEC] ring-[#E7B4B4]",
+    },
+    {
+      corto: "Bajo",
+      frase: cuentaAlerta(conteos.bajos, "bajo el mínimo", "bajo el mínimo"),
+      n: conteos.bajos,
+      tono: "bg-[#FFF6D8] ring-[#E4D08A]",
+    },
+    {
+      corto: "Sin mín.",
+      frase: cuentaAlerta(conteos.sinMinimo, "sin mínimo", "sin mínimo"),
+      n: conteos.sinMinimo,
+      tono: "bg-stone-200 ring-stone-300",
+    },
+  ];
   return (
-    <Link
-      href={href}
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${tono}`}
-    >
-      <span className={`size-1.5 rounded-full ${punto}`} aria-hidden />
-      {n.toLocaleString("es-VE")} {etiqueta}
-    </Link>
+    <span className="flex items-start gap-1" role="group" aria-label="Alertas de stock">
+      {items.map((item) => (
+        <span key={item.corto} title={item.frase} aria-label={item.frase} className="flex w-12 flex-col items-center gap-1">
+          <span
+            className={`grid h-8 min-w-8 place-items-center rounded-full px-1 text-sm font-bold tabular-nums text-cacao ring-1 ${item.tono}`}
+          >
+            {item.n.toLocaleString("es-VE")}
+          </span>
+          <span className="text-center text-[10px] font-semibold leading-none text-cacao">{item.corto}</span>
+        </span>
+      ))}
+    </span>
   );
 }

@@ -5,13 +5,16 @@ import {
   DIAS_SE_AGOTA_PRONTO,
   VENTANA_CONSUMO_DIAS,
   armarStock,
+  categoriasDe,
   clasificarStock,
   costoPorUnidadBase,
   estimarDiasAgotar,
   fechaISOEnCaracas,
   filtrarLineas,
+  grupoCategoriaStock,
   inicioVentana,
   lineaStock,
+  losQueHayQuePedir,
   ordenarLineas,
   resumirConsumo,
   salidaDesdeMovimiento,
@@ -19,6 +22,7 @@ import {
   seAgotaPronto,
   tasaParaValorarStock,
   textoDias,
+  valorPorGrupo,
 } from "../src/lib/stock-liviano.ts";
 
 let fallas = 0;
@@ -179,6 +183,8 @@ const reserva = lineaStock(
 igual("libre descuenta reserva", reserva.libre, 2);
 igual("bajo por la reserva", reserva.estado, "bajo");
 igual("valor de lo que hay en cámara", reserva.valorUsd, 20);
+igual("costo por unidad, no el total", reserva.costoUnitarioUsd, 2);
+igual("secos se agrupa", reserva.categoria, "Secos y granos");
 igual("días con el libre", reserva.dias.estado === "estimado" ? reserva.dias.dias : null, 2);
 igual("se acaba pronto", reserva.seAgotaPronto, true);
 
@@ -258,6 +264,55 @@ igual(
   null,
 );
 igual("ventana usada", VENTANA_CONSUMO_DIAS, 14);
+
+igual("lacteo", grupoCategoriaStock("lacteo"), "Lácteos");
+igual("lácteo con tilde", grupoCategoriaStock("LÁCTEO"), "Lácteos");
+igual("proteina", grupoCategoriaStock("proteina"), "Proteínas");
+igual("proteínas ya escrito", grupoCategoriaStock("Proteínas"), "Proteínas");
+igual("secos", grupoCategoriaStock("Secos"), "Secos y granos");
+igual("vegetales", grupoCategoriaStock("Vegetales"), "Vegetales y frutas");
+igual("frutas y vegetales", grupoCategoriaStock("Frutas & Vegetales"), "Vegetales y frutas");
+igual("café y té", grupoCategoriaStock("Café & Té"), "Bebidas");
+igual("desechables", grupoCategoriaStock("desechables"), "Limpieza y desechables");
+igual("limpieza", grupoCategoriaStock("Limpieza"), "Limpieza y desechables");
+igual("snacks cae en otros", grupoCategoriaStock("Snacks"), "Otros");
+igual("frase más larga", grupoCategoriaStock("lácteos y huevos"), "Lácteos");
+igual("vacío es sin categoría", grupoCategoriaStock("  "), "Sin categoría");
+igual("sin clasificar", grupoCategoriaStock("Sin clasificar"), "Sin categoría");
+igual("desconocido", grupoCategoriaStock("Congelados"), "Otros");
+igual("agrupar no cambia el texto", grupoCategoriaStock("Secos y granos"), "Secos y granos");
+
+const grupos = valorPorGrupo(vista.lineas);
+igual("el grupo con más plata va primero", grupos.map((g) => g.grupo), ["Proteínas", "Secos y granos"]);
+igual("valor proteínas", grupos[0].valorUsd, 24);
+igual("valor secos", grupos[1].valorUsd, 20);
+igual("porcentaje proteínas", grupos[0].porcentaje, (24 / 44) * 100);
+igual("porcentaje secos", grupos[1].porcentaje, (20 / 44) * 100);
+igual(
+  "la categoría abre sus insumos",
+  grupos[0].lineas.map((l) => l.id),
+  ["pollo"],
+);
+
+igual(
+  "pedir junta agotados y bajos",
+  losQueHayQuePedir(vista.lineas).map((l) => l.id),
+  ["vacio", "harina"],
+);
+igual(
+  "filtros usan el grupo, no el texto crudo",
+  filtrarLineas(vista.lineas, { texto: "", categoria: "Secos y granos", estado: "todos" }).map((l) => l.nombre).sort(),
+  ["Azúcar", "Harina", "Sal"],
+);
+igual(
+  "orden de grupos",
+  categoriasDe([
+    lineaStock({ ...base, id: "a", nombre: "A", stockTotal: 1, stockMinimo: 1, categoria: "snacks" }),
+    lineaStock({ ...base, id: "b", nombre: "B", stockTotal: 1, stockMinimo: 1, categoria: "lacteo" }),
+    lineaStock({ ...base, id: "c", nombre: "C", stockTotal: 1, stockMinimo: 1, categoria: "" }),
+  ]),
+  ["Lácteos", "Otros", "Sin categoría"],
+);
 
 if (fallas > 0) {
   console.error(`${fallas} prueba(s) fallaron.`);
