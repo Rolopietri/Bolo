@@ -1,6 +1,6 @@
 // Módulos del menú inicial
 // ═══════════════════════════════════════════════════════════════════
-// Bolo arranca con Cocina y Administración. Tareas, Eventos, Presupuestos y
+// Bolo arranca con Cocina, Administración y Mercado. Tareas, Eventos, Presupuestos y
 // WiFi vienen de la app interna de Quinta Mamá: se retiran del menú, pero sus
 // rutas, tablas y datos siguen intactos (se puede entrar por URL directa).
 //

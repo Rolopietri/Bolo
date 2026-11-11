@@ -17,9 +17,9 @@ function ok(nombre, real, esperado) {
 
 console.log("Módulos del menú");
 
-ok("sin variable → Cocina y Administración", modulosActivos(undefined), ["cocina", "administracion"]);
-ok("variable vacía → por defecto", modulosActivos(""), ["cocina", "administracion"]);
-ok("solo ids desconocidos → por defecto", modulosActivos("agenda, foo"), ["cocina", "administracion"]);
+ok("sin variable → Cocina, Administración y Mercado", modulosActivos(undefined), ["cocina", "administracion", "marketplace"]);
+ok("variable vacía → por defecto", modulosActivos(""), ["cocina", "administracion", "marketplace"]);
+ok("solo ids desconocidos → por defecto", modulosActivos("agenda, foo"), ["cocina", "administracion", "marketplace"]);
 ok(
   "respeta el orden del catálogo, no el de la variable",
   modulosActivos("wifi,cocina"),
@@ -60,7 +60,7 @@ ok("Planes de producción apagados por defecto", funcionActiva("planes", undefin
 ok("Planes apagados con el menú por defecto explícito", funcionActiva("planes", "cocina,administracion"), false);
 ok("Planes se reactivan con BOLO_MODULOS", funcionActiva("planes", "cocina, administracion, Planes"), true);
 ok("Planes no agrega tarjeta al inicio", modulosActivos("cocina,administracion,planes"), ["cocina", "administracion"]);
-ok("solo 'planes' no cambia el menú por defecto", modulosActivos("planes"), ["cocina", "administracion"]);
+ok("solo 'planes' no cambia el menú por defecto", modulosActivos("planes"), ["cocina", "administracion", "marketplace"]);
 ok("función desconocida → apagada", funcionActiva("agenda", "agenda"), false);
 
 if (fallos) {
