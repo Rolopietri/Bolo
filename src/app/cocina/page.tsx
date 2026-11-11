@@ -1,15 +1,32 @@
 import { Header } from "@/components/Header";
 import Link from "next/link";
+import type { ComponentType, SVGProps } from "react";
 import { funcionActiva } from "@/lib/modulos.mjs";
-import { ChevronIcon } from "@/components/icons";
+import {
+  BookIcon,
+  BoxIcon,
+  CalculatorIcon,
+  CalendarIcon,
+  CartIcon,
+  ChartIcon,
+  ChevronIcon,
+  ClipboardIcon,
+  PlusIcon,
+  ReceiptIcon,
+  TruckIcon,
+  UtensilsIcon,
+} from "@/components/icons";
 import { Hoy } from "./_Hoy";
 
 // El saludo y la fecha son de hoy (hora de Caracas). No se prerenderiza.
 export const dynamic = "force-dynamic";
 
+type Icono = ComponentType<SVGProps<SVGSVGElement>>;
+
 type Acceso = {
   href: string;
   label: string;
+  Icon: Icono;
   /** Función opcional: la pastilla solo aparece si está en BOLO_MODULOS. */
   funcion?: "planes";
   /** Ancla del cursor-guía del asistente. */
@@ -28,30 +45,31 @@ const GRUPOS: Grupo[] = [
   {
     titulo: "Inventario",
     accesos: [
-      { href: "/cocina/insumos", label: "Insumos" },
-      { href: "/cocina/inventario/stock", label: "Stock" },
-      { href: "/cocina/inventario/conteo", label: "Conteo" },
-      { href: "/cocina/proveedores", label: "Proveedores" },
-      { href: "/cocina/menaje", label: "Menaje" },
+      { href: "/cocina/insumos", label: "Insumos", Icon: BoxIcon },
+      { href: "/cocina/inventario/stock", label: "Stock", Icon: ChartIcon },
+      { href: "/cocina/inventario/conteo", label: "Conteo", Icon: ClipboardIcon },
+      { href: "/cocina/proveedores", label: "Proveedores", Icon: TruckIcon },
+      { href: "/cocina/menaje", label: "Menaje", Icon: UtensilsIcon },
     ],
   },
   {
     titulo: "Recetas",
     accesos: [
-      { href: "/cocina/recetas", label: "Recetas" },
-      { href: "/cocina/costeo", label: "Costeo" },
-      { href: "/cocina/plato", label: "Crear un plato", dataGuia: "guia-plato" },
+      { href: "/cocina/recetas", label: "Recetas", Icon: BookIcon },
+      { href: "/cocina/costeo", label: "Costeo", Icon: CalculatorIcon },
+      { href: "/cocina/plato", label: "Crear un plato", Icon: PlusIcon, dataGuia: "guia-plato" },
     ],
   },
   {
     titulo: "Operación",
     accesos: [
-      { href: "/cocina/compras", label: "Compras" },
-      { href: "/cocina/ventas", label: "Ventas" },
-      { href: "/cocina/pedido", label: "Pedido sugerido" },
+      { href: "/cocina/compras", label: "Compras", Icon: CartIcon },
+      { href: "/cocina/ventas", label: "Ventas", Icon: ReceiptIcon },
+      { href: "/cocina/pedido", label: "Pedido sugerido", Icon: CartIcon },
       {
         href: "/cocina/inventario/planes",
         label: "Planes de producción",
+        Icon: CalendarIcon,
         funcion: "planes",
       },
     ],
@@ -90,17 +108,21 @@ export default function CocinaHub() {
               >
                 <h3 className="font-cinzel text-xl text-cacao">{grupo.titulo}</h3>
                 <div className="mt-3 flex flex-wrap gap-2.5">
-                  {grupo.accesos.map((acceso) => (
-                    <Link
-                      key={acceso.href}
-                      href={acceso.href}
-                      data-guia={acceso.dataGuia}
-                      className="inline-flex items-center gap-1 rounded-full bg-white px-4 py-2 text-sm font-semibold text-cacao shadow-sm ring-1 ring-marfil transition-colors hover:text-terracotta hover:ring-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
-                    >
-                      {acceso.label}
-                      <ChevronIcon className="size-3.5 text-terracotta" />
-                    </Link>
-                  ))}
+                  {grupo.accesos.map((acceso) => {
+                    const Icon = acceso.Icon;
+                    return (
+                      <Link
+                        key={acceso.href}
+                        href={acceso.href}
+                        data-guia={acceso.dataGuia}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white px-4 py-2 text-sm font-semibold text-cacao shadow-sm ring-1 ring-marfil transition-colors hover:text-terracotta hover:ring-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta"
+                      >
+                        <Icon className="size-5 text-terracotta" />
+                        {acceso.label}
+                        <ChevronIcon className="size-3.5 text-terracotta" />
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             ))}
