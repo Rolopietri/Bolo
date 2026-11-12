@@ -230,8 +230,6 @@ export function InsumosClient({
   // Alta en 3 pasos: 1 ¿Qué es?, 2 ¿Cómo lo compras?, 3 ¿Cuánto tienes?, 4 resumen.
   const [paso, setPaso] = useState<1 | 2 | 3 | 4>(1);
   const [errorPaso, setErrorPaso] = useState<string | null>(null);
-  // null = aún no respondió; si dice que sí, aparece el % de pérdida.
-  const [pierdePeso, setPierdePeso] = useState<boolean | null>(null);
   // true si la persona eligió la categoría a mano (ya no se sugiere sola).
   const [categoriaTocada, setCategoriaTocada] = useState(false);
   // Reinicia el selector de presentación cuando la foto o "agregar otro"
@@ -388,7 +386,6 @@ export function InsumosClient({
   function resetForm() {
     setPaso(1);
     setErrorPaso(null);
-    setPierdePeso(null);
     setCategoriaTocada(false);
     setVersionPresentacion((v) => v + 1);
     setForm({ ...emptyForm });
@@ -867,11 +864,6 @@ export function InsumosClient({
     {
       label: "Aviso",
       valor: Number(form.stockMinimo) > 0 ? "al quedar " + cantidadTexto(form.stockMinimo) : "Sin aviso",
-      paso: 3,
-    },
-    {
-      label: "Pérdida al prepararlo",
-      valor: Number(form.mermaCoccionPorc) > 0 ? form.mermaCoccionPorc + " %" : "No",
       paso: 3,
     },
   ];
@@ -1518,32 +1510,6 @@ export function InsumosClient({
                 {campoStock}
                 {campoMinimo}
               </div>
-              <div className="text-sm text-cacao">
-                ¿Pierde peso al prepararlo?
-                <div className="mt-1 grid max-w-xs grid-cols-2 gap-2">
-                  {([
-                    [false, "No"],
-                    [true, "Sí"],
-                  ] as const).map(([v, label]) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() => {
-                        setPierdePeso(v);
-                        if (!v) setForm((f) => ({ ...f, mermaCoccionPorc: "" }));
-                      }}
-                      className={`min-h-10 rounded-lg text-sm ring-1 ${
-                        pierdePeso === v
-                          ? "bg-cacao text-white ring-cacao"
-                          : "bg-white text-cacao ring-marfil hover:bg-marfil-soft"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {pierdePeso && <div className="max-w-xs">{campoMerma}</div>}
               <details className="text-sm text-cacao" open={form.notas.trim() !== ""}>
                 <summary className="cursor-pointer text-cacao-soft">Notas (opcional)</summary>
                 <div className="mt-2">{campoNotas}</div>
