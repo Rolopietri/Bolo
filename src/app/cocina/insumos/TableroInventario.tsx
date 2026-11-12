@@ -34,19 +34,11 @@ import {
   CLAVE_TASA_HOY,
   CLAVE_TASA_PERSONALIZADA,
   bsDesdeUsd,
-  fechaTasaLegible,
   formatoMonto,
-  formatoTasa,
   tasaPersonalizada,
 } from "../_tasa";
 
 export type TasaInventario = { bsPorUsd: number; origen: OrigenTasaStock; fecha: string } | null;
-
-const ORIGEN_TASA: Record<OrigenTasaStock, string> = {
-  bcv: "dólar BCV",
-  promedio: "promedio",
-  personalizada: "tu tasa",
-};
 
 export function dinero(n: number): string {
   return `$${formatoMonto(n)}`;
@@ -171,19 +163,10 @@ export function TableroInventario({
         <article className="min-w-0 rounded-2xl bg-white p-5 ring-1 ring-marfil">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-cacao-soft">Valor en cámara</p>
           <p className="mt-1 font-cinzel text-3xl text-cacao">{dinero(resumen.valorUsd)}</p>
-          {bs != null && tasa ? (
-            <p className="mt-2 text-sm text-cacao-soft">
-              Bs {formatoMonto(bs)} · {ORIGEN_TASA[tasa.origen]}
-              {tasa.origen !== "personalizada" && tasa.fecha ? ` del ${fechaTasaLegible(tasa.fecha)}` : ""}
-              {tasa.origen !== "personalizada" ? ` · Bs ${formatoTasa(tasa.bsPorUsd)}` : ""}
-            </p>
-          ) : (
-            <p className="mt-2 text-sm text-cacao-soft">
-              Sin tasa para verlo en bolívares.{" "}
-              <Link href="/cocina" className="underline hover:text-terracotta">
-                La tasa está en Hoy
-              </Link>
-              .
+          {/* Solo el monto en bolívares: la tasa se elige y se ve en Hoy. */}
+          {bs != null && (
+            <p className="mt-1 text-sm text-cacao-soft" title="A la tasa elegida en Hoy">
+              ≈ Bs {formatoMonto(bs)}
             </p>
           )}
           {resumen.sinCosto > 0 && (
@@ -199,7 +182,7 @@ export function TableroInventario({
             aria-expanded={verValor}
             className="mt-4 flex w-full items-center justify-center gap-1 rounded-xl bg-marfil-soft px-3 py-2 text-sm font-semibold text-cacao ring-1 ring-marfil hover:bg-marfil"
           >
-            {verValor ? "Ocultar" : "Dónde está el dinero"}
+            {verValor ? "Ocultar desglose" : "Desglose por categoría"}
             <ChevronIcon className={`size-4 ${verValor ? "-rotate-90" : "rotate-90"}`} />
           </button>
           {verValor && (
