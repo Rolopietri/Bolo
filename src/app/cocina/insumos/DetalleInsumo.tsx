@@ -25,11 +25,14 @@ export function DetalleInsumo({
   onClose,
   onPerdida,
   onEditar,
+  onDesactivar,
 }: {
   insumo: Insumo;
   onClose: () => void;
   onPerdida: () => void;
   onEditar: () => void;
+  /** Oculta el insumo del inventario sin borrarlo (se puede reactivar). */
+  onDesactivar?: () => void;
 }) {
   const [seccion, setSeccion] = useState<Seccion>("uso");
 
@@ -112,6 +115,18 @@ export function DetalleInsumo({
           {seccion === "uso" && <UsoDiarioClient insumoInicial={insumo.id} fijo />}
           {seccion === "perdidas" && <MermasClient insumoId={insumo.id} />}
           {seccion === "cambios" && <AuditoriaClient insumoInicial={insumo.id} fijo />}
+          {onDesactivar && (
+            <div className="mt-8 border-t border-marfil pt-4">
+              <button
+                type="button"
+                onClick={onDesactivar}
+                className="text-[11px] uppercase tracking-widest text-cacao-soft hover:text-terracotta"
+                title="Ocultarlo del inventario sin borrar su historial. Se puede reactivar desde Más → Ver inactivos."
+              >
+                Desactivar este insumo
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

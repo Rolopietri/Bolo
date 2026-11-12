@@ -38,8 +38,7 @@ export const GRUPOS_HOME = [
     id: "inventario",
     titulo: "Inventario",
     accesos: [
-      { id: "insumos", href: "/cocina/insumos", label: "Insumos" },
-      { id: "stock", href: "/cocina/inventario/stock", label: "Stock", dataGuia: "accion-stock" },
+      { id: "stock", href: "/cocina/insumos", label: "Inventario", dataGuia: "accion-stock" },
       { id: "uso", href: "/cocina/insumos?vista=uso", label: "Uso diario" },
       { id: "proveedores", href: "/cocina/proveedores", label: "Proveedores" },
       { id: "menaje", href: "/cocina/menaje", label: "Menaje" },

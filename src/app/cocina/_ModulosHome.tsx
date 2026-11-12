@@ -9,7 +9,6 @@ import {
   CalculatorIcon,
   CalendarIcon,
   CartIcon,
-  ChartIcon,
   ChevronIcon,
   PlusIcon,
   ReceiptIcon,
@@ -31,7 +30,7 @@ const SLOP_PX = 12;
 type Icono = ComponentType<SVGProps<SVGSVGElement>>;
 const ICONOS: Record<string, Icono> = {
   insumos: BoxIcon,
-  stock: ChartIcon,
+  stock: BoxIcon,
   uso: CalendarIcon,
   proveedores: TruckIcon,
   menaje: UtensilsIcon,

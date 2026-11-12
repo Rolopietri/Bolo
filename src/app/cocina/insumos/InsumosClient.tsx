@@ -34,13 +34,30 @@ import {
   opcionesCantidad,
   precioLegible,
 } from "@/lib/units";
-import { stockLibre } from "@/lib/types";
-import { normalizarBusqueda } from "@/lib/text";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { WarningIcon, CameraIcon, ImageIcon } from "@/components/icons";
+import { WarningIcon, CameraIcon, ImageIcon, ChevronIcon, SearchIcon } from "@/components/icons";
 import { CamaraCaptura } from "./_CamaraCaptura";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { DetalleInsumo } from "./DetalleInsumo";
+import {
+  PastillaEstado,
+  TableroInventario,
+  cargarConsumoYTasa,
+  type TasaInventario,
+} from "./TableroInventario";
+import {
+  armarStock,
+  categoriaVisible,
+  categoriasDe,
+  filtrarLineas,
+  ordenarLineas,
+  textoDias,
+  valorPorGrupo,
+  type ConsumoInsumo,
+  type FiltroEstadoStock,
+  type LineaStock,
+  type OrdenStock,
+} from "@/lib/stock-liviano";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
@@ -144,18 +161,35 @@ async function archivoABase64(
   return { data: dataUrl.split(",")[1] ?? "", tipo: "image/jpeg" };
 }
 
+/** Cuántos insumos se ven antes de "Ver todos" (sin búsqueda ni filtros). */
+const TOPE_LISTA = 8;
+
+const ESTADOS_LISTA: { id: FiltroEstadoStock; label: string }[] = [
+  { id: "pronto", label: "Se acaba pronto" },
+  { id: "agotado", label: "Agotado" },
+  { id: "bajo", label: "Bajo mínimo" },
+  { id: "ok", label: "En orden" },
+  { id: "sin_minimo", label: "Sin mínimo" },
+];
+
+const ORDENES_LISTA: { id: OrdenStock; label: string }[] = [
+  { id: "pronto", label: "Se acaba pronto" },
+  { id: "valor", label: "Mayor valor" },
+  { id: "nombre", label: "Nombre" },
+  { id: "estado", label: "Estado" },
+];
+
 export function InsumosClient({
   insumoInicial = null,
-  onVerAlertas,
-  onVerMermas,
-  onConteoAlertas,
+  filtroInicial = null,
+  onVerGeneral,
 }: {
-  /** Si viene de Stock, desplaza la lista hasta esta ficha. */
+  /** Desplaza la lista hasta esta ficha (enlaces desde otras pantallas). */
   insumoInicial?: string | null;
-  onVerAlertas?: () => void;
-  onVerMermas?: () => void;
-  /** Reporta agotados + bajos (para el contador de la pestaña Alertas). */
-  onConteoAlertas?: (n: number) => void;
+  /** Abre la lista ya filtrada (ej. "pedir" desde un enlace de alertas). */
+  filtroInicial?: "pedir" | null;
+  /** Abre una vista de todos los insumos (uso diario, pérdidas, cambios). */
+  onVerGeneral?: (v: "uso" | "mermas" | "auditoria") => void;
 } = {}) {
   const [items, setItems] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -174,8 +208,19 @@ export function InsumosClient({
   /** Error al CARGAR la pantalla (distinto de los errores de guardar/borrar). */
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
-  const [filterCat, setFilterCat] = useState<string>("todas");
   const [search, setSearch] = useState("");
+  // Filtros de la lista (plegados en "Filtros"). "pedir" = agotados + bajos.
+  const [categoria, setCategoria] = useState("todas");
+  const [estado, setEstado] = useState<FiltroEstadoStock | "pedir">(filtroInicial ?? "todos");
+  const [orden, setOrden] = useState<OrdenStock>("pronto");
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  const [listaAbierta, setListaAbierta] = useState(false);
+  const [masAbierto, setMasAbierto] = useState(false);
+  const [verValor, setVerValor] = useState(false);
+  // Consumo reciente (ventas + pérdidas) y tasa: llegan después del catálogo.
+  const [consumo, setConsumo] = useState<Map<string, ConsumoInsumo> | null>(null);
+  const [tasa, setTasa] = useState<TasaInventario>(null);
+  const listaRef = useRef<HTMLElement | null>(null);
   const [adding, setAdding] = useState(false);
   const [importando, setImportando] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -220,6 +265,17 @@ export function InsumosClient({
         if (!cancelled) {
           setItems(ins);
           setProveedores(prov);
+          // "Cuánto me dura" usa las ventas recientes: se calcula aparte para
+          // no demorar la lista.
+          cargarConsumoYTasa(ins)
+            .then((r) => {
+              if (cancelled) return;
+              setConsumo(r.consumo);
+              setTasa(r.tasa);
+            })
+            .catch(() => {
+              if (!cancelled) setConsumo(new Map());
+            });
           if (
             insumoInicial &&
             ins.some((i) => i.id === insumoInicial && !i.activo)
@@ -599,46 +655,79 @@ export function InsumosClient({
     }
   }
 
-  const filtered = useMemo(() => {
-    const q = normalizarBusqueda(search.trim());
-    return items.filter(
-      (i) =>
-        (showInactivos || i.activo) &&
-        (filterCat === "todas" ||
-          (filterCat === "__sin__"
-            ? !i.categoriaCompra?.trim()
-            : i.categoriaCompra === filterCat)) &&
-        (q === "" || normalizarBusqueda(i.nombre).includes(q)),
+  const inactivos = useMemo(
+    () => items.filter((i) => !i.activo).sort((a, b) => a.nombre.localeCompare(b.nombre, "es")),
+    [items],
+  );
+  const itemsPorId = useMemo(() => new Map(items.map((i) => [i.id, i] as const)), [items]);
+
+  // Una sola fuente para estado, días y valor de cada insumo activo.
+  const { lineas, resumen } = useMemo(
+    () =>
+      armarStock(
+        items.map((i) => ({
+          id: i.id,
+          nombre: i.nombre,
+          activo: i.activo,
+          categoria: categoriaVisible(i.categoriaCompra),
+          unidadBase: i.unidadBase,
+          stockTotal: i.stockTotal,
+          stockComprometido: i.stockComprometido,
+          stockMinimo: i.stockMinimo,
+          precioBaseUsd: i.precioBaseUsd,
+          precioCompraUsd: i.precioCompraUsd,
+          cantidadPorCompra: i.cantidadPorCompra,
+        })),
+        consumo ?? new Map(),
+      ),
+    [items, consumo],
+  );
+  const categoriasLista = useMemo(() => categoriasDe(lineas), [lineas]);
+  const gruposValor = useMemo(() => valorPorGrupo(lineas), [lineas]);
+  const visibles = useMemo(() => {
+    const base =
+      estado === "pedir"
+        ? filtrarLineas(lineas, { texto: search, categoria, estado: "todos" }).filter(
+            (l) => l.estado === "agotado" || l.estado === "bajo",
+          )
+        : filtrarLineas(lineas, { texto: search, categoria, estado });
+    return ordenarLineas(base, orden);
+  }, [lineas, search, categoria, estado, orden]);
+  const filtrosActivos = [
+    estado !== "todos" && {
+      id: "estado",
+      label: estado === "pedir" ? "Para pedir" : (ESTADOS_LISTA.find((e) => e.id === estado)?.label ?? estado),
+      quitar: () => setEstado("todos"),
+    },
+    categoria !== "todas" && {
+      id: "categoria",
+      label: categoria === "__sin__" ? "Sin categoría" : categoria,
+      quitar: () => setCategoria("todas"),
+    },
+    orden !== "pronto" && {
+      id: "orden",
+      label: `Orden: ${ORDENES_LISTA.find((o) => o.id === orden)?.label ?? orden}`,
+      quitar: () => setOrden("pronto"),
+    },
+  ].filter((f): f is { id: string; label: string; quitar: () => void } => Boolean(f));
+  // Con búsqueda o filtros se ve todo; sin ellos, los primeros y "Ver todos".
+  const filtrando = search.trim() !== "" || filtrosActivos.length > 0;
+  const mostradas = listaAbierta || filtrando ? visibles : visibles.slice(0, TOPE_LISTA);
+  const hayMas = !filtrando && visibles.length > TOPE_LISTA;
+  const hayStockSinDias =
+    consumo !== null && resumen.conConsumo === 0 && lineas.some((l) => l.libre > 0);
+
+  // Desde el tablero: filtra la lista de abajo y la lleva a la vista.
+  function filtrarDesdeTablero(f: { estado?: "pronto" | "pedir"; categoria?: string }) {
+    setEstado(f.estado ?? "todos");
+    setCategoria(f.categoria ?? "todas");
+    setOrden(f.categoria ? "valor" : "pronto");
+    setListaAbierta(false);
+    requestAnimationFrame(() =>
+      listaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
     );
-  }, [items, filterCat, search, showInactivos]);
+  }
 
-  const inactivosCount = useMemo(
-    () => items.filter((i) => !i.activo).length,
-    [items],
-  );
-
-  const grouped = useMemo(() => {
-    const map = new Map<string, Insumo[]>();
-    filtered.forEach((i) => {
-      const k = i.categoriaCompra?.trim() || "Sin categoría";
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(i);
-    });
-    // Orden estable (alfabético, "Sin categoría" al final) para que los
-    // botones no cambien de lugar después de editar o comprar.
-    return Array.from(map.entries())
-      .map(([k, ins]) => [k, [...ins].sort((a, b) => a.nombre.localeCompare(b.nombre, "es"))] as const)
-      .sort(([a], [b]) =>
-        a === "Sin categoría" ? 1 : b === "Sin categoría" ? -1 : a.localeCompare(b, "es"),
-      );
-  }, [filtered]);
-
-  // Categorías que YA existen en el catálogo (para los pills de filtro). Usa la
-  // categoría de INSUMO (categoria_compra), no la de ventas.
-  const haySinCat = useMemo(
-    () => items.some((i) => i.activo && !i.categoriaCompra?.trim()),
-    [items],
-  );
   const categoriasReales = useMemo(() => {
     const set = new Set<string>();
     items.forEach((i) => i.categoriaCompra?.trim() && set.add(i.categoriaCompra));
@@ -654,154 +743,218 @@ export function InsumosClient({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [categoriasInsumo, categoriasReales]);
 
-  // Alertas de stock (sobre stock libre, igual que la pestaña Alertas).
-  const alertas = useMemo(() => {
-    let agotados = 0;
-    let bajos = 0;
-    items.forEach((i) => {
-      if (!i.activo || !i.stockMinimo) return;
-      const libre = stockLibre(i);
-      if (libre <= 0) agotados++;
-      else if (libre < i.stockMinimo) bajos++;
-    });
-    return { agotados, bajos };
-  }, [items]);
-
-  useEffect(() => {
-    if (!loading && !errorCarga)
-      onConteoAlertas?.(alertas.agotados + alertas.bajos);
-  }, [loading, errorCarga, alertas, onConteoAlertas]);
-
   return (
     <div>
       {error && <ErrorBanner className="mb-4">{error}</ErrorBanner>}
 
-      {!loading && alertas.agotados + alertas.bajos > 0 && (
-        <button
-          type="button"
-          onClick={onVerAlertas}
-          className="mb-4 w-full flex flex-wrap items-center justify-between gap-2 rounded-xl bg-red-50/60 ring-1 ring-red-200 px-4 py-2.5 text-left text-sm hover:bg-red-50"
-        >
-          <span className="flex flex-wrap items-center gap-3 text-cacao">
-            {alertas.agotados > 0 && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
-                {alertas.agotados} agotado{alertas.agotados === 1 ? "" : "s"}
-              </span>
-            )}
-            {alertas.bajos > 0 && (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="inline-block h-2 w-2 rounded-full bg-amber-500" />
-                {alertas.bajos} con stock bajo
-              </span>
-            )}
-          </span>
-          <span className="text-xs uppercase tracking-widest text-terracotta">
-            Ver alertas →
-          </span>
-        </button>
-      )}
-
       {avisoPerdida && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-marfil-soft ring-1 ring-marfil px-4 py-2.5 text-sm text-cacao">
           <span>Pérdida registrada y descontada del stock.</span>
-          <span className="flex items-center gap-4 text-xs uppercase tracking-widest">
-            <button type="button" onClick={onVerMermas} className="text-terracotta hover:underline">
-              Ver en Mermas →
-            </button>
-            <button type="button" onClick={() => setAvisoPerdida(false)} className="text-cacao-mute hover:text-cacao" aria-label="Cerrar aviso">
-              ✕
-            </button>
-          </span>
+          <button type="button" onClick={() => setAvisoPerdida(false)} className="text-cacao-mute hover:text-cacao" aria-label="Cerrar aviso">
+            ✕
+          </button>
         </div>
       )}
 
-      <UnitCalculator className="mb-5" />
+      {/* ── ¿Cómo estoy? ─────────────────────────────────────── */}
+      {!loading && !errorCarga && lineas.length > 0 && (
+        <div className="mb-8">
+          <TableroInventario
+            resumen={resumen}
+            grupos={gruposValor}
+            tasa={tasa}
+            consumoListo={consumo !== null}
+            hayStockSinDias={hayStockSinDias}
+            verValor={verValor}
+            onVerValor={() => setVerValor((v) => !v)}
+            onFiltrar={filtrarDesdeTablero}
+          />
+        </div>
+      )}
 
-      {/* Buscador */}
-      <div className="mb-3 flex items-center gap-2">
-        <input
-          type="text"
-          placeholder="Buscar insumo por nombre..."
-          aria-label="Buscar insumo"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="flex-1 rounded-lg ring-1 ring-marfil px-3 py-2"
-        />
-      </div>
+      {/* ── ¿Qué hago? ───────────────────────────────────────── */}
+      <section ref={listaRef} className="scroll-mt-24 space-y-3 mb-5" aria-label="Insumos">
+        <div className="flex items-end justify-between gap-3">
+          <h2 className="font-display text-xs uppercase tracking-[0.3em] text-cacao">Insumos</h2>
+          {lineas.length > 0 && (
+            <p className="text-xs text-cacao-soft">
+              {mostradas.length < visibles.length
+                ? `Mostrando ${mostradas.length} de ${visibles.length}`
+                : `${visibles.length} ${visibles.length === 1 ? "insumo" : "insumos"}`}
+            </p>
+          )}
+        </div>
 
-      {/* Filtros */}
-      <div className="flex flex-wrap gap-2 mb-5">
-        <button
-          onClick={() => setFilterCat("todas")}
-          className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-            filterCat === "todas"
-              ? "bg-cacao text-white ring-cacao"
-              : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
-          }`}
-        >
-          Todas
-        </button>
-        {categoriasReales.map((c) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex min-w-[12rem] flex-1 items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-marfil">
+            <SearchIcon className="size-4 text-cacao-mute" />
+            <input
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar insumo"
+              aria-label="Buscar insumo"
+              className="w-full bg-transparent text-sm text-cacao outline-none placeholder:text-cacao-mute"
+            />
+          </label>
           <button
-            key={c}
-            onClick={() => setFilterCat(c)}
-            className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-              filterCat === c
+            type="button"
+            onClick={() => setFiltrosAbiertos((v) => !v)}
+            aria-expanded={filtrosAbiertos}
+            className={`inline-flex min-h-10 items-center gap-1.5 rounded-lg px-3 text-xs uppercase tracking-widest ring-1 ${
+              filtrosAbiertos || filtrosActivos.length > 0
                 ? "bg-cacao text-white ring-cacao"
                 : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
             }`}
           >
-            {c}
+            Filtros
+            {filtrosActivos.length > 0 && (
+              <span className="rounded-full bg-white/25 px-1.5 text-[10px] tracking-normal">{filtrosActivos.length}</span>
+            )}
           </button>
-        ))}
-        {haySinCat && (
-          <button
-            onClick={() => setFilterCat("__sin__")}
-            className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-              filterCat === "__sin__"
-                ? "bg-cacao text-white ring-cacao"
-                : "bg-amber-50 text-amber-800 ring-amber-300 hover:bg-amber-100"
-            }`}
-          >
-            Sin categoría
-          </button>
+          {!adding && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="inline-flex min-h-10 items-center rounded-lg bg-terracotta px-4 text-xs font-semibold uppercase tracking-widest text-white hover:bg-terracotta-deep"
+            >
+              + Agregar
+            </button>
+          )}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setMasAbierto((v) => !v)}
+              aria-expanded={masAbierto}
+              aria-haspopup="menu"
+              className="inline-flex min-h-10 items-center gap-1 rounded-lg bg-white px-3 text-xs uppercase tracking-widest text-cacao-soft ring-1 ring-marfil hover:bg-marfil-soft"
+            >
+              Más
+              <ChevronIcon className={`size-3.5 ${masAbierto ? "-rotate-90" : "rotate-90"}`} />
+            </button>
+            {masAbierto && (
+              <button
+                type="button"
+                aria-label="Cerrar menú"
+                tabIndex={-1}
+                onClick={() => setMasAbierto(false)}
+                className="fixed inset-0 z-10 cursor-default"
+              />
+            )}
+            {masAbierto && (
+              <ul
+                role="menu"
+                className="absolute right-0 z-20 mt-1 w-60 overflow-hidden rounded-xl bg-white py-1 text-sm shadow-lg ring-1 ring-marfil"
+                onClick={() => setMasAbierto(false)}
+              >
+                {[
+                  { label: "Importar insumos (Excel)", accion: () => setImportando(true) },
+                  { label: "Uso diario de todos", accion: () => onVerGeneral?.("uso") },
+                  { label: "Pérdidas de todos", accion: () => onVerGeneral?.("mermas") },
+                  { label: "Cambios de stock", accion: () => onVerGeneral?.("auditoria") },
+                  ...(inactivos.length > 0
+                    ? [
+                        {
+                          label: `${showInactivos ? "Ocultar" : "Ver"} inactivos (${inactivos.length})`,
+                          accion: () => setShowInactivos((v) => !v),
+                        },
+                      ]
+                    : []),
+                ].map((op) => (
+                  <li key={op.label}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={op.accion}
+                      className="block w-full px-4 py-2.5 text-left text-cacao hover:bg-marfil-soft"
+                    >
+                      {op.label}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        {!filtrosAbiertos && filtrosActivos.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {filtrosActivos.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={f.quitar}
+                className="inline-flex items-center gap-1 rounded-full bg-marfil-soft px-3 py-1 text-xs text-cacao ring-1 ring-marfil hover:ring-terracotta/40"
+                title="Quitar este filtro"
+              >
+                {f.label}
+                <span aria-hidden="true" className="text-cacao-mute">✕</span>
+              </button>
+            ))}
+          </div>
         )}
-      </div>
 
-      {inactivosCount > 0 && (
-        <div className="mb-5 -mt-2">
-          <button
-            onClick={() => setShowInactivos((v) => !v)}
-            className={`px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${
-              showInactivos
-                ? "bg-cacao text-white ring-cacao"
-                : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
-            }`}
-            title="Mostrar u ocultar los insumos desactivados"
-          >
-            {showInactivos ? "Ocultar inactivos" : "Ver inactivos"} (
-            {inactivosCount})
-          </button>
-        </div>
-      )}
-
-      {!adding && (
-        <div className="mb-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <button
-            onClick={() => setImportando(true)}
-            className="w-full rounded-xl bg-terracotta text-white py-3 font-bold hover:bg-terracotta-deep transition-colors"
-          >
-            Importar insumos
-          </button>
-          <button
-            onClick={() => setAdding(true)}
-            className="w-full rounded-xl ring-1 ring-marfil bg-white text-cacao py-3 font-bold hover:bg-marfil-soft transition-colors"
-          >
-            + Agregar a mano
-          </button>
-        </div>
-      )}
+        {filtrosAbiertos && (
+          <div className="rounded-xl bg-marfil-soft/60 p-3 ring-1 ring-marfil">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="text-[10px] uppercase tracking-widest text-cacao-soft">
+                Estado
+                <select
+                  value={estado}
+                  onChange={(e) => setEstado(e.target.value as FiltroEstadoStock | "pedir")}
+                  className="mt-1 block w-full rounded-lg bg-white px-3 py-2 text-sm normal-case tracking-normal text-cacao ring-1 ring-marfil"
+                >
+                  <option value="todos">Todos</option>
+                  <option value="pedir">Para pedir</option>
+                  {ESTADOS_LISTA.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[10px] uppercase tracking-widest text-cacao-soft">
+                Categoría
+                <select
+                  value={categoria}
+                  onChange={(e) => setCategoria(e.target.value)}
+                  className="mt-1 block w-full rounded-lg bg-white px-3 py-2 text-sm normal-case tracking-normal text-cacao ring-1 ring-marfil"
+                >
+                  <option value="todas">Todas</option>
+                  {categoriasLista.map((c) => (
+                    <option key={c} value={c === "Sin categoría" ? "__sin__" : c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[10px] uppercase tracking-widest text-cacao-soft">
+                Ordenar por
+                <select
+                  value={orden}
+                  onChange={(e) => setOrden(e.target.value as OrdenStock)}
+                  className="mt-1 block w-full rounded-lg bg-white px-3 py-2 text-sm normal-case tracking-normal text-cacao ring-1 ring-marfil"
+                >
+                  {ORDENES_LISTA.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {filtrosActivos.length > 0 && (
+              <button
+                type="button"
+                onClick={() => filtrosActivos.forEach((f) => f.quitar())}
+                className="mt-3 text-[11px] uppercase tracking-widest text-terracotta hover:underline"
+              >
+                Limpiar filtros
+              </button>
+            )}
+          </div>
+        )}
+      </section>
 
       {importando && (
         <Importador
@@ -822,6 +975,7 @@ export function InsumosClient({
           <h2 className="font-display text-sm tracking-[0.2em] uppercase text-cacao">
             {editingId ? "Editar insumo" : "Nuevo insumo"}
           </h2>
+          <UnitCalculator />
           {!editingId && (
             <div className="flex flex-col gap-1">
               <div className="flex flex-wrap gap-2">
@@ -1140,7 +1294,7 @@ export function InsumosClient({
 
       {loading ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
-          Cargando catálogo...
+          Cargando inventario…
         </div>
       ) : errorCarga ? (
         <ErrorCarga
@@ -1151,181 +1305,82 @@ export function InsumosClient({
       ) : items.length === 0 ? (
         <EstadoVacioCocina
           titulo="Todavía no hay insumos"
-          beneficio="Cada ingrediente lleva su precio y su stock. Así las recetas calculan el costo real y las alertas avisan cuando falta."
+          beneficio="Cada ingrediente lleva su precio y su stock. Así las recetas calculan el costo real y aquí ves qué se acaba y qué pedir."
           cta="Agregar insumo"
           onCta={() => setAdding(true)}
           onDemo={reintentarCarga}
         />
-      ) : grouped.length === 0 ? (
+      ) : visibles.length === 0 ? (
         <div className="rounded-2xl bg-white ring-1 ring-marfil p-8 text-center text-cacao-soft">
-          Ningún insumo coincide con estos filtros.
+          {lineas.length === 0
+            ? "No hay insumos activos."
+            : "Ningún insumo coincide con la búsqueda o los filtros."}
         </div>
       ) : (
-        <div className="space-y-6">
-          {grouped.map(([cat, ins]) => (
-            <section
-              key={cat}
-              className="rounded-2xl bg-white ring-1 ring-marfil p-5"
+        <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-marfil">
+          <ul className="divide-y divide-marfil">
+            {mostradas.map((l) => {
+              const i = itemsPorId.get(l.id);
+              return i ? (
+                <FilaInsumo
+                  key={l.id}
+                  linea={l}
+                  insumo={i}
+                  hoy={hoy}
+                  consumoListo={consumo !== null}
+                  onDetalle={() => setDetalleInsumo(i)}
+                  onPerdida={() => setPerdidaInsumo(i)}
+                  onEditar={() => startEdit(i)}
+                  onPrecio={(upd) => setItems((prev) => prev.map((x) => (x.id === upd.id ? upd : x)))}
+                  onError={setError}
+                />
+              ) : null;
+            })}
+          </ul>
+          {hayMas && (
+            <button
+              type="button"
+              onClick={() => setListaAbierta((v) => !v)}
+              aria-expanded={listaAbierta}
+              className="flex w-full items-center justify-center gap-1 border-t border-marfil px-4 py-3 text-sm font-semibold text-cacao hover:bg-marfil-soft"
             >
-              <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute mb-3">
-                {cat}
-              </h2>
-              <ul className="divide-y divide-marfil">
-                {ins.map((i) => {
-                  // El badge "bajo" compara contra stockLibre, no contra stockTotal
-                  // (es lo que realmente está disponible para producir).
-                  const libre = stockLibre(i);
-                  const lowStock =
-                    i.stockMinimo !== null &&
-                    i.stockMinimo > 0 &&
-                    libre < i.stockMinimo;
-                  // Detección automática de problema de unidades
-                  const problemaUnidades = detectarInsumoConProblema(
-                    i.unidadCompra,
-                    i.unidadBase,
-                    i.cantidadPorCompra,
-                  );
-                  return (
-                    <li
-                      key={i.id}
-                      data-insumo-id={i.id}
-                      className="py-3 grid grid-cols-12 gap-2 items-start rounded-lg transition-shadow"
-                    >
-                      <div className="col-span-12 sm:col-span-5">
-                        <div className="text-cacao font-medium">
-                          <button
-                            type="button"
-                            onClick={() => setDetalleInsumo(i)}
-                            className="text-left hover:text-terracotta hover:underline"
-                            title="Ver el detalle de este insumo"
-                          >
-                            {i.nombre}
-                          </button>
-                          {!i.activo && (
-                            <span className="ml-2 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-marfil-light text-cacao-soft ring-1 ring-marfil">
-                              Inactivo
-                            </span>
-                          )}
-                          {lowStock && i.activo && (
-                            <span className="ml-2 text-[10px] uppercase tracking-widest text-terracotta">
-                              · stock bajo
-                            </span>
-                          )}
-                          {problemaUnidades && (
-                            <button
-                              type="button"
-                              onClick={() => startEdit(i)}
-                              title={`Revisar unidades: 1 ${canonica(i.unidadCompra)} debería ser ${formatN(problemaUnidades.esperado)} ${canonica(i.unidadBase)} (tiene ${formatN(i.cantidadPorCompra)})`}
-                              className="ml-2 text-[10px] uppercase tracking-widest text-amber-800 bg-amber-50 ring-1 ring-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100"
-                            >
-                              <WarningIcon className="inline size-3 align-[-0.1em] mr-0.5" />
-                              revisar unidades
-                            </button>
-                          )}
-                        </div>
-                        <div className="text-xs text-cacao-mute mt-0.5">
-                          {etiquetaPresentacion(i)}
-                        </div>
-                      </div>
-                      <div className="col-span-6 sm:col-span-3">
-                        <div className="text-xs text-cacao-mute uppercase tracking-widest">
-                          Precio
-                        </div>
-                        <PrecioCelda
-                          insumo={i}
-                          hoy={hoy}
-                          onRefreshed={(upd) =>
-                            setItems((prev) =>
-                              prev.map((x) => (x.id === upd.id ? upd : x)),
-                            )
-                          }
-                          onError={setError}
-                        />
-                      </div>
-                      <div className="col-span-6 sm:col-span-2">
-                        <div className="text-xs text-cacao-mute uppercase tracking-widest">
-                          {i.stockComprometido > 0 ? "Stock libre" : "Stock"}
-                        </div>
-                        <div
-                          className={`text-sm ${lowStock ? "text-terracotta font-medium" : "text-cacao"}`}
-                        >
-                          {displayCantidad(libre, i.unidadBase)}
-                        </div>
-                        {i.stockComprometido > 0 && (
-                          <div className="text-xs text-cacao-mute">
-                            {displayCantidad(i.stockTotal, i.unidadBase)} total ·{" "}
-                            {displayCantidad(i.stockComprometido, i.unidadBase)} comp.
-                          </div>
-                        )}
-                        {i.stockMinimo !== null && i.stockMinimo > 0 && (
-                          <div className="text-xs text-cacao-mute">
-                            mín. {displayCantidad(i.stockMinimo, i.unidadBase)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="col-span-12 sm:col-span-2 flex flex-wrap sm:justify-end gap-2 text-[11px] uppercase tracking-widest">
-                        {i.activo ? (
-                          <>
-                            <button
-                              onClick={() => setPerdidaInsumo(i)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
-                              title="Registrar pérdida, merma o mal estado"
-                            >
-                              Pérdida
-                            </button>
-                            <button
-                              onClick={() => startEdit(i)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => setDetalleInsumo(i)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
-                              title="Uso diario, pérdidas y cambios de stock de este insumo"
-                            >
-                              Detalle
-                            </button>
-                            <button
-                              onClick={() => setPendienteDesactivar(i.id)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
-                              title="Ocultar del catálogo sin borrar (conserva el histórico). Se puede reactivar."
-                            >
-                              Desactivar
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              onClick={() => startEdit(i)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
-                            >
-                              Editar
-                            </button>
-                            <button
-                              onClick={() => setActivo(i.id, true)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao font-medium"
-                              title="Volver a activar este insumo"
-                            >
-                              Reactivar
-                            </button>
-                            <button
-                              onClick={() => setPendienteBorrar(i.id)}
-                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
-                              title="Borrar definitivamente del catálogo (no se puede deshacer)"
-                            >
-                              Borrar
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ))}
+              {listaAbierta ? "Ver menos" : `Ver todos (${visibles.length})`}
+              <ChevronIcon className={`size-4 ${listaAbierta ? "-rotate-90" : "rotate-90"}`} />
+            </button>
+          )}
         </div>
+      )}
+
+      {showInactivos && inactivos.length > 0 && (
+        <section className="mt-6" aria-label="Insumos inactivos">
+          <h3 className="font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">
+            Inactivos
+          </h3>
+          <ul className="mt-2 divide-y divide-marfil border-y border-marfil">
+            {inactivos.map((i) => (
+              <li key={i.id} data-insumo-id={i.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+                <span className="text-cacao-soft">{i.nombre}</span>
+                <span className="flex gap-2 text-[11px] uppercase tracking-widest">
+                  <button
+                    type="button"
+                    onClick={() => setActivo(i.id, true)}
+                    className="inline-flex min-h-10 items-center rounded-full bg-white px-3 font-medium text-cacao ring-1 ring-marfil hover:bg-marfil-soft"
+                  >
+                    Reactivar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPendienteBorrar(i.id)}
+                    className="inline-flex min-h-10 items-center rounded-full bg-white px-3 text-cacao-soft ring-1 ring-marfil hover:text-terracotta"
+                    title="Borrar definitivamente (no se puede deshacer)"
+                  >
+                    Borrar
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       <ConfirmDialog
@@ -1375,6 +1430,10 @@ export function InsumosClient({
             startEdit(detalleInsumo);
             setDetalleInsumo(null);
           }}
+          onDesactivar={() => {
+            setPendienteDesactivar(detalleInsumo.id);
+            setDetalleInsumo(null);
+          }}
         />
       )}
 
@@ -1389,11 +1448,120 @@ export function InsumosClient({
                 x.id === insumoId ? { ...x, stockTotal: nuevoStockTotal } : x,
               ),
             );
-            if (onVerMermas) setAvisoPerdida(true);
+            setAvisoPerdida(true);
           }}
         />
       )}
     </div>
+  );
+}
+
+/** Una fila de la lista: estado, cuánto queda, cuánto dura y precio. Cada dato
+ *  aparece una sola vez; el resto (uso diario, pérdidas, cambios) vive en el
+ *  Detalle. */
+function FilaInsumo({
+  linea: l,
+  insumo: i,
+  hoy,
+  consumoListo,
+  onDetalle,
+  onPerdida,
+  onEditar,
+  onPrecio,
+  onError,
+}: {
+  linea: LineaStock;
+  insumo: Insumo;
+  hoy: string;
+  consumoListo: boolean;
+  onDetalle: () => void;
+  onPerdida: () => void;
+  onEditar: () => void;
+  onPrecio: (upd: Insumo) => void;
+  onError: (msg: string) => void;
+}) {
+  const problemaUnidades = detectarInsumoConProblema(i.unidadCompra, i.unidadBase, i.cantidadPorCompra);
+  return (
+    <li data-insumo-id={i.id} className="scroll-mt-24 px-4 py-4 sm:px-5 transition-shadow">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div className="min-w-0">
+          <button
+            type="button"
+            onClick={onDetalle}
+            className="text-left font-medium text-cacao break-words hover:text-terracotta hover:underline"
+            title="Ver uso diario, pérdidas y cambios de este insumo"
+          >
+            {i.nombre}
+          </button>
+          <p className="text-xs text-cacao-soft">
+            {l.categoria} · {etiquetaPresentacion(i)}
+          </p>
+          {problemaUnidades && (
+            <button
+              type="button"
+              onClick={onEditar}
+              title={`Revisar unidades: 1 ${canonica(i.unidadCompra)} debería ser ${formatN(problemaUnidades.esperado)} ${canonica(i.unidadBase)} (tiene ${formatN(i.cantidadPorCompra)})`}
+              className="mt-1 text-[10px] uppercase tracking-widest text-amber-800 bg-amber-50 ring-1 ring-amber-200 rounded-full px-2 py-0.5 hover:bg-amber-100"
+            >
+              <WarningIcon className="inline size-3 align-[-0.1em] mr-0.5" />
+              revisar unidades
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <PastillaEstado estado={l.estado} />
+          {l.seAgotaPronto && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-amber-900 ring-1 ring-amber-200">
+              <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
+              Se acaba pronto
+            </span>
+          )}
+        </div>
+      </div>
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
+        <div>
+          <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">Queda</dt>
+          <dd className="text-cacao">{displayCantidad(l.libre, l.unidadBase)}</dd>
+          {l.comprometido > 0 && (
+            <dd className="text-[11px] text-cacao-soft">
+              {displayCantidad(l.comprometido, l.unidadBase)} reservados
+            </dd>
+          )}
+          {l.minimo != null && l.minimo > 0 && (
+            <dd className="text-[11px] text-cacao-soft">mín. {displayCantidad(l.minimo, l.unidadBase)}</dd>
+          )}
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">Alcanza para</dt>
+          <dd className={l.dias.estado === "sin_datos" || !consumoListo ? "text-cacao-soft" : "text-cacao"}>
+            {consumoListo ? textoDias(l.dias) : "…"}
+          </dd>
+        </div>
+        <div className="col-span-2 sm:col-span-1">
+          <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">Precio</dt>
+          <dd>
+            <PrecioCelda insumo={i} hoy={hoy} onRefreshed={onPrecio} onError={onError} />
+          </dd>
+        </div>
+      </dl>
+      <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-widest">
+        <button
+          type="button"
+          onClick={onPerdida}
+          className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
+          title="Registrar pérdida, merma o mal estado"
+        >
+          Pérdida
+        </button>
+        <button
+          type="button"
+          onClick={onEditar}
+          className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
+        >
+          Editar
+        </button>
+      </div>
+    </li>
   );
 }
 

@@ -91,7 +91,7 @@ ok(
 );
 
 const defecto = [
-  { id: "inventario", ids: ["insumos", "stock", "uso", "proveedores", "menaje"] },
+  { id: "inventario", ids: ["stock", "uso", "proveedores", "menaje"] },
   { id: "recetas", ids: ["recetas", "costeo", "plato"] },
   { id: "operacion", ids: ["compras", "ventas", "pedido"] },
 ];
@@ -107,7 +107,7 @@ ok(
     recetas: ["plato"],
   }),
   [
-    { id: "inventario", ids: ["stock", "menaje", "insumos", "uso", "proveedores"] },
+    { id: "inventario", ids: ["stock", "menaje", "uso", "proveedores"] },
     { id: "recetas", ids: ["plato", "recetas", "costeo"] },
     { id: "operacion", ids: ["compras", "ventas", "pedido"] },
   ],
@@ -160,7 +160,7 @@ ok(
   "el arrastre se queda dentro del grupo",
   movido.map((g) => ({ id: g.id, ids: g.accesos.map((a) => a.id) })),
   [
-    { id: "inventario", ids: ["menaje", "insumos", "stock", "uso", "proveedores"] },
+    { id: "inventario", ids: ["menaje", "stock", "uso", "proveedores"] },
     { id: "recetas", ids: ["recetas", "costeo", "plato"] },
     { id: "operacion", ids: ["compras", "ventas", "pedido"] },
   ],
@@ -174,7 +174,7 @@ ok("el orden por defecto no se escribe", ordenParaGuardar(undefined, gruposDefec
 ok(
   "un orden propio de pastillas se guarda en pastillas",
   ordenParaGuardar(undefined, movido, layoutDefecto(undefined)),
-  { pastillas: { inventario: ["menaje", "insumos", "stock", "uso", "proveedores"] } },
+  { pastillas: { inventario: ["menaje", "stock", "uso", "proveedores"] } },
 );
 ok(
   "Para hoy no es un bloque",
