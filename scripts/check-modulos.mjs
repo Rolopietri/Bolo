@@ -10,7 +10,13 @@ import {
   mismoOrdenVisible,
   moverId,
   normalizarOrdenModulos,
+  BLOQUES_HOME,
+  layoutDefecto,
+  layoutVisible,
+  moverBloque,
+  moverEnOrden,
   ordenParaGuardar,
+  reordenarCasillas,
   reordenarGrupo,
 } from "../src/lib/orden-pastillas.mjs";
 
@@ -164,18 +170,74 @@ ok(
   reordenarGrupo(gruposDefecto, "inventario", "plato", 0) === gruposDefecto ? "mismo" : "copia",
   "mismo",
 );
-ok("el orden por defecto no se escribe", ordenParaGuardar(undefined, gruposDefecto), null);
+ok("el orden por defecto no se escribe", ordenParaGuardar(undefined, gruposDefecto, layoutDefecto(undefined)), null);
 ok(
-  "un orden propio se guarda por grupo",
-  ordenParaGuardar(undefined, movido)?.inventario,
-  ["menaje", "insumos", "stock", "conteo", "proveedores"],
+  "un orden propio de pastillas se guarda en pastillas",
+  ordenParaGuardar(undefined, movido, layoutDefecto(undefined)),
+  { pastillas: { inventario: ["menaje", "insumos", "stock", "conteo", "proveedores"] } },
+);
+ok(
+  "Para hoy no es un bloque",
+  BLOQUES_HOME.some((b) => b.id === "para-hoy" || b.titulo === "Para hoy"),
+  false,
+);
+ok(
+  "Stock de Módulos es el ancla del guía",
+  GRUPOS_HOME.flatMap((g) => g.accesos).find((a) => a.id === "stock")?.dataGuia,
+  "accion-stock",
 );
 
-const home = readFileSync(new URL("../src/app/cocina/_ModulosHome.tsx", import.meta.url), "utf8");
-const pagina = readFileSync(new URL("../src/app/cocina/page.tsx", import.meta.url), "utf8");
-ok("la pastilla pasa data-guia al enlace", home.includes("data-guia={acceso.dataGuia}"), true);
-ok("el Home de cocina sigue mostrando Para hoy", pagina.includes("<Hoy />"), true);
-ok("el Home no pinta las pastillas a mano", pagina.includes("guia-plato"), false);
+const defectoLayout = layoutDefecto(undefined);
+ok(
+  "la disposición por defecto alterna columnas",
+  defectoLayout,
+  [
+    { id: "aviso", col: 0 },
+    { id: "tasas", col: 1 },
+    { id: "anillo", col: 0 },
+    { id: "inventario", col: 1 },
+    { id: "recetas", col: 0 },
+    { id: "operacion", col: 1 },
+  ],
+);
+ok(
+  "un bloque nuevo va al final y el oculto no aparece",
+  layoutVisible(undefined, {
+    layout: [{ id: "tasas", col: 1 }, { id: "para-hoy", col: 0 }, { id: "aviso", col: 0 }],
+  }).map((b) => b.id),
+  ["tasas", "aviso", "anillo", "inventario", "recetas", "operacion"],
+);
+const aLaDerecha = moverBloque(defectoLayout, "anillo", 1, 0);
+ok(
+  "el anillo puede ir a la esquina derecha",
+  aLaDerecha.filter((b) => b.col === 1).map((b) => b.id),
+  ["anillo", "tasas", "inventario", "operacion"],
+);
+ok(
+  "mover el bloque se guarda en layout",
+  ordenParaGuardar(undefined, gruposDefecto, aLaDerecha)?.layout?.filter((b) => b.col === 1).map((b) => b.id),
+  ["anillo", "tasas", "inventario", "operacion"],
+);
+ok(
+  "en móvil el orden es la lista, sin perder la columna",
+  moverEnOrden(defectoLayout, "operacion", 0)[0],
+  { id: "operacion", col: 1 },
+);
+ok(
+  "una casilla desconocida no mueve nada",
+  reordenarCasillas(gruposDefecto, "plato", 0) === gruposDefecto,
+  true,
+);
+
+const pastillas = readFileSync(new URL("../src/app/cocina/_ModulosHome.tsx", import.meta.url), "utf8");
+const home = readFileSync(new URL("../src/app/cocina/_HomeCocina.tsx", import.meta.url), "utf8");
+const hoy = readFileSync(new URL("../src/app/cocina/_Hoy.tsx", import.meta.url), "utf8");
+ok("la pastilla pasa data-guia al enlace", pastillas.includes("data-guia={acceso.dataGuia}"), true);
+ok("el anillo sigue anclado para la guía", home.includes('data-guia="cocina-empezar"'), true);
+ok("cada bloque tiene asa", home.includes("data-bloque-id={bloque.id}"), true);
+ok("el asa usa el icono de agarre", home.includes("<GripIcon"), true);
+ok("Para hoy ya no está en el Home", hoy.includes("Para hoy"), false);
+ok("el Home no pinta las pastillas a mano", home.includes("guia-plato"), false);
 
 if (fallos) {
   console.error(`\n${fallos} caso(s) fallaron.`);

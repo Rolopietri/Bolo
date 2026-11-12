@@ -1,7 +1,9 @@
-// Orden de las pastillas de Módulos en el Home de cocina.
+// Disposición del Home de cocina.
 // Archivo .mjs (sin TypeScript) para probarlo con `node`: scripts/check-modulos.mjs.
 //
-// El orden guardado vive en restaurante_ajustes.orden_modulos, por grupo.
+// El orden guardado vive en restaurante_ajustes.orden_modulos (jsonb):
+//   layout: [{ id, col }]  orden en móvil; col 0 = izquierda, 1 = derecha en escritorio
+//   pastillas: { inventario: ["stock", ...], ... }
 // Si no hay orden, o la columna todavía no existe, se usa el catálogo.
 
 import { funcionActiva } from "./modulos.mjs";
@@ -37,7 +39,7 @@ export const GRUPOS_HOME = [
     titulo: "Inventario",
     accesos: [
       { id: "insumos", href: "/cocina/insumos", label: "Insumos" },
-      { id: "stock", href: "/cocina/inventario/stock", label: "Stock" },
+      { id: "stock", href: "/cocina/inventario/stock", label: "Stock", dataGuia: "accion-stock" },
       { id: "conteo", href: "/cocina/inventario/conteo", label: "Conteo" },
       { id: "proveedores", href: "/cocina/proveedores", label: "Proveedores" },
       { id: "menaje", href: "/cocina/menaje", label: "Menaje" },
@@ -70,10 +72,45 @@ export const GRUPOS_HOME = [
 ];
 
 /**
- * @param {unknown} valor
- * @returns {Record<string, string[]> | null}
+ * Ids conocidos, sin repetir y sin basura.
+ * @param {unknown} lista
+ * @param {Set<string>} conocidos
+ * @returns {string[]}
  */
-export function normalizarOrdenModulos(valor) {
+function idsConocidos(lista, conocidos) {
+  if (!Array.isArray(lista)) return [];
+  /** @type {string[]} */
+  const ids = [];
+  const vistos = new Set();
+  for (const item of lista) {
+    if (typeof item !== "string") continue;
+    const id = item.trim();
+    if (!id || vistos.has(id) || !conocidos.has(id)) continue;
+    vistos.add(id);
+    ids.push(id);
+  }
+  return ids;
+}
+
+/**
+ * Bloques que se pueden mover en el Home. `col` es la columna por defecto
+ * en escritorio (0 izquierda, 1 derecha). En móvil se apilan en este orden.
+ * @type {readonly { id: string, titulo: string, col: 0 | 1 }[]}
+ */
+export const BLOQUES_HOME = [
+  { id: "aviso", titulo: "Hoy", col: 0 },
+  { id: "tasas", titulo: "Tasas", col: 1 },
+  { id: "anillo", titulo: "Anillo", col: 0 },
+  { id: "inventario", titulo: "Inventario", col: 1 },
+  { id: "recetas", titulo: "Recetas", col: 0 },
+  { id: "operacion", titulo: "Operación", col: 1 },
+];
+
+/**
+ * @param {unknown} valor
+ * @returns {{ pastillas: Record<string, string[]>, layout: { id: string, col: 0 | 1 }[] | null } | null}
+ */
+export function normalizarOrdenHome(valor) {
   let data = valor;
   if (typeof data === "string") {
     const texto = data.trim();
@@ -85,43 +122,63 @@ export function normalizarOrdenModulos(valor) {
     }
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const fila = /** @type {Record<string, unknown>} */ (data);
+  const fuente =
+    fila.pastillas && typeof fila.pastillas === "object" && !Array.isArray(fila.pastillas)
+      ? /** @type {Record<string, unknown>} */ (fila.pastillas)
+      : fila;
 
   /** @type {Record<string, string[]>} */
-  const out = {};
-  let alguno = false;
+  const pastillas = {};
+  let algunaPastilla = false;
   for (const grupo of GRUPOS_HOME) {
-    const lista = /** @type {Record<string, unknown>} */ (data)[grupo.id];
-    if (!Array.isArray(lista)) continue;
-    /** @type {string[]} */
-    const ids = [];
-    const vistos = new Set();
-    const conocidos = new Set(grupo.accesos.map((a) => a.id));
-    for (const item of lista) {
-      if (typeof item !== "string") continue;
-      const id = item.trim();
-      if (!id || vistos.has(id) || !conocidos.has(id)) continue;
-      vistos.add(id);
-      ids.push(id);
-    }
+    const ids = idsConocidos(fuente[grupo.id], new Set(grupo.accesos.map((acceso) => acceso.id)));
     if (ids.length > 0) {
-      out[grupo.id] = ids;
-      alguno = true;
+      pastillas[grupo.id] = ids;
+      algunaPastilla = true;
     }
   }
-  return alguno ? out : null;
+
+  const conocidos = new Set(BLOQUES_HOME.map((bloque) => bloque.id));
+  const defectoCol = new Map(BLOQUES_HOME.map((bloque) => [bloque.id, bloque.col]));
+  /** @type {{ id: string, col: 0 | 1 }[]} */
+  const layout = [];
+  const vistos = new Set();
+  if (Array.isArray(fila.layout)) {
+    for (const item of fila.layout) {
+      const id = typeof item === "string" ? item.trim() : typeof item?.id === "string" ? item.id.trim() : "";
+      if (!id || vistos.has(id) || !conocidos.has(id)) continue;
+      const crudo = typeof item === "object" && item ? item.col : defectoCol.get(id);
+      vistos.add(id);
+      layout.push({ id, col: crudo === 1 ? 1 : 0 });
+    }
+  }
+  if (!algunaPastilla && layout.length === 0) return null;
+  return { pastillas, layout: layout.length ? layout : null };
+}
+
+/**
+ * @param {unknown} valor
+ * @returns {Record<string, string[]> | null}
+ */
+export function normalizarOrdenModulos(valor) {
+  const home = normalizarOrdenHome(valor);
+  if (!home || Object.keys(home.pastillas).length === 0) return null;
+  return home.pastillas;
 }
 
 /**
  * Pastillas visibles, en el orden guardado dentro de cada grupo.
  * Las que no están en ese orden (nuevas, o recién prendidas por flag) van al final,
  * en el orden del catálogo. Las ocultas por flag no aparecen, aunque estén guardadas.
+ * La clave `grupos` reordena las casillas. Las que no estén en esa lista van al final.
  * @param {string | undefined | null} modulos  valor de BOLO_MODULOS
  * @param {unknown} ordenGuardado
  * @returns {GrupoHome[]}
  */
 export function gruposOrdenados(modulos, ordenGuardado) {
   const orden = normalizarOrdenModulos(ordenGuardado);
-  return GRUPOS_HOME.map((grupo) => {
+  const armados = GRUPOS_HOME.map((grupo) => {
     const visibles = grupo.accesos.filter(
       (acceso) => !acceso.funcion || funcionActiva(acceso.funcion, modulos),
     );
@@ -141,6 +198,7 @@ export function gruposOrdenados(modulos, ordenGuardado) {
     }
     return { id: grupo.id, titulo: grupo.titulo, accesos: ordenados };
   }).filter((grupo) => grupo.accesos.length > 0);
+  return armados;
 }
 
 /**
@@ -215,18 +273,151 @@ export function reordenarGrupo(grupos, grupoId, id, destino) {
 }
 
 /**
- * Lo que se escribe en la base. Null significa «orden por defecto», así una
- * pastilla nueva entra en su lugar del catálogo y no al final.
+ * Mueve una casilla completa, con sus pastillas. Si el id no está,
+ * devuelve el mismo arreglo.
+ * @param {GrupoHome[]} grupos
+ * @param {string} grupoId
+ * @param {number} destino
+ * @returns {GrupoHome[]}
+ */
+export function reordenarCasillas(grupos, grupoId, destino) {
+  const ids = grupos.map((grupo) => grupo.id);
+  const moved = moverId(ids, grupoId, destino);
+  if (moved === ids) return grupos;
+  const porId = new Map(grupos.map((grupo) => [grupo.id, grupo]));
+  return moved.map((id) => {
+    const grupo = porId.get(id);
+    if (!grupo) throw new Error(`Casilla desconocida: ${id}`);
+    return grupo;
+  });
+}
+
+/**
+ * Bloques visibles. Una casilla de Módulos no aparece si no le queda ninguna pastilla.
+ * @param {string | undefined | null} modulos
+ * @returns {{ id: string, titulo: string, col: 0 | 1 }[]}
+ */
+export function bloquesVisibles(modulos) {
+  const conPastillas = new Set(gruposOrdenados(modulos, null).map((grupo) => grupo.id));
+  return BLOQUES_HOME.filter((bloque) => {
+    if (bloque.id === "inventario" || bloque.id === "recetas" || bloque.id === "operacion") {
+      return conPastillas.has(bloque.id);
+    }
+    return true;
+  }).map((bloque) => ({ id: bloque.id, titulo: bloque.titulo, col: bloque.col }));
+}
+
+/**
+ * @param {string | undefined | null} modulos
+ * @returns {{ id: string, col: 0 | 1 }[]}
+ */
+export function layoutDefecto(modulos) {
+  return bloquesVisibles(modulos).map((bloque) => ({ id: bloque.id, col: bloque.col }));
+}
+
+/**
+ * Orden visible. Lo que no esté guardado (bloque nuevo) va al final, en su columna
+ * por defecto. Los ids desconocidos u ocultos no aparecen.
+ * @param {string | undefined | null} modulos
+ * @param {unknown} ordenGuardado
+ * @returns {{ id: string, col: 0 | 1 }[]}
+ */
+export function layoutVisible(modulos, ordenGuardado) {
+  const visibles = layoutDefecto(modulos);
+  const porId = new Map(visibles.map((bloque) => [bloque.id, bloque]));
+  const leido = normalizarOrdenHome(ordenGuardado)?.layout ?? [];
+  const usados = new Set();
+  /** @type {{ id: string, col: 0 | 1 }[]} */
+  const salida = [];
+  for (const item of leido) {
+    if (!porId.has(item.id) || usados.has(item.id)) continue;
+    usados.add(item.id);
+    salida.push({ id: item.id, col: item.col === 1 ? 1 : 0 });
+  }
+  for (const bloque of visibles) {
+    if (usados.has(bloque.id)) continue;
+    salida.push({ id: bloque.id, col: bloque.col });
+  }
+  return salida;
+}
+
+/**
+ * Mueve un bloque dentro del orden (móvil: una sola columna). Conserva su `col`.
+ * @param {{ id: string, col: 0 | 1 }[]} layout
+ * @param {string} id
+ * @param {number} destino
+ */
+export function moverEnOrden(layout, id, destino) {
+  const ids = layout.map((bloque) => bloque.id);
+  const moved = moverId(ids, id, destino);
+  if (moved === ids) return layout;
+  const porId = new Map(layout.map((bloque) => [bloque.id, bloque]));
+  return moved.map((itemId) => {
+    const bloque = porId.get(itemId);
+    if (!bloque) throw new Error(`Bloque desconocido: ${itemId}`);
+    return bloque;
+  });
+}
+
+/**
+ * Lleva un bloque a una columna y a un puesto dentro de esa columna (escritorio).
+ * El índice es entre los bloques de esa columna, sin contar el que se mueve.
+ * @param {{ id: string, col: 0 | 1 }[]} layout
+ * @param {string} id
+ * @param {0 | 1} col
+ * @param {number} indiceEnColumna
+ */
+export function moverBloque(layout, id, col, indiceEnColumna) {
+  const actual = layout.find((bloque) => bloque.id === id);
+  if (!actual) return layout;
+  const destinoCol = col === 1 ? 1 : 0;
+  const sin = layout.filter((bloque) => bloque.id !== id);
+  const enColumna = sin.filter((bloque) => bloque.col === destinoCol);
+  const to = Math.max(0, Math.min(enColumna.length, Math.trunc(indiceEnColumna)));
+  const ancla = enColumna[to];
+  const item = { id, col: destinoCol };
+  if (!ancla) return [...sin, item];
+  const indice = sin.findIndex((bloque) => bloque.id === ancla.id);
+  const next = sin.slice();
+  next.splice(indice, 0, item);
+  if (JSON.stringify(next) === JSON.stringify(layout)) return layout;
+  return next;
+}
+
+/**
+ * Lo que se escribe en la base. Null = disposición por defecto.
+ * `layout` solo si los bloques no están en su lugar; `pastillas` solo de los grupos que cambiaron.
  * @param {string | undefined | null} modulos
  * @param {GrupoHome[]} grupos
- * @returns {Record<string, string[]> | null}
+ * @param {{ id: string, col: 0 | 1 }[] | null | undefined} [layout]
+ * @returns {{ layout?: { id: string, col: 0 | 1 }[], pastillas?: Record<string, string[]> } | null}
  */
-export function ordenParaGuardar(modulos, grupos) {
+export function ordenParaGuardar(modulos, grupos, layout) {
+  const defecto = gruposOrdenados(modulos, null);
+  const pastillasDefecto = new Map(
+    defecto.map((grupo) => [grupo.id, grupo.accesos.map((acceso) => acceso.id).join("\0")]),
+  );
   /** @type {Record<string, string[]>} */
-  const explicito = {};
+  const pastillas = {};
   for (const grupo of grupos) {
-    explicito[grupo.id] = grupo.accesos.map((acceso) => acceso.id);
+    const ids = grupo.accesos.map((acceso) => acceso.id);
+    if (pastillasDefecto.get(grupo.id) === ids.join("\0")) continue;
+    pastillas[grupo.id] = ids;
   }
-  if (mismoOrdenVisible(modulos, explicito, null)) return null;
-  return explicito;
+  /** @type {{ layout?: { id: string, col: 0 | 1 }[], pastillas?: Record<string, string[]> }} */
+  const out = {};
+  let alguno = false;
+  if (layout) {
+    const base = layoutDefecto(modulos);
+    const limpio = layout.map((bloque) => ({ id: bloque.id, col: bloque.col === 1 ? 1 : 0 }));
+    if (JSON.stringify(limpio) !== JSON.stringify(base)) {
+      out.layout = limpio;
+      alguno = true;
+    }
+  }
+  if (Object.keys(pastillas).length > 0) {
+    out.pastillas = pastillas;
+    alguno = true;
+  }
+  return alguno ? out : null;
 }

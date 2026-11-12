@@ -5,11 +5,15 @@
 -- Requiere la tabla public.restaurante_ajustes
 -- (supabase/restaurante-ajustes.sql). No borra filas ni columnas.
 --
--- orden_modulos es null cuando el local usa el orden por defecto.
--- Si hay un orden propio, es un objeto por grupo, con ids de pastilla:
---   {"inventario":["menaje","insumos"],"recetas":["plato","recetas","costeo"],"operacion":["ventas","compras","pedido"]}
--- Una pastilla que no esté en la lista (nueva, o prendida después con un flag)
--- se muestra al final de su grupo. Las ocultas por flag no se muestran.
+-- orden_modulos es null cuando el local usa la disposición por defecto.
+-- Si hay una disposición propia, es un objeto:
+--   layout: orden de los bloques del Home. Cada item es { id, col }
+--     col 0 = columna izquierda en escritorio, 1 = derecha.
+--     En móvil se apilan en el orden del arreglo.
+--   pastillas: orden de las pastillas dentro de cada casilla de Módulos.
+--   {"layout":[{"id":"anillo","col":1},{"id":"aviso","col":0}],"pastillas":{"inventario":["stock","insumos"]}}
+-- Un bloque o pastilla que no esté en la lista se muestra al final.
+-- Los ocultos por flag no se muestran.
 --
 -- Las políticas RLS ya existentes cubren la fila completa, incluida esta
 -- columna. No hace falta una política nueva:

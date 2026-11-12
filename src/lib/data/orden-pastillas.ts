@@ -1,10 +1,13 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { normalizarOrdenModulos } from "@/lib/orden-pastillas.mjs";
+import { normalizarOrdenHome } from "@/lib/orden-pastillas.mjs";
 
-/** Orden por grupo (ids de pastilla). Null = el del catálogo. */
-export type OrdenPastillas = Record<string, string[]>;
+/** Disposición del Home. Null = la del catálogo. */
+export type OrdenPastillas = {
+  layout?: { id: string; col: number }[];
+  pastillas?: Record<string, string[]>;
+};
 
 export type LecturaOrden = {
   orden: OrdenPastillas | null;
@@ -81,8 +84,14 @@ export async function leerOrdenPastillas(): Promise<LecturaOrden> {
       return { orden: null, estado: "ok" };
     }
     const fila = data as { orden_modulos?: unknown } | null;
+    const home = normalizarOrdenHome(fila?.orden_modulos ?? null);
     return {
-      orden: normalizarOrdenModulos(fila?.orden_modulos ?? null),
+      orden: home
+        ? {
+            pastillas: home.pastillas,
+            ...(home.layout ? { layout: home.layout } : {}),
+          }
+        : null,
       estado: "ok",
     };
   } catch (e) {

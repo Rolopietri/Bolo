@@ -107,8 +107,57 @@ a.modulos-pastilla-arrastre {
   box-shadow: 0 10px 24px rgba(29, 29, 27, 0.16);
 }
 
+/* La casilla entera tiembla menos que sus pastillas, para que se distinga. */
+@keyframes bolo-wiggle-casilla {
+  0%,
+  100% {
+    transform: rotate(-0.4deg);
+  }
+  50% {
+    transform: rotate(0.4deg);
+  }
+}
+
+.modulos-casilla-wiggle {
+  animation: bolo-wiggle-casilla 0.46s ease-in-out infinite;
+  transform-origin: center 2.5rem;
+}
+
+.modulos-casilla-wiggle:nth-child(even) {
+  animation-duration: 0.55s;
+  animation-delay: -0.2s;
+}
+
+.modulos-casilla-arrastre {
+  animation: none;
+  z-index: 6;
+  box-shadow: 0 16px 36px rgba(29, 29, 27, 0.14);
+}
+
+.modulos-casilla-arrastre .modulos-wiggle {
+  animation: none;
+}
+
+.modulos-asa,
+.modulos-titulo-casilla {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.modulos-asa {
+  touch-action: none;
+  cursor: grab;
+}
+
+.modulos-titulo-casilla {
+  touch-action: manipulation;
+  cursor: grab;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .modulos-wiggle {
+  .modulos-wiggle,
+  .modulos-casilla-wiggle {
     animation: none;
   }
 }
