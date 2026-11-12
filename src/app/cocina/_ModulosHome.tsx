@@ -11,13 +11,12 @@ import {
   CartIcon,
   ChartIcon,
   ChevronIcon,
-  ClipboardIcon,
   PlusIcon,
   ReceiptIcon,
   TruckIcon,
   UtensilsIcon,
 } from "@/components/icons";
-import type { ConteosHoy } from "./_hoy";
+import type { ConteosHoy } from "./_hoyDatos";
 import { moverId } from "@/lib/orden-pastillas.mjs";
 
 type Grupo = {
@@ -33,7 +32,7 @@ type Icono = ComponentType<SVGProps<SVGSVGElement>>;
 const ICONOS: Record<string, Icono> = {
   insumos: BoxIcon,
   stock: ChartIcon,
-  conteo: ClipboardIcon,
+  uso: CalendarIcon,
   proveedores: TruckIcon,
   menaje: UtensilsIcon,
   recetas: BookIcon,

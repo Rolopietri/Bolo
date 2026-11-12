@@ -3,7 +3,6 @@
 // Mermas y pérdidas de insumos en un solo lugar (pestaña de Insumos):
 //  1. Pérdidas registradas a mano (botón "Pérdida" del catálogo): mal estado,
 //     vencimiento, merma, etc. Valoradas al precio base y con "deshacer".
-//  2. Merma por conteo: lo que faltó entre el sistema y el conteo físico.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TIPOS_PERDIDA, type Insumo, type StockMovimiento } from "@/lib/types";
@@ -15,7 +14,6 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { extractError } from "@/lib/data/error";
-import { MermaConteoClient } from "./MermaConteoClient";
 
 const TIPOS = new Set<string>(TIPOS_PERDIDA.map((t) => t.value));
 const tipoLabel = (t: string) =>
@@ -37,7 +35,12 @@ function haceDias(hoy: string, dias: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function MermasClient() {
+export function MermasClient({
+  insumoId,
+}: {
+  /** Dentro del detalle de un insumo: solo sus pérdidas. */
+  insumoId?: string;
+} = {}) {
   const [movs, setMovs] = useState<StockMovimiento[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +62,7 @@ export function MermasClient() {
           listInsumos(),
         ]);
         if (!cancel) {
-          setMovs(mv.filter((m) => TIPOS.has(m.tipo)));
+          setMovs(mv.filter((m) => TIPOS.has(m.tipo) && (!insumoId || m.insumoId === insumoId)));
           setInsumos(ins);
         }
       } catch (e) {
@@ -69,7 +72,7 @@ export function MermasClient() {
       }
     })();
     return () => { cancel = true; };
-  }, [intento]);
+  }, [intento, insumoId]);
 
   function reintentarCarga() {
     setLoading(true);
@@ -133,10 +136,12 @@ export function MermasClient() {
             <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">
               Pérdidas registradas
             </h2>
-            <p className="mt-1 text-[12px] text-cacao-soft">
-              Lo que das de baja a mano con el botón <b>Pérdida</b> del catálogo
-              (mal estado, vencimiento, merma…), valorado al precio base.
-            </p>
+            {!insumoId && (
+              <p className="mt-1 text-[12px] text-cacao-soft">
+                Lo que das de baja a mano con el botón <b>Pérdida</b> de cada
+                insumo (mal estado, vencimiento, merma…), valorado al precio del día.
+              </p>
+            )}
           </div>
           <div className="flex gap-1">
             {([
@@ -176,7 +181,7 @@ export function MermasClient() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 border-y border-marfil divide-y sm:divide-y-0 sm:divide-x divide-marfil">
+            <div className={`grid grid-cols-1 ${insumoId ? "sm:grid-cols-2" : "sm:grid-cols-3"} border-y border-marfil divide-y sm:divide-y-0 sm:divide-x divide-marfil`}>
               <div className="py-4 sm:px-4 sm:first:pl-0">
                 <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
                   Valor perdido
@@ -202,7 +207,7 @@ export function MermasClient() {
                   ))}
                 </ul>
               </div>
-              <div className="py-4 sm:px-4 sm:first:pl-0">
+              {!insumoId && <div className="py-4 sm:px-4 sm:first:pl-0">
                 <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
                   Dónde más se pierde
                 </div>
@@ -214,7 +219,7 @@ export function MermasClient() {
                     </li>
                   ))}
                 </ul>
-              </div>
+              </div>}
             </div>
 
             <ul className="border-b border-marfil divide-y divide-marfil">
@@ -256,13 +261,6 @@ export function MermasClient() {
         )}
       </section>
 
-      {/* ── Merma por conteo ─────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">
-          Merma por conteo físico
-        </h2>
-        <MermaConteoClient />
-      </section>
 
       <ConfirmDialog
         open={pendienteBorrar !== null}

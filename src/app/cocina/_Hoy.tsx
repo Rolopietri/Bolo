@@ -14,7 +14,7 @@ import {
   type ConteosHoy,
   type InsumoHoy,
   type ItemChecklist,
-} from "./_hoy";
+} from "./_hoyDatos";
 import { AnilloListas } from "./_AnilloListas";
 
 /** Filas visibles aunque todavía no lleguen los conteos, para no dejar

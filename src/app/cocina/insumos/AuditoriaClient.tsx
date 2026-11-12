@@ -85,9 +85,12 @@ function CambioCapa({
 
 export function AuditoriaClient({
   insumoInicial = null,
+  fijo = false,
 }: {
-  /** Abre la auditoría ya filtrada a un insumo (desde "Historial"). */
+  /** Abre la auditoría ya filtrada a un insumo. */
   insumoInicial?: string | null;
+  /** Dentro del detalle de un insumo: sin texto de ayuda ni filtros. */
+  fijo?: boolean;
 } = {}) {
   const [entries, setEntries] = useState<StockAuditoria[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
@@ -227,7 +230,7 @@ export function AuditoriaClient({
   return (
     <div className="space-y-5">
 
-      <div className="rounded-xl bg-marfil-soft ring-1 ring-marfil p-4 text-sm text-cacao-soft font-serif">
+      {!fijo && <div className="rounded-xl bg-marfil-soft ring-1 ring-marfil p-4 text-sm text-cacao-soft font-serif">
         Cada cambio de stock queda registrado automáticamente: el antes, el
         después, el momento exacto y de dónde vino. Los marcados como{" "}
         <span className="font-sans font-medium text-[#8A5A15]">
@@ -241,10 +244,10 @@ export function AuditoriaClient({
             directo(s) en el registro.
           </span>
         )}
-      </div>
+      </div>}
 
       {/* Filtros */}
-      <section className="space-y-2">
+      {!fijo && <section className="space-y-2">
         <div className="flex flex-wrap gap-2">
           <select
             value={filterInsumo}
@@ -285,7 +288,7 @@ export function AuditoriaClient({
           onChange={(e) => setSearch(e.target.value)}
           className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
         />
-      </section>
+      </section>}
 
       {/* Tabla */}
       {filtered.length === 0 ? (

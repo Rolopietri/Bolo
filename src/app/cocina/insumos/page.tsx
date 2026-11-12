@@ -5,7 +5,7 @@ import { InsumosTabs, type Vista } from "./InsumosTabs";
 import { PasoSiguiente } from "../_PasoSiguiente";
 import { PasosCocina } from "../_PasosCocina";
 
-const VISTAS: Vista[] = ["catalogo", "alertas", "mermas", "auditoria"];
+const VISTAS: Vista[] = ["catalogo", "uso", "alertas", "mermas", "auditoria"];
 
 export default async function InsumosPage({
   searchParams,
@@ -14,9 +14,11 @@ export default async function InsumosPage({
 }) {
   const { vista, insumo } = await searchParams;
   const insumoInicial = typeof insumo === "string" ? insumo : undefined;
-  const vistaInicial = insumoInicial
-    ? "catalogo"
-    : (VISTAS.find((v) => v === vista) ?? "catalogo");
+  // ?insumo= abre su ficha en el catálogo; con ?vista=uso, su uso diario.
+  const vistaInicial =
+    insumoInicial && vista !== "uso"
+      ? "catalogo"
+      : (VISTAS.find((v) => v === vista) ?? "catalogo");
   return (
     <>
       <Header subtitle="Insumos" />

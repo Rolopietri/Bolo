@@ -40,6 +40,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WarningIcon, CameraIcon, ImageIcon } from "@/components/icons";
 import { CamaraCaptura } from "./_CamaraCaptura";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
+import { DetalleInsumo } from "./DetalleInsumo";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
@@ -147,15 +148,12 @@ export function InsumosClient({
   insumoInicial = null,
   onVerAlertas,
   onVerMermas,
-  onVerHistorial,
   onConteoAlertas,
 }: {
   /** Si viene de Stock, desplaza la lista hasta esta ficha. */
   insumoInicial?: string | null;
   onVerAlertas?: () => void;
   onVerMermas?: () => void;
-  /** Abre la auditoría de stock filtrada a este insumo. */
-  onVerHistorial?: (insumoId: string) => void;
   /** Reporta agotados + bajos (para el contador de la pestaña Alertas). */
   onConteoAlertas?: (n: number) => void;
 } = {}) {
@@ -200,6 +198,8 @@ export function InsumosClient({
   const fichaVista = useRef<string | null>(null);
   // Insumo al que se le va a registrar una pérdida (abre el modal).
   const [perdidaInsumo, setPerdidaInsumo] = useState<Insumo | null>(null);
+  // Insumo cuyo detalle (uso diario, pérdidas, cambios) está abierto.
+  const [detalleInsumo, setDetalleInsumo] = useState<Insumo | null>(null);
   // Aviso tras registrar una pérdida, con acceso a la pestaña de Mermas.
   const [avisoPerdida, setAvisoPerdida] = useState(false);
   // Lista de categorías de insumo (tipo de materia prima). Se gestiona desde
@@ -1193,7 +1193,14 @@ export function InsumosClient({
                     >
                       <div className="col-span-12 sm:col-span-5">
                         <div className="text-cacao font-medium">
-                          {i.nombre}
+                          <button
+                            type="button"
+                            onClick={() => setDetalleInsumo(i)}
+                            className="text-left hover:text-terracotta hover:underline"
+                            title="Ver el detalle de este insumo"
+                          >
+                            {i.nombre}
+                          </button>
                           {!i.activo && (
                             <span className="ml-2 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-full bg-marfil-light text-cacao-soft ring-1 ring-marfil">
                               Inactivo
@@ -1272,15 +1279,13 @@ export function InsumosClient({
                             >
                               Editar
                             </button>
-                            {onVerHistorial && (
-                              <button
-                                onClick={() => onVerHistorial(i.id)}
-                                className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
-                                title="Ver cada cambio de stock de este insumo (auditoría)"
-                              >
-                                Historial
-                              </button>
-                            )}
+                            <button
+                              onClick={() => setDetalleInsumo(i)}
+                              className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
+                              title="Uso diario, pérdidas y cambios de stock de este insumo"
+                            >
+                              Detalle
+                            </button>
                             <button
                               onClick={() => setPendienteDesactivar(i.id)}
                               className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-terracotta"
@@ -1356,6 +1361,22 @@ export function InsumosClient({
         }}
         onCancel={() => setPendienteBorrar(null)}
       />
+
+      {detalleInsumo && (
+        <DetalleInsumo
+          key={detalleInsumo.id}
+          insumo={detalleInsumo}
+          onClose={() => setDetalleInsumo(null)}
+          onPerdida={() => {
+            setPerdidaInsumo(detalleInsumo);
+            setDetalleInsumo(null);
+          }}
+          onEditar={() => {
+            startEdit(detalleInsumo);
+            setDetalleInsumo(null);
+          }}
+        />
+      )}
 
       {perdidaInsumo && (
         <PerdidaInsumoDialog

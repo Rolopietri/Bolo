@@ -12,7 +12,7 @@ import {
   type ItemChecklist,
   type TonoCentroHoy,
   type TonoHoy,
-} from "./_hoy";
+} from "./_hoyDatos";
 
 const DETALLE_ID = "detalle-listas-hoy";
 

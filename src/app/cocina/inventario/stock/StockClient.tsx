@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CartIcon, ChevronIcon, ClipboardIcon, SearchIcon } from "@/components/icons";
+import { CalendarIcon, CartIcon, ChevronIcon, SearchIcon } from "@/components/icons";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { listInsumos, getTasaBcvActual } from "@/lib/data/cocina";
@@ -387,11 +387,11 @@ export function StockClient() {
           Qué pedir
         </Link>
         <Link
-          href="/cocina/inventario/conteo"
+          href="/cocina/insumos?vista=uso"
           className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-2.5 text-sm text-cacao ring-1 ring-marfil hover:bg-marfil-soft"
         >
-          <ClipboardIcon className="size-4" />
-          Conteo
+          <CalendarIcon className="size-4" />
+          Uso diario
         </Link>
         <Link
           href="/cocina/insumos"
@@ -747,8 +747,8 @@ function Fila({ linea: l }: { linea: LineaStock }) {
             Qué pedir
           </Link>
         )}
-        <Link href="/cocina/inventario/conteo" className="text-cacao-soft hover:text-terracotta hover:underline">
-          Conteo
+        <Link href={`/cocina/insumos?vista=uso&insumo=${l.id}`} className="text-cacao-soft hover:text-terracotta hover:underline">
+          Uso diario
         </Link>
       </div>
     </li>

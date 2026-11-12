@@ -40,7 +40,7 @@ export const GRUPOS_HOME = [
     accesos: [
       { id: "insumos", href: "/cocina/insumos", label: "Insumos" },
       { id: "stock", href: "/cocina/inventario/stock", label: "Stock", dataGuia: "accion-stock" },
-      { id: "conteo", href: "/cocina/inventario/conteo", label: "Conteo" },
+      { id: "uso", href: "/cocina/insumos?vista=uso", label: "Uso diario" },
       { id: "proveedores", href: "/cocina/proveedores", label: "Proveedores" },
       { id: "menaje", href: "/cocina/menaje", label: "Menaje" },
     ],
