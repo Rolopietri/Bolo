@@ -1459,20 +1459,8 @@ export function InsumosClient({
   );
 }
 
-/** Explicación de "Alcanza para" con los números de este insumo. */
-function explicarAlcance(l: LineaStock, consumoListo: boolean): string {
-  const fuente = `lo que salió en los últimos ${VENTANA_CONSUMO_DIAS} días (ventas según las recetas, más pérdidas y mermas)`;
-  if (!consumoListo) return "Calculando con las ventas recientes…";
-  if (l.dias.estado === "agotado") return "No queda stock libre de este insumo.";
-  if (l.dias.estado === "sin_datos") {
-    return `Se calcula con ${fuente}. Este insumo salió en menos de ${MIN_DIAS_CON_CONSUMO} días distintos, así que todavía no hay un promedio confiable.`;
-  }
-  const u = l.unidadBase;
-  // Promedio redondeado para leerlo fácil (373 g, no 372.857 g).
-  const p = l.dias.promedioDiario;
-  const promedio = p >= 10 ? Math.round(p) : Math.round(p * 100) / 100;
-  return `Quedan ${displayCantidad(l.libre, u)} ÷ ${displayCantidad(promedio, u)} por día ≈ ${textoDias(l.dias)}. El promedio es ${fuente}: ${displayCantidad(l.dias.consumido, u)} ÷ ${VENTANA_CONSUMO_DIAS} días.`;
-}
+/** Explicación general de "Alcanza para" (la misma para todos los insumos). */
+const AYUDA_ALCANCE = `Días de cobertura estimados: stock disponible ÷ consumo diario promedio. El consumo diario promedio se obtiene de las salidas totales de los últimos ${VENTANA_CONSUMO_DIAS} días (ventas descontadas según receta, pérdidas y mermas) ÷ ${VENTANA_CONSUMO_DIAS}. Se requieren salidas en al menos ${MIN_DIAS_CON_CONSUMO} días distintos para estimarlo.`;
 
 /** Una fila de la lista: estado, cuánto queda, cuánto dura y precio. Cada dato
  *  aparece una sola vez; el resto (uso diario, pérdidas, cambios) vive en el
@@ -1551,7 +1539,7 @@ function FilaInsumo({
         </div>
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">
-            <AyudaEtiqueta ayuda={explicarAlcance(l, consumoListo)}>Alcanza para</AyudaEtiqueta>
+            <AyudaEtiqueta ayuda={AYUDA_ALCANCE}>Alcanza para</AyudaEtiqueta>
           </dt>
           <dd className={l.dias.estado === "sin_datos" || !consumoListo ? "text-cacao-soft" : "text-cacao"}>
             {consumoListo ? textoDias(l.dias) : "…"}
