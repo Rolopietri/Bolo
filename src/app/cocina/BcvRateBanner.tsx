@@ -208,7 +208,7 @@ export function BcvRateBanner() {
   const meta = META_TASA[activa];
 
   return (
-    <div className="grid items-start gap-3 md:grid-cols-2">
+    <div className="grid items-start gap-3">
       <section className="rounded-2xl bg-white p-4 ring-1 ring-marfil sm:p-5" aria-label="Tasa de cambio">
         <div className="flex items-start justify-between gap-3">
           <p className="font-display text-[11px] tracking-[0.3em] text-cacao-mute">Tasa de cambio</p>

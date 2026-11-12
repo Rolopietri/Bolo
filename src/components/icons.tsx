@@ -126,6 +126,20 @@ export function StoreIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+/** Asa de seis puntos para arrastrar una casilla. */
+export function GripIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <circle cx="9" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="7" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="9" cy="17" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15" cy="17" r="1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
 /** Chevron para desplegar/colapsar. Apunta a la derecha; rótalo con CSS
  *  (ej. `rotate-90`) para el estado abierto. */
 export function ChevronIcon(props: SVGProps<SVGSVGElement>) {

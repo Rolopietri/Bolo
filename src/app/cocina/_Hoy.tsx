@@ -1,18 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import type { ComponentType, SVGProps } from "react";
-import {
-  BookIcon,
-  CartIcon,
-  ChartIcon,
-  ClipboardIcon,
-} from "@/components/icons";
-import { ErrorCarga } from "@/components/ErrorCarga";
 import { extractError } from "@/lib/data/error";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { BcvRateBanner } from "./BcvRateBanner";
 import {
   checklistHoy,
   fechaHoyLegible,
@@ -26,36 +16,6 @@ import {
   type ItemChecklist,
 } from "./_hoy";
 import { AnilloListas } from "./_AnilloListas";
-
-type Icono = ComponentType<SVGProps<SVGSVGElement>>;
-
-const ACCIONES: { href: string; titulo: string; detalle: string; Icon: Icono; dataGuia?: string }[] = [
-  {
-    href: "/cocina/inventario/stock",
-    titulo: "Stock",
-    detalle: "Cuánto hay libre, cuánto vale y qué se acaba pronto.",
-    Icon: ChartIcon,
-    dataGuia: "accion-stock",
-  },
-  {
-    href: "/cocina/inventario/conteo",
-    titulo: "Conteo",
-    detalle: "Anota lo que hay en cámara y cuadra el stock.",
-    Icon: ClipboardIcon,
-  },
-  {
-    href: "/cocina/pedido",
-    titulo: "Pedido sugerido",
-    detalle: "Lo que está bajo el mínimo. Lo revisas y lo pasas a compra.",
-    Icon: CartIcon,
-  },
-  {
-    href: "/cocina/recetas",
-    titulo: "Recetas",
-    detalle: "Revisa el costo de cada plato.",
-    Icon: BookIcon,
-  },
-];
 
 /** Filas visibles aunque todavía no lleguen los conteos, para no dejar
  *  colgado el cursor-guía del asistente. */
@@ -211,7 +171,7 @@ async function leerNombre(): Promise<string | null> {
   }
 }
 
-export function Hoy() {
+export function useCocinaHoy() {
   const [nombre, setNombre] = useState<string | null>(null);
   const [carga, setCarga] = useState<Carga | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -248,139 +208,29 @@ export function Hoy() {
           detalle: "No se pudo revisar. Puedes entrar igual.",
         }))
       : FILAS_BASE;
-  const faltantes = carga ? carga.conteos.agotados + carga.conteos.bajos : 0;
 
-  return (
-    <div className="space-y-8">
-      <section>
-        <p className="font-display text-[11px] tracking-[0.4em] text-cacao-soft">Hoy</p>
-        <h1
-          className="mt-2 text-balance font-cinzel text-3xl text-cacao sm:text-4xl"
-          suppressHydrationWarning
-        >
-          {saludo}
-          {nombre ? `, ${nombre}` : ""}
-        </h1>
-        <p className="mt-2 max-w-xl text-cacao-soft" suppressHydrationWarning>
-          {fecha} · Esto es lo que conviene atender en la cocina.
-        </p>
-      </section>
+  function reintentar() {
+    setError(null);
+    setCarga(null);
+    setIntento((n) => n + 1);
+  }
 
-      <BcvRateBanner />
-
-      <section aria-label="Acciones rápidas">
-        <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">Para hoy</h2>
-        <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-          {ACCIONES.map((a) => {
-            const detalle =
-              a.href === "/cocina/pedido" && faltantes > 0
-                ? `${faltantes.toLocaleString("es-VE")} ${faltantes === 1 ? "insumo para reponer" : "insumos para reponer"}. Revísalos y regístralos como compra.`
-                : a.detalle;
-            return (
-            <li key={a.href}>
-              <Link
-                href={a.href}
-                data-guia={a.dataGuia}
-                className="group flex h-full flex-col gap-3 rounded-2xl bg-marfil-soft p-4 ring-1 ring-marfil transition-colors hover:bg-white hover:ring-terracotta focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terracotta sm:p-5"
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="grid size-11 shrink-0 place-items-center rounded-full bg-naranja-soft/70 text-terracotta transition-colors group-hover:bg-terracotta group-hover:text-white">
-                    <a.Icon className="size-5" />
-                  </span>
-                  {a.href === "/cocina/inventario/stock" && carga && (
-                    <SemaforoStock conteos={carga.conteos} />
-                  )}
-                  {a.href === "/cocina/pedido" && faltantes > 0 && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-red-800 ring-1 ring-red-200">
-                      <span className="size-1.5 rounded-full bg-red-500" aria-hidden />
-                      Stock bajo
-                    </span>
-                  )}
-                </span>
-                <span>
-                  <span className="block font-cinzel text-lg leading-tight text-cacao transition-colors group-hover:text-terracotta">
-                    {a.titulo}
-                  </span>
-                  <span className="mt-1 block text-sm leading-snug text-cacao-soft">{detalle}</span>
-                </span>
-              </Link>
-            </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <section aria-label="Qué falta" aria-busy={!carga && !error} data-guia="cocina-empezar">
-        <h2 className="text-[11px] uppercase tracking-[0.3em] text-cacao-soft">
-          {carga ? tituloChecklist(items) : "Qué falta"}
-        </h2>
-        <p className="mt-2 max-w-xl text-sm text-cacao-soft">
-          {carga
-            ? introHoy(carga.conteos)
-            : error
-              ? "No se pudo revisar la cocina. Los accesos de abajo siguen abiertos."
-              : "Revisando proveedores, insumos, recetas, compras y el stock."}
-        </p>
-        {error && (
-          <ErrorCarga
-            className="mt-4"
-            que="hoy"
-            detalle={error}
-            onReintentar={() => {
-              setError(null);
-              setCarga(null);
-              setIntento((n) => n + 1);
-            }}
-          />
-        )}
-        <AnilloListas
-          items={items}
-          modo={carga ? "datos" : error ? "error" : "cargando"}
-        />
-      </section>
-
-    </div>
-  );
+  return {
+    nombre,
+    saludo,
+    fecha,
+    carga,
+    error,
+    items,
+    modoAnillo: (carga ? "datos" : error ? "error" : "cargando") as "datos" | "error" | "cargando",
+    titulo: carga ? tituloChecklist(items) : "Qué falta",
+    intro: carga
+      ? introHoy(carga.conteos)
+      : error
+        ? "No se pudo revisar la cocina. Los accesos de abajo siguen abiertos."
+        : "Revisando proveedores, insumos, recetas, compras y el stock.",
+    reintentar,
+  };
 }
 
-function cuentaAlerta(n: number, uno: string, varios: string): string {
-  return `${n.toLocaleString("es-VE")} ${n === 1 ? uno : varios}`;
-}
-
-/** Los tres conteos que antes estaban en Alertas de stock, en el mismo orden. */
-function SemaforoStock({ conteos }: { conteos: ConteosHoy }) {
-  const items = [
-    {
-      corto: "Agotado",
-      frase: cuentaAlerta(conteos.agotados, "agotado", "agotados"),
-      n: conteos.agotados,
-      tono: "bg-[#FDECEC] ring-[#E7B4B4]",
-    },
-    {
-      corto: "Bajo",
-      frase: cuentaAlerta(conteos.bajos, "bajo el mínimo", "bajo el mínimo"),
-      n: conteos.bajos,
-      tono: "bg-[#FFF6D8] ring-[#E4D08A]",
-    },
-    {
-      corto: "Sin mín.",
-      frase: cuentaAlerta(conteos.sinMinimo, "sin mínimo", "sin mínimo"),
-      n: conteos.sinMinimo,
-      tono: "bg-stone-200 ring-stone-300",
-    },
-  ];
-  return (
-    <span className="flex items-start gap-1" role="group" aria-label="Alertas de stock">
-      {items.map((item) => (
-        <span key={item.corto} title={item.frase} aria-label={item.frase} className="flex w-12 flex-col items-center gap-1">
-          <span
-            className={`grid h-8 min-w-8 place-items-center rounded-full px-1 text-sm font-bold tabular-nums text-cacao ring-1 ${item.tono}`}
-          >
-            {item.n.toLocaleString("es-VE")}
-          </span>
-          <span className="text-center text-[10px] font-semibold leading-none text-cacao">{item.corto}</span>
-        </span>
-      ))}
-    </span>
-  );
-}
+export { AnilloListas };
