@@ -95,11 +95,11 @@ export function TelegramClient() {
             <p className="text-cacao-soft">
               Empieza con <b>Entrando</b> o <b>Sin procesar</b> (lo que se saca para procesar) y{" "}
               <b>Saliendo</b> o <b>Procesado</b> (lo que quedó listo), con el peso y el insumo en cualquier orden
-              («8 kg lomito» o «lomito 8 kg»). Se pueden mezclar, y la entrada y la salida pueden ir en mensajes
+              («8 kg lomito» o «lomito 8 kg»). Los decimales van con coma o con punto («6,5» o «6.5»). Se pueden mezclar, y la entrada y la salida pueden ir en mensajes
               distintos: Bolo las junta al revisar.
             </p>
             <pre className="rounded-lg bg-marfil-soft px-3 py-2 text-xs text-cacao ring-1 ring-marfil">
-              {"Entrando 8 kg lomito\nLomito 6 kg saliendo\n\nSin procesar cebolla 3 kg\nProcesado 2,5 kg cebolla\n\nEntrando 12 unidades pollo, procesado 12"}
+              {"Entrando 8 kg lomito\nLomito 6,5 kg saliendo\n\nSin procesar cebolla 3 kg\nProcesado 2.5 kg cebolla\n\nEntrando 12 unidades pollo, procesado 12"}
             </pre>
             <p className="text-xs text-cacao-soft">
               Solo llegan los mensajes con números o con foto; la conversación normal se ignora. Nada se guarda sin

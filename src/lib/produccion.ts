@@ -260,11 +260,20 @@ const RE_SALIDA = /^(sal|proces|qued|limpi|neto)/i;
 
 type Cantidad = { n: number; u: string | null };
 
+/**
+ * Número y unidad de un acierto de RE_CANTIDAD. El decimal puede ir con coma o
+ * con punto ("8,5" = "8.5"). Excepción: en gramos o mililitros, "1.500" o
+ * "1,500" son miles (nadie escribe 1,5 g en una cocina).
+ */
+function cantidadDe(m: RegExpMatchArray): Cantidad {
+  const u = m[2] ? (m[2].toLowerCase() === "k" ? "kg" : m[2].toLowerCase()) : null;
+  const pequena = u != null && /^(g|grs?|gramos?|ml)$/.test(u);
+  const crudo = pequena && /^\d{1,3}[.,]\d{3}$/.test(m[1]) ? m[1].replace(/[.,]/, "") : m[1].replace(",", ".");
+  return { n: Number(crudo), u };
+}
+
 function cantidadesDe(texto: string): Cantidad[] {
-  return [...texto.matchAll(RE_CANTIDAD)].map((m) => ({
-    n: Number(m[1].replace(",", ".")),
-    u: m[2] ? (m[2].toLowerCase() === "k" ? "kg" : m[2].toLowerCase()) : null,
-  }));
+  return [...texto.matchAll(RE_CANTIDAD)].map(cantidadDe);
 }
 
 function nombreDe(texto: string): string {
@@ -342,7 +351,7 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
       const ks = [...frase.matchAll(RE_CLAVE)].map((m) => ({ i: m.index!, fin: m.index! + m[1].length, salida: RE_SALIDA.test(m[1]) }));
       const ns = [...frase.matchAll(RE_CANTIDAD)].map((m) => ({
         i: m.index!,
-        c: { n: Number(m[1].replace(",", ".")), u: m[2] ? (m[2].toLowerCase() === "k" ? "kg" : m[2].toLowerCase()) : null },
+        c: cantidadDe(m),
         usado: false,
       }));
       // Cada palabra toma el primer peso que la sigue (antes de la próxima
