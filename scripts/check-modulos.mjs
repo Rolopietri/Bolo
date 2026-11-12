@@ -92,7 +92,7 @@ ok(
 
 const defecto = [
   { id: "inventario", ids: ["stock", "uso", "proveedores", "menaje"] },
-  { id: "recetas", ids: ["recetas", "costeo", "plato"] },
+  { id: "recetas", ids: ["recetas", "costeo", "plato", "produccion"] },
   { id: "operacion", ids: ["compras", "ventas", "pedido"] },
 ];
 ok("sin orden guardado → catálogo, sin Planes", idsVisibles(undefined, null), defecto);
@@ -108,7 +108,7 @@ ok(
   }),
   [
     { id: "inventario", ids: ["stock", "menaje", "uso", "proveedores"] },
-    { id: "recetas", ids: ["plato", "recetas", "costeo"] },
+    { id: "recetas", ids: ["plato", "recetas", "costeo", "produccion"] },
     { id: "operacion", ids: ["compras", "ventas", "pedido"] },
   ],
 );
@@ -161,7 +161,7 @@ ok(
   movido.map((g) => ({ id: g.id, ids: g.accesos.map((a) => a.id) })),
   [
     { id: "inventario", ids: ["menaje", "stock", "uso", "proveedores"] },
-    { id: "recetas", ids: ["recetas", "costeo", "plato"] },
+    { id: "recetas", ids: ["recetas", "costeo", "plato", "produccion"] },
     { id: "operacion", ids: ["compras", "ventas", "pedido"] },
   ],
 );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ComponentType, PointerEvent as ReactPointerEvent, SVGProps } from "react";
 import {
+  BalanzaIcon,
   BookIcon,
   BoxIcon,
   CalculatorIcon,
@@ -37,6 +38,7 @@ const ICONOS: Record<string, Icono> = {
   recetas: BookIcon,
   costeo: CalculatorIcon,
   plato: PlusIcon,
+  produccion: BalanzaIcon,
   compras: CartIcon,
   ventas: ReceiptIcon,
   pedido: CartIcon,

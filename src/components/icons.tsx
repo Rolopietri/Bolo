@@ -410,3 +410,15 @@ export function SparkleIcon(props: SVGProps<SVGSVGElement>) {
     </Svg>
   );
 }
+
+/** Balanza de cocina (producción: pesar lo que entra y lo que queda). */
+export function BalanzaIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Svg {...props}>
+      <path d="M4 20h16l-1.5-8h-13L4 20Z" />
+      <path d="M12 12V8" />
+      <path d="M7 8h10a5 5 0 0 0-10 0Z" />
+      <path d="M12 16.5 13.5 15" />
+    </Svg>
+  );
+}

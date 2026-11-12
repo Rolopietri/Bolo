@@ -51,6 +51,7 @@ export const GRUPOS_HOME = [
       { id: "recetas", href: "/cocina/recetas", label: "Recetas" },
       { id: "costeo", href: "/cocina/costeo", label: "Costeo" },
       { id: "plato", href: "/cocina/plato", label: "Crear un plato", dataGuia: "guia-plato" },
+      { id: "produccion", href: "/cocina/produccion", label: "Producción" },
     ],
   },
   {
