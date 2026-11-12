@@ -47,7 +47,6 @@ import {
   type TasaInventario,
 } from "./TableroInventario";
 import {
-  MIN_DIAS_CON_CONSUMO,
   VENTANA_CONSUMO_DIAS,
   armarStock,
   categoriaVisible,
@@ -1460,7 +1459,7 @@ export function InsumosClient({
 }
 
 /** Explicación general de "Alcanza para" (la misma para todos los insumos). */
-const AYUDA_ALCANCE = `Días de cobertura estimados: stock disponible ÷ consumo diario promedio. El consumo diario promedio se obtiene de las salidas totales de los últimos ${VENTANA_CONSUMO_DIAS} días (ventas descontadas según receta, pérdidas y mermas) ÷ ${VENTANA_CONSUMO_DIAS}. Se requieren salidas en al menos ${MIN_DIAS_CON_CONSUMO} días distintos para estimarlo.`;
+const AYUDA_ALCANCE = `Stock disponible ÷ consumo diario promedio (últimos ${VENTANA_CONSUMO_DIAS} días).`;
 
 /** Una fila de la lista: estado, cuánto queda, cuánto dura y precio. Cada dato
  *  aparece una sola vez; el resto (uso diario, pérdidas, cambios) vive en el
