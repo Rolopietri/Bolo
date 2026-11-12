@@ -21,7 +21,6 @@ import {
   createCategoriaInsumo,
   type CategoriaInsumo,
 } from "@/lib/data/categoriasInsumo";
-import { UnitCalculator } from "@/components/UnitCalculator";
 import { PresentacionPicker } from "@/components/PresentacionPicker";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { leerPresentacion, SUELTO, TIPOS_PRESENTACION } from "@/lib/presentacion";
@@ -40,6 +39,7 @@ import { CamaraCaptura } from "./_CamaraCaptura";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { DetalleInsumo } from "./DetalleInsumo";
 import { AyudaEtiqueta } from "@/components/AyudaEtiqueta";
+import { sugerirCategoria } from "@/lib/sugerir-categoria";
 import {
   PastillaEstado,
   TableroInventario,
@@ -227,6 +227,17 @@ export function InsumosClient({
   const [importando, setImportando] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
+  // Alta en 3 pasos: 1 ¿Qué es?, 2 ¿Cómo lo compras?, 3 ¿Cuánto tienes?, 4 resumen.
+  const [paso, setPaso] = useState<1 | 2 | 3 | 4>(1);
+  const [errorPaso, setErrorPaso] = useState<string | null>(null);
+  // null = aún no respondió; si dice que sí, aparece el % de pérdida.
+  const [pierdePeso, setPierdePeso] = useState<boolean | null>(null);
+  // true si la persona eligió la categoría a mano (ya no se sugiere sola).
+  const [categoriaTocada, setCategoriaTocada] = useState(false);
+  // Reinicia el selector de presentación cuando la foto o "agregar otro"
+  // cambian sus datos desde fuera.
+  const [versionPresentacion, setVersionPresentacion] = useState(0);
+  const agregarOtro = useRef(false);
   // Reconocimiento de insumo por foto de la etiqueta.
   const [reconociendo, setReconociendo] = useState(false);
   const [errorFoto, setErrorFoto] = useState<string | null>(null);
@@ -375,6 +386,11 @@ export function InsumosClient({
   }
 
   function resetForm() {
+    setPaso(1);
+    setErrorPaso(null);
+    setPierdePeso(null);
+    setCategoriaTocada(false);
+    setVersionPresentacion((v) => v + 1);
     setForm({ ...emptyForm });
     setCreandoCategoria(false);
     setCreandoProveedor(false);
@@ -421,6 +437,8 @@ export function InsumosClient({
             : `Marca: ${c.marca}`
           : f.notas,
       }));
+      setVersionPresentacion((v) => v + 1);
+      if (c.categoria) setCategoriaTocada(true);
       // Si la categoría reconocida no existe en la lista, habilita crearla.
       if (c.categoria && !categoriasDisponibles.includes(c.categoria)) {
         setCreandoCategoria(true);
@@ -613,6 +631,15 @@ export function InsumosClient({
         setItems((prev) => [...prev, nuevo]);
         scrollToId = nuevo.id;
       }
+      if (agregarOtro.current && !editingId) {
+        agregarOtro.current = false;
+        const { categoria: cat, proveedorId: prov } = form;
+        resetForm();
+        setAdding(true);
+        setForm({ ...emptyForm, categoria: cat, proveedorId: prov });
+        setCategoriaTocada(cat !== "");
+        return;
+      }
       resetForm();
       // Scroll al item recién editado/creado en el próximo tick, después del
       // re-render. Usamos requestAnimationFrame para asegurarnos que el DOM
@@ -744,6 +771,429 @@ export function InsumosClient({
     categoriasReales.forEach((c) => set.add(c));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [categoriasInsumo, categoriasReales]);
+
+  // Categoría sugerida por el nombre (solo al agregar y si no la eligió a mano).
+  const categoriaSugerida = useMemo(() => {
+    const g = sugerirCategoria(form.nombre);
+    if (!g) return null;
+    return categoriasDisponibles.find((c) => c.toLowerCase() === g.toLowerCase()) ?? g;
+  }, [form.nombre, categoriasDisponibles]);
+
+  // Al escribir el nombre de un insumo nuevo, la categoría se sugiere sola
+  // mientras la persona no la haya elegido a mano.
+  function cambiarNombre(nombre: string) {
+    if (editingId || categoriaTocada || creandoCategoria) {
+      setForm({ ...form, nombre });
+      return;
+    }
+    const g = sugerirCategoria(nombre);
+    const sug = g ? (categoriasDisponibles.find((c) => c.toLowerCase() === g.toLowerCase()) ?? g) : "";
+    setForm({ ...form, nombre, categoria: sug });
+  }
+
+  // Avanza de paso validando lo justo; en el resumen, guarda.
+  function enviarPaso(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorPaso(null);
+    if (paso === 1) {
+      if (!form.nombre.trim()) {
+        setErrorPaso("Escribe el nombre del insumo.");
+        return;
+      }
+      setPaso(2);
+      return;
+    }
+    if (paso === 2) {
+      if (!form.unidadCompra.trim() || !form.unidadBase.trim()) {
+        setErrorPaso("Elige la presentación y cuánto trae.");
+        return;
+      }
+      // Sugerencia para el aviso: 1 de la presentación (ej. 1 saco).
+      if (form.stockMinimo.trim() === "") {
+        setForm((f) => ({ ...f, stockUnidad: "compra", stockMinimo: "1" }));
+      }
+      setPaso(3);
+      return;
+    }
+    if (paso === 3) {
+      setPaso(4);
+      return;
+    }
+    void handleSubmit(e);
+  }
+
+  // Precio por kg/L/unidad legible para mostrar junto al precio de compra.
+  function precioPorUnidadTexto(): string | null {
+    const pr = Number(form.precioCompraUsd);
+    const cpc = Number(form.cantidadPorCompra) || 0;
+    if (!(pr > 0) || !(cpc > 0) || !form.unidadBase) return null;
+    const p = precioLegible(pr / cpc, form.unidadBase);
+    const monto = p.precio >= 0.01 ? p.precio.toFixed(2) : p.precio.toPrecision(2);
+    return "$" + monto + "/" + p.unidad;
+  }
+
+  // Filas del resumen antes de guardar (cada una vuelve a su paso).
+  const unidadStockLabel = opcionesStock.find((o) => o.key === unidadStock)?.label ?? form.unidadBase;
+  const enPresentacion = unidadStock === "compra";
+  const cantidadTexto = (n: string) => (enPresentacion ? n + " × " + unidadStockLabel : n + " " + unidadStockLabel);
+  const porUnidad = precioPorUnidadTexto();
+  const resumenNuevo: { label: string; valor: string; paso: 1 | 2 | 3 }[] = [
+    { label: "Categoría", valor: form.categoria || "Sin categoría", paso: 1 },
+    { label: "Se compra en", valor: form.unidadCompra || "—", paso: 2 },
+    {
+      label: "Precio",
+      valor:
+        Number(form.precioCompraUsd) > 0
+          ? "$" + Number(form.precioCompraUsd).toFixed(2) + (porUnidad ? " · " + porUnidad : "")
+          : "Sin precio",
+      paso: 2,
+    },
+    {
+      label: "Proveedor",
+      valor: proveedores.find((x) => x.id === form.proveedorId)?.nombre ?? "Sin proveedor",
+      paso: 2,
+    },
+    {
+      label: "Tienes",
+      valor:
+        Number(form.stockTotal) > 0
+          ? cantidadTexto(form.stockTotal) +
+            (factorStock !== 1
+              ? " (" + displayCantidad(Number(form.stockTotal) * factorStock, form.unidadBase) + ")"
+              : "")
+          : "Nada por ahora",
+      paso: 3,
+    },
+    {
+      label: "Aviso",
+      valor: Number(form.stockMinimo) > 0 ? "al quedar " + cantidadTexto(form.stockMinimo) : "Sin aviso",
+      paso: 3,
+    },
+    {
+      label: "Pérdida al prepararlo",
+      valor: Number(form.mermaCoccionPorc) > 0 ? form.mermaCoccionPorc + " %" : "No",
+      paso: 3,
+    },
+  ];
+
+  // ── Campos del formulario de insumo ────────────────────────────────
+  // Cada campo se escribe una vez y se usa en los dos modos: los 3 pasos para
+  // agregar y la vista compacta para editar.
+  const bloqueFoto = (
+<div className="flex flex-col gap-1">
+      <div className="flex flex-wrap gap-2">
+        {/* Cámara: abre la webcam/cámara en vivo para capturar al momento */}
+        <button
+          type="button"
+          onClick={() => setCamaraAbierta(true)}
+          disabled={reconociendo}
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
+            reconociendo
+              ? "bg-marfil text-cacao-soft"
+              : "bg-marfil-soft text-cacao hover:bg-marfil"
+          }`}
+        >
+          <CameraIcon className="size-4 text-terracotta" />
+          {reconociendo ? "Leyendo la etiqueta…" : "Tomar foto"}
+        </button>
+        {/* Galería: elegir una imagen existente */}
+        <label
+          className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
+            reconociendo
+              ? "bg-marfil text-cacao-soft"
+              : "cursor-pointer bg-marfil-soft text-cacao hover:bg-marfil"
+          }`}
+        >
+          <ImageIcon className="size-4 text-terracotta" />
+          Galería
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            disabled={reconociendo}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void reconocerFoto(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+      <span className="text-xs text-cacao-soft">
+        Toma una foto del empaque o elige una de tu galería y relleno los datos
+        por ti. Revisa antes de guardar.
+      </span>
+      {errorFoto && (
+        <span className="text-xs text-terracotta-deep">{errorFoto}</span>
+      )}
+      {camaraAbierta && (
+        <CamaraCaptura
+          onCapturar={(data, tipo) => void enviarReconocer(data, tipo)}
+          onCerrar={() => setCamaraAbierta(false)}
+        />
+      )}
+    </div>
+  );
+  const campoNombre = (
+    <input
+      type="text"
+      placeholder="Nombre del insumo (ej: Café en grano)"
+      aria-label="Nombre del insumo"
+      value={form.nombre}
+      onChange={(e) => cambiarNombre(e.target.value)}
+      autoFocus
+      required
+      className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+    />
+  );
+  const campoCategoria = (
+    <label className="text-sm text-cacao">
+      Categoría
+      <select
+        value={creandoCategoria ? "__nueva__" : form.categoria}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__nueva__") {
+            setCreandoCategoria(true);
+            setForm({ ...form, categoria: "" });
+          } else {
+            setCreandoCategoria(false);
+            setForm({ ...form, categoria: v });
+          }
+          setCategoriaTocada(true);
+        }}
+        className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
+      >
+        <option value="">— Sin categoría —</option>
+        {(form.categoria && !categoriasDisponibles.includes(form.categoria)
+          ? [...categoriasDisponibles, form.categoria]
+          : categoriasDisponibles
+        ).map((c) => (
+          <option key={c} value={c}>
+            {c}
+          </option>
+        ))}
+        <option value="__nueva__">+ Nueva categoría…</option>
+      </select>
+      {creandoCategoria && (
+        <input
+          type="text"
+          value={form.categoria}
+          onChange={(e) =>
+            setForm({ ...form, categoria: e.target.value })
+          }
+          placeholder="Nombre de la categoría nueva"
+          autoFocus
+          autoCapitalize="words"
+          spellCheck={false}
+          className="mt-2 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+        />
+      )}
+    </label>
+  );
+  const campoProveedor = (
+    <label className="text-sm text-cacao">
+      Proveedor
+      <select
+        value={creandoProveedor ? "__nuevo__" : form.proveedorId}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === "__nuevo__") {
+            setCreandoProveedor(true);
+            setNuevoProveedor("");
+          } else {
+            setCreandoProveedor(false);
+            setForm({ ...form, proveedorId: v });
+          }
+        }}
+        className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
+      >
+        <option value="">— Ninguno —</option>
+        {proveedores.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.nombre}
+          </option>
+        ))}
+        <option value="__nuevo__">+ Nuevo proveedor…</option>
+      </select>
+      {creandoProveedor && (
+        <div className="mt-2 flex gap-2">
+          <input
+            type="text"
+            value={nuevoProveedor}
+            onChange={(e) => setNuevoProveedor(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                agregarProveedor();
+              }
+            }}
+            placeholder="Nombre del proveedor nuevo"
+            autoFocus
+            autoCapitalize="words"
+            spellCheck={false}
+            className="flex-1 rounded-lg ring-1 ring-marfil px-3 py-2"
+          />
+          <button
+            type="button"
+            onClick={agregarProveedor}
+            disabled={guardandoProveedor || !nuevoProveedor.trim()}
+            className="shrink-0 rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium hover:bg-terracotta transition-colors disabled:opacity-50"
+          >
+            {guardandoProveedor ? "Guardando…" : "Agregar"}
+          </button>
+        </div>
+      )}
+    </label>
+  );
+  const campoPresentacion = (
+    <PresentacionPicker
+      key={editingId ?? `nuevo-${versionPresentacion}`}
+      inicial={
+        form.unidadCompra
+          ? {
+              unidadCompra: form.unidadCompra,
+              cantidadPorCompra: Number(form.cantidadPorCompra) || 0,
+              unidadBase: form.unidadBase,
+            }
+          : undefined
+      }
+      baseActual={
+        editingId ? items.find((x) => x.id === editingId)?.unidadBase : undefined
+      }
+      tiposEnUso={tiposEnUso}
+      onChange={(c) =>
+        setForm((f) => ({
+          ...f,
+          unidadCompra: c?.unidadCompra ?? "",
+          cantidadPorCompra: c?.cantidadPorCompra ?? "",
+          unidadBase: c?.unidadBase ?? "",
+        }))
+      }
+    />
+  );
+  const campoPrecio = (
+    <label className="text-sm text-cacao">
+      Precio de compra (USD)
+      <input
+        type="number"
+        step="0.01"
+        min="0"
+        value={form.precioCompraUsd}
+        onChange={(e) =>
+          setForm({ ...form, precioCompraUsd: e.target.value })
+        }
+        className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+      />
+      {Number(form.precioCompraUsd) > 0 &&
+        Number(form.cantidadPorCompra) > 0 &&
+        form.unidadBase && (
+          <span className="text-[11px] text-cacao-mute block mt-1">
+            {(() => {
+              const p = precioLegible(
+                Number(form.precioCompraUsd) / Number(form.cantidadPorCompra),
+                form.unidadBase,
+              );
+              return `Te sale a $${p.precio >= 0.01 ? p.precio.toFixed(2) : p.precio.toPrecision(2)} por ${p.unidad}`;
+            })()}
+          </span>
+        )}
+    </label>
+  );
+  const campoStock = (
+    <label className="text-sm text-cacao">
+      ¿Cuánto tienes ahora?
+      <CantidadUnidad
+        valor={form.stockTotal}
+        unidad={unidadStock}
+        opciones={opcionesStock}
+        onChange={(v, u) =>
+          u !== unidadStock
+            ? cambiarUnidadStock(u)
+            : setForm({ ...form, stockTotal: v })
+        }
+      />
+      <span className="text-[10px] text-cacao-mute block mt-1">
+        {factorStock !== 1 && Number(form.stockTotal) > 0 ? (
+          <>
+            Son{" "}
+            <b>
+              {displayCantidad(
+                Number(form.stockTotal) * factorStock,
+                form.unidadBase,
+              )}
+            </b>
+            .
+          </>
+        ) : (
+          <>
+            Lo que hay en el estante.
+            {/* Solo hay stock reservado cuando se usan Planes de producción. */}
+            {items.some((i) => i.stockComprometido > 0) &&
+              " El stock libre (= total − comprometido) aparece en el listado."}
+          </>
+        )}
+      </span>
+    </label>
+  );
+  const campoMinimo = (
+    <label className="text-sm text-cacao">
+      Avísame cuando queden
+      <CantidadUnidad
+        valor={form.stockMinimo}
+        unidad={unidadStock}
+        opciones={opcionesStock}
+        placeholder="Opcional"
+        onChange={(v, u) =>
+          u !== unidadStock
+            ? cambiarUnidadStock(u)
+            : setForm({ ...form, stockMinimo: v })
+        }
+      />
+      {factorStock !== 1 && Number(form.stockMinimo) > 0 && (
+        <span className="text-[10px] text-cacao-mute block mt-1">
+          Te avisamos al quedar menos de{" "}
+          <b>
+            {displayCantidad(
+              Number(form.stockMinimo) * factorStock,
+              form.unidadBase,
+            )}
+          </b>
+          .
+        </span>
+      )}
+    </label>
+  );
+  const campoMerma = (
+    <label className="text-sm text-cacao">
+      Pérdida al prepararlo (%)
+      <input
+        type="number"
+        step="1"
+        min="0"
+        max="99"
+        placeholder="Ej. 70 (opcional)"
+        value={form.mermaCoccionPorc}
+        onChange={(e) =>
+          setForm({ ...form, mermaCoccionPorc: e.target.value })
+        }
+        className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+      />
+      <span className="text-[10px] text-cacao-mute block mt-1">
+        Ej.: tocineta ≈ 70 % al cocinarse; aguacate, por la pepa.
+      </span>
+    </label>
+  );
+  const campoNotas = (
+    <textarea
+      placeholder="Notas (opcional)"
+      aria-label="Notas"
+      value={form.notas}
+      onChange={(e) => setForm({ ...form, notas: e.target.value })}
+      rows={2}
+      className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+    />
+  );
 
   return (
     <div>
@@ -968,320 +1418,34 @@ export function InsumosClient({
         />
       )}
 
-      {adding && (
+      {adding && editingId && (
         <form
           id="insumo-form"
           onSubmit={handleSubmit}
           className="mb-5 rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-3"
         >
           <h2 className="font-display text-sm tracking-[0.2em] uppercase text-cacao">
-            {editingId ? "Editar insumo" : "Nuevo insumo"}
+            Editar insumo
           </h2>
-          <UnitCalculator />
-          {!editingId && (
-            <div className="flex flex-col gap-1">
-              <div className="flex flex-wrap gap-2">
-                {/* Cámara: abre la webcam/cámara en vivo para capturar al momento */}
-                <button
-                  type="button"
-                  onClick={() => setCamaraAbierta(true)}
-                  disabled={reconociendo}
-                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
-                    reconociendo
-                      ? "bg-marfil text-cacao-soft"
-                      : "bg-marfil-soft text-cacao hover:bg-marfil"
-                  }`}
-                >
-                  <CameraIcon className="size-4 text-terracotta" />
-                  {reconociendo ? "Leyendo la etiqueta…" : "Tomar foto"}
-                </button>
-                {/* Galería: elegir una imagen existente */}
-                <label
-                  className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm ring-1 ring-marfil transition-colors ${
-                    reconociendo
-                      ? "bg-marfil text-cacao-soft"
-                      : "cursor-pointer bg-marfil-soft text-cacao hover:bg-marfil"
-                  }`}
-                >
-                  <ImageIcon className="size-4 text-terracotta" />
-                  Galería
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={reconociendo}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void reconocerFoto(f);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-              </div>
-              <span className="text-xs text-cacao-soft">
-                Toma una foto del empaque o elige una de tu galería y relleno los datos
-                por ti. Revisa antes de guardar.
-              </span>
-              {errorFoto && (
-                <span className="text-xs text-terracotta-deep">{errorFoto}</span>
-              )}
-              {camaraAbierta && (
-                <CamaraCaptura
-                  onCapturar={(data, tipo) => void enviarReconocer(data, tipo)}
-                  onCerrar={() => setCamaraAbierta(false)}
-                />
-              )}
-            </div>
-          )}
-          <input
-            type="text"
-            placeholder="Nombre del insumo (ej: Café en grano)"
-            aria-label="Nombre del insumo"
-            value={form.nombre}
-            onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-            autoFocus
-            required
-            className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-          />
+          {campoNombre}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className="text-sm text-cacao">
-              Categoría
-              <select
-                value={creandoCategoria ? "__nueva__" : form.categoria}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === "__nueva__") {
-                    setCreandoCategoria(true);
-                    setForm({ ...form, categoria: "" });
-                  } else {
-                    setCreandoCategoria(false);
-                    setForm({ ...form, categoria: v });
-                  }
-                }}
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
-              >
-                <option value="">— Sin categoría —</option>
-                {categoriasDisponibles.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-                <option value="__nueva__">+ Nueva categoría…</option>
-              </select>
-              {creandoCategoria && (
-                <input
-                  type="text"
-                  value={form.categoria}
-                  onChange={(e) =>
-                    setForm({ ...form, categoria: e.target.value })
-                  }
-                  placeholder="Nombre de la categoría nueva"
-                  autoFocus
-                  autoCapitalize="words"
-                  spellCheck={false}
-                  className="mt-2 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-                />
-              )}
-            </label>
-            <label className="text-sm text-cacao">
-              Proveedor
-              <select
-                value={creandoProveedor ? "__nuevo__" : form.proveedorId}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (v === "__nuevo__") {
-                    setCreandoProveedor(true);
-                    setNuevoProveedor("");
-                  } else {
-                    setCreandoProveedor(false);
-                    setForm({ ...form, proveedorId: v });
-                  }
-                }}
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white"
-              >
-                <option value="">— Ninguno —</option>
-                {proveedores.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-                <option value="__nuevo__">+ Nuevo proveedor…</option>
-              </select>
-              {creandoProveedor && (
-                <div className="mt-2 flex gap-2">
-                  <input
-                    type="text"
-                    value={nuevoProveedor}
-                    onChange={(e) => setNuevoProveedor(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        agregarProveedor();
-                      }
-                    }}
-                    placeholder="Nombre del proveedor nuevo"
-                    autoFocus
-                    autoCapitalize="words"
-                    spellCheck={false}
-                    className="flex-1 rounded-lg ring-1 ring-marfil px-3 py-2"
-                  />
-                  <button
-                    type="button"
-                    onClick={agregarProveedor}
-                    disabled={guardandoProveedor || !nuevoProveedor.trim()}
-                    className="shrink-0 rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium hover:bg-terracotta transition-colors disabled:opacity-50"
-                  >
-                    {guardandoProveedor ? "Guardando…" : "Agregar"}
-                  </button>
-                </div>
-              )}
-            </label>
+            {campoCategoria}
+            {campoProveedor}
           </div>
-          <PresentacionPicker
-            key={editingId ?? "nuevo"}
-            inicial={
-              editingId
-                ? {
-                    unidadCompra: form.unidadCompra,
-                    cantidadPorCompra: Number(form.cantidadPorCompra) || 0,
-                    unidadBase: form.unidadBase,
-                  }
-                : undefined
-            }
-            baseActual={
-              editingId ? items.find((x) => x.id === editingId)?.unidadBase : undefined
-            }
-            tiposEnUso={tiposEnUso}
-            onChange={(c) =>
-              setForm((f) => ({
-                ...f,
-                unidadCompra: c?.unidadCompra ?? "",
-                cantidadPorCompra: c?.cantidadPorCompra ?? "",
-                unidadBase: c?.unidadBase ?? "",
-              }))
-            }
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <label className="text-sm text-cacao">
-              Precio del empaque (USD)
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.precioCompraUsd}
-                onChange={(e) =>
-                  setForm({ ...form, precioCompraUsd: e.target.value })
-                }
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-              />
-              {Number(form.precioCompraUsd) > 0 &&
-                Number(form.cantidadPorCompra) > 0 &&
-                form.unidadBase && (
-                  <span className="text-[11px] text-cacao-mute block mt-1">
-                    {(() => {
-                      const p = precioLegible(
-                        Number(form.precioCompraUsd) / Number(form.cantidadPorCompra),
-                        form.unidadBase,
-                      );
-                      return `= $${p.precio >= 0.01 ? p.precio.toFixed(2) : p.precio.toPrecision(2)} / ${p.unidad}`;
-                    })()}
-                  </span>
-                )}
-            </label>
-            <label className="text-sm text-cacao">
-              Stock total (físico)
-              <CantidadUnidad
-                valor={form.stockTotal}
-                unidad={unidadStock}
-                opciones={opcionesStock}
-                onChange={(v, u) =>
-                  u !== unidadStock
-                    ? cambiarUnidadStock(u)
-                    : setForm({ ...form, stockTotal: v })
-                }
-              />
-              <span className="text-[10px] text-cacao-mute block mt-1">
-                {factorStock !== 1 && Number(form.stockTotal) > 0 ? (
-                  <>
-                    Son{" "}
-                    <b>
-                      {displayCantidad(
-                        Number(form.stockTotal) * factorStock,
-                        form.unidadBase,
-                      )}
-                    </b>
-                    .
-                  </>
-                ) : (
-                  <>
-                    Lo que hay físicamente.
-                    {/* Solo hay stock reservado cuando se usan Planes de producción. */}
-                    {items.some((i) => i.stockComprometido > 0) &&
-                      " El stock libre (= total − comprometido) aparece en el listado."}
-                  </>
-                )}
-              </span>
-            </label>
-            <label className="text-sm text-cacao">
-              Stock mínimo (alerta si baja)
-              <CantidadUnidad
-                valor={form.stockMinimo}
-                unidad={unidadStock}
-                opciones={opcionesStock}
-                placeholder="Opcional"
-                onChange={(v, u) =>
-                  u !== unidadStock
-                    ? cambiarUnidadStock(u)
-                    : setForm({ ...form, stockMinimo: v })
-                }
-              />
-              {factorStock !== 1 && Number(form.stockMinimo) > 0 && (
-                <span className="text-[10px] text-cacao-mute block mt-1">
-                  Alerta cuando queden menos de{" "}
-                  <b>
-                    {displayCantidad(
-                      Number(form.stockMinimo) * factorStock,
-                      form.unidadBase,
-                    )}
-                  </b>
-                  .
-                </span>
-              )}
-            </label>
-            <label className="text-sm text-cacao">
-              Merma por procesamiento (%)
-              <input
-                type="number"
-                step="1"
-                min="0"
-                max="99"
-                placeholder="Ej. 70 (opcional)"
-                value={form.mermaCoccionPorc}
-                onChange={(e) =>
-                  setForm({ ...form, mermaCoccionPorc: e.target.value })
-                }
-                className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-              />
-              <span className="text-[10px] text-cacao-mute block mt-1">
-                % de peso que se pierde al prepararlo: al cocinarse (tocineta ≈ 70%),
-                o por la parte que se descarta (pepa del aguacate, semilla del mango).
-              </span>
-            </label>
+          {campoPresentacion}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {campoPrecio}
+            {campoStock}
+            {campoMinimo}
+            {campoMerma}
           </div>
-          <textarea
-            placeholder="Notas (opcional)"
-            aria-label="Notas"
-            value={form.notas}
-            onChange={(e) => setForm({ ...form, notas: e.target.value })}
-            rows={2}
-            className="w-full rounded-lg ring-1 ring-marfil px-3 py-2"
-          />
+          {campoNotas}
           <div className="flex gap-2 pt-2">
             <button
               type="submit"
               className="flex-1 rounded-lg bg-cacao text-white py-2 font-medium hover:bg-terracotta"
             >
-              {editingId ? "Guardar cambios" : "Crear insumo"}
+              Guardar cambios
             </button>
             <button
               type="button"
@@ -1290,6 +1454,167 @@ export function InsumosClient({
             >
               Cancelar
             </button>
+          </div>
+        </form>
+      )}
+
+      {adding && !editingId && (
+        <form
+          id="insumo-form"
+          onSubmit={enviarPaso}
+          className="mb-5 rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-4"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="font-display text-sm tracking-[0.2em] uppercase text-cacao">
+              Nuevo insumo
+            </h2>
+            <button
+              type="button"
+              onClick={resetForm}
+              className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao"
+            >
+              Cancelar
+            </button>
+          </div>
+          <div className="flex gap-1" aria-hidden="true">
+            {[1, 2, 3].map((n) => (
+              <span
+                key={n}
+                className={`h-1 flex-1 rounded-full ${paso >= n ? "bg-terracotta" : "bg-marfil"}`}
+              />
+            ))}
+          </div>
+          <p className="text-[11px] uppercase tracking-widest text-cacao-mute">
+            {paso <= 3 ? `Paso ${paso} de 3` : "Listo para guardar"}
+          </p>
+
+          {paso === 1 && (
+            <div className="space-y-3">
+              <h3 className="font-cinzel text-xl text-cacao">¿Qué es?</h3>
+              {bloqueFoto}
+              {campoNombre}
+              {campoCategoria}
+              {categoriaSugerida && !categoriaTocada && form.categoria === categoriaSugerida && (
+                <p className="-mt-1 text-[11px] text-cacao-mute">Sugerida por el nombre. Puedes cambiarla.</p>
+              )}
+            </div>
+          )}
+
+          {paso === 2 && (
+            <div className="space-y-3">
+              <h3 className="font-cinzel text-xl text-cacao">¿Cómo lo compras?</h3>
+              {campoPresentacion}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {campoPrecio}
+                {campoProveedor}
+              </div>
+            </div>
+          )}
+
+          {paso === 3 && (
+            <div className="space-y-3">
+              <h3 className="font-cinzel text-xl text-cacao">¿Cuánto tienes?</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {campoStock}
+                {campoMinimo}
+              </div>
+              <div className="text-sm text-cacao">
+                ¿Pierde peso al prepararlo?
+                <div className="mt-1 grid max-w-xs grid-cols-2 gap-2">
+                  {([
+                    [false, "No"],
+                    [true, "Sí"],
+                  ] as const).map(([v, label]) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        setPierdePeso(v);
+                        if (!v) setForm((f) => ({ ...f, mermaCoccionPorc: "" }));
+                      }}
+                      className={`min-h-10 rounded-lg text-sm ring-1 ${
+                        pierdePeso === v
+                          ? "bg-cacao text-white ring-cacao"
+                          : "bg-white text-cacao ring-marfil hover:bg-marfil-soft"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {pierdePeso && <div className="max-w-xs">{campoMerma}</div>}
+              <details className="text-sm text-cacao" open={form.notas.trim() !== ""}>
+                <summary className="cursor-pointer text-cacao-soft">Notas (opcional)</summary>
+                <div className="mt-2">{campoNotas}</div>
+              </details>
+            </div>
+          )}
+
+          {paso === 4 && (
+            <div className="space-y-3">
+              <h3 className="font-cinzel text-xl text-cacao">{form.nombre.trim() || "Nuevo insumo"}</h3>
+              <dl className="divide-y divide-marfil border-y border-marfil text-sm">
+                {resumenNuevo.map((r) => (
+                  <div key={r.label} className="flex items-baseline justify-between gap-3 py-2">
+                    <dt className="text-cacao-soft">{r.label}</dt>
+                    <dd className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => setPaso(r.paso)}
+                        className="text-cacao hover:text-terracotta hover:underline"
+                        title="Corregir"
+                      >
+                        {r.valor}
+                      </button>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-[11px] text-cacao-mute">Toca un dato para corregirlo.</p>
+            </div>
+          )}
+
+          {errorPaso && <p className="text-sm text-terracotta-deep">{errorPaso}</p>}
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            {paso > 1 && (
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorPaso(null);
+                  setPaso((p) => (p - 1) as 1 | 2 | 3 | 4);
+                }}
+                className="rounded-lg ring-1 ring-marfil px-4 py-2 text-cacao hover:bg-marfil-soft"
+              >
+                Atrás
+              </button>
+            )}
+            {paso < 4 ? (
+              <button
+                type="submit"
+                className="flex-1 rounded-lg bg-terracotta py-2 font-medium text-white hover:bg-terracotta-deep"
+              >
+                {paso === 3 ? "Revisar" : "Siguiente"}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="submit"
+                  onClick={() => (agregarOtro.current = false)}
+                  className="flex-1 rounded-lg bg-terracotta py-2 font-medium text-white hover:bg-terracotta-deep"
+                >
+                  Guardar
+                </button>
+                <button
+                  type="submit"
+                  onClick={() => (agregarOtro.current = true)}
+                  className="w-full rounded-lg ring-1 ring-marfil py-2 text-cacao hover:bg-marfil-soft"
+                >
+                  Guardar y agregar otro
+                </button>
+              </>
+            )}
           </div>
         </form>
       )}
