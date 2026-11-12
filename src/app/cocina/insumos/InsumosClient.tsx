@@ -39,6 +39,7 @@ import { WarningIcon, CameraIcon, ImageIcon, ChevronIcon, SearchIcon } from "@/c
 import { CamaraCaptura } from "./_CamaraCaptura";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
 import { DetalleInsumo } from "./DetalleInsumo";
+import { AyudaEtiqueta } from "@/components/AyudaEtiqueta";
 import {
   PastillaEstado,
   TableroInventario,
@@ -46,6 +47,8 @@ import {
   type TasaInventario,
 } from "./TableroInventario";
 import {
+  MIN_DIAS_CON_CONSUMO,
+  VENTANA_CONSUMO_DIAS,
   armarStock,
   categoriaVisible,
   categoriasDe,
@@ -1456,6 +1459,21 @@ export function InsumosClient({
   );
 }
 
+/** Explicación de "Alcanza para" con los números de este insumo. */
+function explicarAlcance(l: LineaStock, consumoListo: boolean): string {
+  const fuente = `lo que salió en los últimos ${VENTANA_CONSUMO_DIAS} días (ventas según las recetas, más pérdidas y mermas)`;
+  if (!consumoListo) return "Calculando con las ventas recientes…";
+  if (l.dias.estado === "agotado") return "No queda stock libre de este insumo.";
+  if (l.dias.estado === "sin_datos") {
+    return `Se calcula con ${fuente}. Este insumo salió en menos de ${MIN_DIAS_CON_CONSUMO} días distintos, así que todavía no hay un promedio confiable.`;
+  }
+  const u = l.unidadBase;
+  // Promedio redondeado para leerlo fácil (373 g, no 372.857 g).
+  const p = l.dias.promedioDiario;
+  const promedio = p >= 10 ? Math.round(p) : Math.round(p * 100) / 100;
+  return `Quedan ${displayCantidad(l.libre, u)} ÷ ${displayCantidad(promedio, u)} por día ≈ ${textoDias(l.dias)}. El promedio es ${fuente}: ${displayCantidad(l.dias.consumido, u)} ÷ ${VENTANA_CONSUMO_DIAS} días.`;
+}
+
 /** Una fila de la lista: estado, cuánto queda, cuánto dura y precio. Cada dato
  *  aparece una sola vez; el resto (uso diario, pérdidas, cambios) vive en el
  *  Detalle. */
@@ -1532,7 +1550,9 @@ function FilaInsumo({
           )}
         </div>
         <div>
-          <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">Alcanza para</dt>
+          <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">
+            <AyudaEtiqueta ayuda={explicarAlcance(l, consumoListo)}>Alcanza para</AyudaEtiqueta>
+          </dt>
           <dd className={l.dias.estado === "sin_datos" || !consumoListo ? "text-cacao-soft" : "text-cacao"}>
             {consumoListo ? textoDias(l.dias) : "…"}
           </dd>
