@@ -236,8 +236,10 @@ function porPalabraPrincipal<T extends { id: string; nombre: string }>(linea: st
   let empate = false;
   for (const ins of insumos) {
     const delInsumo = sinTildes(ins.nombre).split(/[^a-zñ]+/).filter((w) => w.length >= 3);
-    if (delInsumo.length === 0 || !palabras.has(delInsumo[0])) continue;
-    const n = delInsumo.filter((w) => palabras.has(w)).length;
+    // Acepta el plural: "pollos" por "pollo", "cebollas" por "cebolla".
+    const esta = (w: string) => palabras.has(w) || palabras.has(`${w}s`) || palabras.has(`${w}es`);
+    if (delInsumo.length === 0 || !esta(delInsumo[0])) continue;
+    const n = delInsumo.filter(esta).length;
     if (n > mejorN) {
       mejor = ins;
       mejorN = n;
@@ -327,25 +329,35 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
       continue;
     }
 
-    // Con palabras clave: trozos que empiezan en cada palabra.
-    const trozos: { salida: boolean | null; texto: string }[] = [];
-    if (claves[0].index! > 0) trozos.push({ salida: null, texto: linea.slice(0, claves[0].index) });
-    claves.forEach((m, k) => {
-      const fin = k + 1 < claves.length ? claves[k + 1].index : linea.length;
-      trozos.push({ salida: RE_SALIDA.test(m[1]), texto: linea.slice(m.index! + m[1].length, fin) });
-    });
-    const ins = trozos.map((t) => buscar(nombreDe(t.texto))).find(Boolean) ?? null;
+    // Con palabras clave. La línea se parte en frases (por coma o "y"); en cada
+    // frase la palabra clave va con su peso, esté antes o después:
+    // "Entrando 8 kg lomito", "Lomito 8 kg entrando", "Lomito entrando 8 kg".
+    const ins = buscar(nombreDe(linea));
     // Sin nombre en la línea ("procesado 6 kg"): es del insumo anterior.
     const destino = ins ?? (previo?.insumoId ? insumoDe(previo.insumoId) ?? null : null);
     let tomada: number | null = null;
     let util: number | null = null;
     const sinClave: Cantidad[] = [];
-    for (const t of trozos) {
-      const c = cantidadesDe(t.texto)[0];
-      if (!c) continue;
-      if (t.salida == null) sinClave.push(c);
-      else if (t.salida) util ??= enPlantilla(c, destino);
-      else tomada ??= enPlantilla(c, destino);
+    for (const frase of linea.split(new RegExp(`(?<!\\d),|,(?!\\d)|(?<![${LETRA}])(?:y|e)(?![${LETRA}])`, "i"))) {
+      const ks = [...frase.matchAll(RE_CLAVE)].map((m) => ({ i: m.index!, fin: m.index! + m[1].length, salida: RE_SALIDA.test(m[1]) }));
+      const ns = [...frase.matchAll(RE_CANTIDAD)].map((m) => ({
+        i: m.index!,
+        c: { n: Number(m[1].replace(",", ".")), u: m[2] ? (m[2].toLowerCase() === "k" ? "kg" : m[2].toLowerCase()) : null },
+        usado: false,
+      }));
+      // Cada palabra toma el primer peso que la sigue (antes de la próxima
+      // palabra); si no hay, el último peso libre que la precede.
+      ks.forEach((k, j) => {
+        const limite = j + 1 < ks.length ? ks[j + 1].i : Infinity;
+        const n =
+          ns.find((x) => !x.usado && x.i >= k.fin && x.i < limite) ??
+          [...ns].reverse().find((x) => !x.usado && x.i < k.i);
+        if (!n) return;
+        n.usado = true;
+        if (k.salida) util ??= enPlantilla(n.c, destino);
+        else tomada ??= enPlantilla(n.c, destino);
+      });
+      for (const n of ns) if (!n.usado) sinClave.push(n.c);
     }
     // "Lomito 8 kg, quedó 6": el número sin palabra ocupa el lugar que falta.
     for (const c of sinClave) {
