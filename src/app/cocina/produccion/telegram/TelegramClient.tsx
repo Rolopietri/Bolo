@@ -93,11 +93,12 @@ export function TelegramClient() {
           <div className="space-y-2 text-sm text-cacao">
             <p className="font-medium">Cómo escribir en el grupo</p>
             <p className="text-cacao-soft">
-              Como se escribe normalmente: el insumo, cuánto entró sin procesar y cuánto quedó procesado. Bolo
-              toma el nombre y los dos números en ese orden. También se puede mandar la foto de la plantilla llena.
+              Empieza con <b>Entrando</b> o <b>Sin procesar</b> (lo que se saca para procesar) y{" "}
+              <b>Saliendo</b> o <b>Procesado</b> (lo que quedó listo), seguido del peso y el insumo. Se pueden
+              mezclar, y la entrada y la salida pueden ir en mensajes distintos: Bolo las junta al revisar.
             </p>
             <pre className="rounded-lg bg-marfil-soft px-3 py-2 text-xs text-cacao ring-1 ring-marfil">
-              {"Lomito 8 kg, quedó 6 kg\nCebolla 3 kg, limpia 2,5 kg\nPollo 12 unidades, quedaron 12"}
+              {"Entrando 8 kg lomito\nSaliendo 6 kg lomito\n\nSin procesar 3 kg cebolla\nProcesado 2,5 kg cebolla\n\nEntrando 12 unidades pollo, procesado 12"}
             </pre>
             <p className="text-xs text-cacao-soft">
               Solo llegan los mensajes con números o con foto; la conversación normal se ignora. Nada se guarda sin

@@ -104,6 +104,9 @@ export function ProduccionClient() {
   // Mensajes del grupo de Telegram por revisar, y el que se está revisando.
   const [pendientes, setPendientes] = useState<Pendiente[]>([]);
   const [revisando, setRevisando] = useState<Pendiente | null>(null);
+  // Otros mensajes que se juntaron con el que se revisa (la entrada en uno y la
+  // salida en otro); se aprueban juntos.
+  const [companeros, setCompaneros] = useState<Pendiente[]>([]);
 
   // ── Comparar ───────────────────────────────────────────────────────
   const [vista, setVista] = useState<Vista>("merma");
@@ -177,6 +180,17 @@ export function ProduccionClient() {
   }, [vista, desde, hoy, insumos]);
 
   const insumoPorId = useMemo(() => new Map(insumos.map((i) => [i.id, i] as const)), [insumos]);
+  // Qué trae cada mensaje de la bandeja: solo la entrada, solo la salida o ambas.
+  const ladoDe = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of pendientes) {
+      const rs = leerMensaje(p.texto ?? "", insumos);
+      if (rs.length === 0) continue;
+      if (rs.every((r) => r.tomada != null && r.util == null)) m.set(p.id, "Solo entrada");
+      else if (rs.every((r) => r.util != null && r.tomada == null)) m.set(p.id, "Solo salida");
+    }
+    return m;
+  }, [pendientes, insumos]);
   const usoVentas = usoCalculado && usoCalculado.desde === desde ? usoCalculado.mapa : null;
 
   function cambiarRenglon(key: number, cambio: Partial<Renglon>) {
@@ -201,6 +215,7 @@ export function ProduccionClient() {
     setDesdeEscaneo(false);
     setFotoUrl(null);
     setRevisando(null);
+    setCompaneros([]);
   }
 
   /** Pasa un mensaje del grupo al formulario para revisarlo y aprobarlo. */
@@ -226,6 +241,35 @@ export function ProduccionClient() {
           }
         }
       }
+      // Entrada y salida en mensajes distintos: busca en la bandeja el mensaje
+      // que completa cada renglón (la salida, después; la entrada, antes). Solo
+      // se junta un mensaje si todo lo que dice es de insumos de este registro.
+      const extra: Pendiente[] = [];
+      const t0 = new Date(p.enviadoAt).getTime();
+      const otros = pendientes
+        .filter((o) => o.id !== p.id && o.texto)
+        .map((o) => ({ o, t: new Date(o.enviadoAt).getTime(), rs: leerMensaje(o.texto ?? "", insumos) }))
+        .filter((x) => x.rs.length > 0 && x.rs.every((y) => y.insumoId && leidos.some((l) => l.insumoId === y.insumoId)));
+      for (const r of leidos) {
+        if (!r.insumoId || (r.tomada != null && r.util != null)) continue;
+        const buscaSalida = r.util == null;
+        const lado = (t: number) => (buscaSalida ? (t >= t0 ? 0 : 1) : t <= t0 ? 0 : 1);
+        const cercania = (t: number) => Math.abs(t - t0);
+        const orden = [...otros].sort((a, b) => lado(a.t) - lado(b.t) || cercania(a.t) - cercania(b.t));
+        for (const x of orden) {
+          const c = x.rs.find(
+            (y) =>
+              y.insumoId === r.insumoId &&
+              (buscaSalida ? y.util != null && y.tomada == null : y.tomada != null && y.util == null),
+          );
+          if (!c) continue;
+          if (buscaSalida) r.util = c.util;
+          else r.tomada = c.tomada;
+          if (!extra.some((e) => e.id === x.o.id)) extra.push(x.o);
+          break;
+        }
+      }
+      setCompaneros(extra);
       setFecha(fechaISOEnCaracas(new Date(p.enviadoAt)));
       if (p.remitente) setResponsable(p.remitente);
       setRenglones(leidos.length > 0 ? aRenglones(leidos) : [renglonVacio()]);
@@ -286,6 +330,21 @@ export function ProduccionClient() {
       setError("Hay renglones con cantidades pero sin insumo. Elige el insumo o quita el renglón.");
       return;
     }
+    const nombreDe = (id: string) => insumoPorId.get(id)?.nombre ?? "un insumo";
+    const sinEntrada = renglones.find((r) => r.insumoId && r.tomada.trim() === "" && r.util.trim() !== "");
+    if (sinEntrada) {
+      setError(`Falta cuánto entró sin procesar de ${nombreDe(sinEntrada.insumoId)}.`);
+      return;
+    }
+    if (revisando) {
+      const sinSalida = renglones.find((r) => r.insumoId && r.tomada.trim() !== "" && r.util.trim() === "");
+      if (sinSalida) {
+        setError(
+          `Falta cuánto salió procesado de ${nombreDe(sinSalida.insumoId)}. Si todavía se está procesando, toca «Dejar pendiente» y apruébalo cuando llegue el mensaje de salida.`,
+        );
+        return;
+      }
+    }
     const completos = renglones.filter((r) => r.insumoId && r.tomada.trim() !== "");
     if (completos.length === 0) {
       setError("Agrega al menos un insumo con su cantidad sin procesar.");
@@ -312,14 +371,18 @@ export function ProduccionClient() {
         tomada,
         util,
         responsable,
-        notas: revisando?.texto ? `Telegram: ${revisando.texto}`.slice(0, 500) : undefined,
+        notas: revisando
+          ? `Telegram: ${[revisando, ...companeros].map((m) => m.texto ?? "").filter(Boolean).join(" | ")}`.slice(0, 500)
+          : undefined,
         origen: revisando ? ("telegram" as const) : desdeEscaneo ? ("escaneo" as const) : ("manual" as const),
       });
     }
     setGuardando(true);
     try {
       await crearLotes(nuevos);
-      if (revisando) await marcarPendiente(revisando.id, "aprobado");
+      if (revisando) {
+        for (const m of [revisando, ...companeros]) await marcarPendiente(m.id, "aprobado");
+      }
       try {
         localStorage.setItem(CLAVE_RESPONSABLE, responsable);
       } catch {
@@ -374,15 +437,16 @@ export function ProduccionClient() {
                   <span className="block truncate text-sm text-cacao">{p.texto || "Foto sin texto"}</span>
                   <span className="block text-xs text-cacao-soft">
                     {p.remitente ?? "Sin nombre"} · {horaCorta(p.enviadoAt)}
+                    {ladoDe.get(p.id) && <> · {ladoDe.get(p.id)}</>}
                   </span>
                 </span>
                 <button
                   type="button"
                   onClick={() => void revisar(p)}
-                  disabled={leyendo !== null || revisando?.id === p.id}
+                  disabled={leyendo !== null || revisando?.id === p.id || companeros.some((c) => c.id === p.id)}
                   className="min-h-10 shrink-0 rounded-lg px-3 text-sm text-terracotta ring-1 ring-marfil hover:bg-marfil-soft disabled:opacity-50"
                 >
-                  {revisando?.id === p.id ? "Revisando" : "Revisar"}
+                  {revisando?.id === p.id || companeros.some((c) => c.id === p.id) ? "Revisando" : "Revisar"}
                 </button>
               </li>
             ))}
@@ -443,6 +507,14 @@ export function ProduccionClient() {
                     Mensaje de {revisando.remitente ?? "alguien del grupo"} · {horaCorta(revisando.enviadoAt)}
                   </p>
                   {revisando.texto && <p className="whitespace-pre-line">{revisando.texto}</p>}
+                  {companeros.map((c) => (
+                    <div key={c.id} className="border-t border-marfil pt-1">
+                      <p className="text-xs text-cacao-soft">
+                        Junto con el mensaje de {c.remitente ?? "alguien del grupo"} · {horaCorta(c.enviadoAt)}
+                      </p>
+                      <p className="whitespace-pre-line">{c.texto}</p>
+                    </div>
+                  ))}
                   <p>
                     Revisa cada renglón contra el mensaje, corrige lo que haga falta y toca <b>Aprobar y guardar</b>.
                   </p>
@@ -585,6 +657,15 @@ export function ProduccionClient() {
               className="rounded-lg px-4 py-2.5 text-cacao ring-1 ring-marfil hover:bg-marfil-soft"
             >
               {revisando ? "Descartar mensaje" : "Descartar"}
+            </button>
+          )}
+          {revisando && (
+            <button
+              type="button"
+              onClick={limpiarRevision}
+              className="rounded-lg px-4 py-2.5 text-cacao-soft hover:bg-marfil-soft"
+            >
+              Dejar pendiente
             </button>
           )}
         </div>
