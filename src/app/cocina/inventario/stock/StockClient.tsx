@@ -192,6 +192,26 @@ export function StockClient() {
   const [verPedir, setVerPedir] = useState(false);
   const [grupoAbierto, setGrupoAbierto] = useState<string | null>(null);
   const [listaAbierta, setListaAbierta] = useState(false);
+  // Estado, categoría y orden viven plegados en "Filtros" para no llenar la
+  // pantalla de pastillas; al cerrarlos queda solo el resumen de lo activo.
+  const [filtrosAbiertos, setFiltrosAbiertos] = useState(false);
+  const filtrosActivos = [
+    estado !== "todos" && {
+      id: "estado",
+      label: ESTADOS.find((e) => e.id === estado)?.label ?? estado,
+      quitar: () => setEstado("todos"),
+    },
+    categoria !== "todas" && {
+      id: "categoria",
+      label: categoria === "__sin__" ? "Sin categoría" : categoria,
+      quitar: () => setCategoria("todas"),
+    },
+    orden !== "pronto" && {
+      id: "orden",
+      label: `Orden: ${ORDENES.find((o) => o.id === orden)?.label ?? orden}`,
+      quitar: () => setOrden("pronto"),
+    },
+  ].filter((f): f is { id: string; label: string; quitar: () => void } => Boolean(f));
 
   useEffect(() => {
     let cancelado = false;
@@ -445,55 +465,97 @@ export function StockClient() {
             </p>
           )}
         </div>
-        <label className="flex items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-marfil">
-          <SearchIcon className="size-4 text-cacao-mute" />
-          <input
-            type="search"
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            placeholder="Buscar insumo"
-            aria-label="Buscar insumo"
-            className="w-full bg-transparent text-sm text-cacao outline-none placeholder:text-cacao-mute"
-          />
-        </label>
-        <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por estado">
-          <span className="text-[10px] uppercase tracking-widest text-cacao-soft">Estado</span>
-          {ESTADOS.map((e) => (
-            <button key={e.id} type="button" onClick={() => setEstado(e.id)} className={pillClass(estado === e.id)}>
-              {e.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <label className="flex flex-1 items-center gap-2 rounded-lg bg-white px-3 py-2 ring-1 ring-marfil">
+            <SearchIcon className="size-4 text-cacao-mute" />
+            <input
+              type="search"
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              placeholder="Buscar insumo"
+              aria-label="Buscar insumo"
+              className="w-full bg-transparent text-sm text-cacao outline-none placeholder:text-cacao-mute"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => setFiltrosAbiertos((v) => !v)}
+            aria-expanded={filtrosAbiertos}
+            className={`inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 text-xs uppercase tracking-widest ring-1 ${
+              filtrosAbiertos || filtrosActivos.length > 0
+                ? "bg-cacao text-white ring-cacao"
+                : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
+            }`}
+          >
+            Filtros
+            {filtrosActivos.length > 0 && (
+              <span className="rounded-full bg-white/25 px-1.5 text-[10px] tracking-normal">
+                {filtrosActivos.length}
+              </span>
+            )}
+            <ChevronIcon className={`size-3.5 ${filtrosAbiertos ? "-rotate-90" : "rotate-90"}`} />
+          </button>
         </div>
-        {categorias.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por categoría">
-            <span className="text-[10px] uppercase tracking-widest text-cacao-soft">Categoría</span>
-            <button type="button" onClick={() => setCategoria("todas")} className={pillClass(categoria === "todas")}>
-              Todas
-            </button>
-            {categorias.map((c) => (
+
+        {!filtrosAbiertos && filtrosActivos.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {filtrosActivos.map((f) => (
               <button
-                key={c}
+                key={f.id}
                 type="button"
-                onClick={() => setCategoria(c === "Sin categoría" ? "__sin__" : c)}
-                className={pillClass(categoria === (c === "Sin categoría" ? "__sin__" : c))}
+                onClick={f.quitar}
+                className="inline-flex items-center gap-1 rounded-full bg-marfil-soft px-3 py-1 text-xs text-cacao ring-1 ring-marfil hover:ring-terracotta/40"
+                title="Quitar este filtro"
               >
-                {c}
+                {f.label}
+                <span aria-hidden="true" className="text-cacao-mute">✕</span>
               </button>
             ))}
           </div>
         )}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[10px] uppercase tracking-widest text-cacao-soft">Orden</span>
-          {ORDENES.map((o) => (
-            <button key={o.id} type="button" onClick={() => setOrden(o.id)} className={pillClass(orden === o.id)}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-xs text-cacao-soft">
-          Los días usan las ventas y las salidas (pérdidas y mermas) de los últimos {VENTANA_CONSUMO_DIAS} días.
-          Si no hay salida en al menos {MIN_DIAS_CON_CONSUMO} días, no calculamos un promedio.
-        </p>
+
+        {filtrosAbiertos && (
+          <div className="space-y-3 border-y border-marfil py-3">
+            <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por estado">
+              <span className="w-full text-[10px] uppercase tracking-widest text-cacao-soft">Estado</span>
+              {ESTADOS.map((e) => (
+                <button key={e.id} type="button" onClick={() => setEstado(e.id)} className={pillClass(estado === e.id)}>
+                  {e.label}
+                </button>
+              ))}
+            </div>
+            {categorias.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por categoría">
+                <span className="w-full text-[10px] uppercase tracking-widest text-cacao-soft">Categoría</span>
+                <button type="button" onClick={() => setCategoria("todas")} className={pillClass(categoria === "todas")}>
+                  Todas
+                </button>
+                {categorias.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setCategoria(c === "Sin categoría" ? "__sin__" : c)}
+                    className={pillClass(categoria === (c === "Sin categoría" ? "__sin__" : c))}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="w-full text-[10px] uppercase tracking-widest text-cacao-soft">Orden</span>
+              {ORDENES.map((o) => (
+                <button key={o.id} type="button" onClick={() => setOrden(o.id)} className={pillClass(orden === o.id)}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-cacao-soft">
+              Los días usan las ventas y las salidas (pérdidas y mermas) de los últimos {VENTANA_CONSUMO_DIAS} días.
+              Si no hay salida en al menos {MIN_DIAS_CON_CONSUMO} días, no calculamos un promedio.
+            </p>
+          </div>
+        )}
       </div>
 
       {visibles.length === 0 ? (
