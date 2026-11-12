@@ -40,7 +40,6 @@ import {
   type SalidaStock,
 } from "@/lib/stock-liviano";
 import { displayCantidad, precioLegible } from "@/lib/units";
-import { pillClass } from "@/lib/ui";
 import {
   CLAVE_TASA_HOY,
   CLAVE_TASA_PERSONALIZADA,
@@ -515,45 +514,67 @@ export function StockClient() {
         )}
 
         {filtrosAbiertos && (
-          <div className="space-y-3 border-y border-marfil py-3">
-            <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por estado">
-              <span className="w-full text-[10px] uppercase tracking-widest text-cacao-soft">Estado</span>
-              {ESTADOS.map((e) => (
-                <button key={e.id} type="button" onClick={() => setEstado(e.id)} className={pillClass(estado === e.id)}>
-                  {e.label}
-                </button>
-              ))}
+          <div className="rounded-xl bg-marfil-soft/60 p-3 ring-1 ring-marfil">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <label className="text-[10px] uppercase tracking-widest text-cacao-soft">
+                Estado
+                <select
+                  value={estado}
+                  onChange={(e) => setEstado(e.target.value as FiltroEstadoStock)}
+                  className="mt-1 block w-full rounded-lg bg-white px-3 py-2 text-sm normal-case tracking-normal text-cacao ring-1 ring-marfil"
+                >
+                  {ESTADOS.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[10px] uppercase tracking-widest text-cacao-soft">
+                Categoría
+                <select
+                  value={categoria}
+                  onChange={(e) => setCategoria(e.target.value)}
+                  disabled={categorias.length <= 1}
+                  className="mt-1 block w-full rounded-lg bg-white px-3 py-2 text-sm normal-case tracking-normal text-cacao ring-1 ring-marfil disabled:opacity-60"
+                >
+                  <option value="todas">Todas</option>
+                  {categorias.map((c) => (
+                    <option key={c} value={c === "Sin categoría" ? "__sin__" : c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-[10px] uppercase tracking-widest text-cacao-soft">
+                Ordenar por
+                <select
+                  value={orden}
+                  onChange={(e) => setOrden(e.target.value as OrdenStock)}
+                  className="mt-1 block w-full rounded-lg bg-white px-3 py-2 text-sm normal-case tracking-normal text-cacao ring-1 ring-marfil"
+                >
+                  {ORDENES.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-            {categorias.length > 1 && (
-              <div className="flex flex-wrap items-center gap-2" aria-label="Filtrar por categoría">
-                <span className="w-full text-[10px] uppercase tracking-widest text-cacao-soft">Categoría</span>
-                <button type="button" onClick={() => setCategoria("todas")} className={pillClass(categoria === "todas")}>
-                  Todas
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] text-cacao-mute">
+                Los días usan las ventas y salidas de los últimos {VENTANA_CONSUMO_DIAS} días.
+              </p>
+              {filtrosActivos.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => filtrosActivos.forEach((f) => f.quitar())}
+                  className="text-[11px] uppercase tracking-widest text-terracotta hover:underline"
+                >
+                  Limpiar filtros
                 </button>
-                {categorias.map((c) => (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setCategoria(c === "Sin categoría" ? "__sin__" : c)}
-                    className={pillClass(categoria === (c === "Sin categoría" ? "__sin__" : c))}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="w-full text-[10px] uppercase tracking-widest text-cacao-soft">Orden</span>
-              {ORDENES.map((o) => (
-                <button key={o.id} type="button" onClick={() => setOrden(o.id)} className={pillClass(orden === o.id)}>
-                  {o.label}
-                </button>
-              ))}
+              )}
             </div>
-            <p className="text-xs text-cacao-soft">
-              Los días usan las ventas y las salidas (pérdidas y mermas) de los últimos {VENTANA_CONSUMO_DIAS} días.
-              Si no hay salida en al menos {MIN_DIAS_CON_CONSUMO} días, no calculamos un promedio.
-            </p>
           </div>
         )}
       </div>
