@@ -1158,7 +1158,7 @@ export function InsumosClient({
   );
   const campoMerma = (
     <label className="text-sm text-cacao">
-      Pérdida al prepararlo (%)
+      Merma (%)
       <input
         type="number"
         step="1"
