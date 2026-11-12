@@ -206,6 +206,18 @@ export function leerPlantilla<T extends { id: string; nombre: string }>(
 const RE_CANTIDAD =
   /(\d+(?:[.,]\d+)?)\s*(kilogramos?|kilos?|kgs?|k|gramos?|grs?|g|litros?|lts?|l|ml|unidades|unid|und|uds?|u)?(?![a-záéíóúñ])/gi;
 
+/** Pasa una cantidad del chat ("800 gr") a la unidad de la plantilla (0,8 kg). */
+function enPlantilla(
+  c: { n: number; u: string | null } | undefined,
+  ins: { unidadBase: string } | null | undefined,
+): number | null {
+  if (!c || !Number.isFinite(c.n)) return null;
+  if (!ins || !c.u) return c.n;
+  const p = unidadPlantilla(ins.unidadBase);
+  const v = convert(c.n, c.u, p.unidad === "unid" ? "unidad" : p.unidad);
+  return v == null ? c.n : Math.round(v * 1000) / 1000;
+}
+
 const sinTildes = (t: string) =>
   t
     .toLowerCase()
@@ -239,9 +251,10 @@ function porPalabraPrincipal<T extends { id: string; nombre: string }>(linea: st
  * Lee un mensaje de texto del grupo de producción. Cada línea con un nombre de
  * insumo y números es un renglón: el primer número es lo que entró sin
  * procesar y el segundo lo que quedó procesado. Ejemplos que entiende:
- *   "Carne molida 10 kg → 6,2 kg"
- *   "Cebolla: 3 / 2,5"
- *   "Pollo 12 und quedaron 12"
+ *   "Lomito 8 kg quedó 6 kg"
+ *   "Cebolla 3 kg, limpia 2,5"
+ *   "Pollo 12 unidades quedaron 12"
+ *   "Lomito 8 kg" + (otra línea) "quedó 6 kg"
  * Si el número trae unidad (800 g) se pasa a la unidad de la plantilla (0,8 kg).
  * Las líneas con números pero sin insumo reconocible quedan con el insumo en
  * blanco para elegirlo al revisar.
@@ -261,19 +274,21 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
     const nombre = linea.replace(RE_CANTIDAD, " ").replace(/[^a-záéíóúñü\s]/gi, " ").trim();
     if (!/[a-záéíóúñ]{3,}/i.test(nombre)) continue;
     const ins = sugerirInsumo(nombre, insumos) ?? porPalabraPrincipal(nombre, insumos);
+    // "Lomito 8 kg" y en la línea siguiente "quedó 6 kg": completa el renglón anterior.
+    const previo = out[out.length - 1];
+    if (!ins && previo && previo.util == null && cantidades.length === 1) {
+      previo.util = enPlantilla(cantidades[0], insumos.find((i) => i.id === previo.insumoId));
+      continue;
+    }
     // Sin insumo reconocido, un número suelto suele ser conversación ("somos 5").
     if (!ins && cantidades.length < 2) continue;
     if (ins && vistos.has(ins.id)) continue;
     if (ins) vistos.add(ins.id);
-    const enPlantilla = (c: { n: number; u: string | null } | undefined): number | null => {
-      if (!c || !Number.isFinite(c.n)) return null;
-      if (!ins || !c.u) return c.n;
-      const p = unidadPlantilla(ins.unidadBase);
-      const destino = p.unidad === "unid" ? "unidad" : p.unidad;
-      const v = convert(c.n, c.u, destino);
-      return v == null ? c.n : Math.round(v * 1000) / 1000;
-    };
-    out.push({ insumoId: ins?.id ?? "", tomada: enPlantilla(cantidades[0]), util: enPlantilla(cantidades[1]) });
+    out.push({
+      insumoId: ins?.id ?? "",
+      tomada: enPlantilla(cantidades[0], ins),
+      util: enPlantilla(cantidades[1], ins),
+    });
   }
   return out;
 }
