@@ -636,3 +636,46 @@ export async function fotoDerecha(archivo: Blob, giro: number): Promise<Blob> {
   const girada = rotar(c, giro, 2000);
   return new Promise((ok) => girada.toBlob((b) => ok(b ?? archivo), "image/jpeg", 0.85));
 }
+
+/** Un trozo de texto leído y su posición en la foto (en píxeles). */
+export type TrozoLeido = { texto: string; x0: number; x1: number; y: number; alto: number };
+
+/** Lee una hoja (por ejemplo, una plantilla impresa llenada a mano) y devuelve
+ *  cada trozo de texto con su posición, sin armar filas: así quien la usa puede
+ *  ubicar cada número junto al renglón impreso más cercano. PaddleOCR primero;
+ *  si no está, Tesseract palabra por palabra. */
+export async function leerTrozos(archivo: Blob, onProgreso?: Progreso): Promise<TrozoLeido[]> {
+  onProgreso?.("Limpiando la foto", 0);
+  const limpia = await limpiarFoto(archivo);
+  try {
+    onProgreso?.("Leyendo la hoja", 40);
+    const paddle = await obtenerPaddle();
+    const img = rotar(limpia, 0, 2000);
+    const r = await paddle.recognize(img, { flatten: true, strategy: "per-box" });
+    const items = (r.results ?? []).filter((it) => it.text.trim());
+    if (items.length > 0) {
+      return items.map((it) => ({
+        texto: it.text,
+        x0: it.box.x,
+        x1: it.box.x + it.box.width,
+        y: it.box.y + it.box.height / 2,
+        alto: it.box.height,
+      }));
+    }
+  } catch {
+    // sin PaddleOCR: sigue Tesseract
+  }
+  onProgreso?.("Revisando con el segundo lector", 70);
+  const worker = await obtenerWorker();
+  await worker.setParameters({ tessedit_pageseg_mode: "11" as never });
+  const { data } = await worker.recognize(paraLeer(limpia), {}, { blocks: true, text: true });
+  const out: TrozoLeido[] = [];
+  for (const b of data.blocks ?? [])
+    for (const p of b.paragraphs)
+      for (const l of p.lines)
+        for (const w of l.words as Palabra[]) {
+          if (!w.text.trim()) continue;
+          out.push({ texto: w.text, x0: w.bbox.x0, x1: w.bbox.x1, y: centro(w.bbox), alto: w.bbox.y1 - w.bbox.y0 });
+        }
+  return out;
+}
