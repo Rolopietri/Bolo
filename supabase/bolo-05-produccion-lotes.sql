@@ -18,8 +18,9 @@ create table if not exists public.produccion_lotes (
   cantidad_util    numeric not null check (cantidad_util >= 0),
   responsable      text,
   notas            text,
-  -- 'manual' (escrito en la app) o 'escaneo' (leído de la plantilla impresa).
-  origen           text not null default 'manual' check (origen in ('manual', 'escaneo')),
+  -- 'manual' (escrito en la app), 'escaneo' (plantilla impresa) o 'telegram'
+  -- (mensaje del grupo de producción, aprobado en la app).
+  origen           text not null default 'manual' check (origen in ('manual', 'escaneo', 'telegram')),
   created_by       uuid default auth.uid(),
   created_at       timestamptz not null default now(),
   constraint produccion_util_no_supera check (cantidad_util <= cantidad_tomada)

@@ -1,8 +1,8 @@
 "use client";
 
 // Producción: el cocinero registra, por insumo, cuánto tomó y cuánto le quedó
-// útil (a mano en la app, o escaneando la plantilla impresa y aprobando lo
-// leído). Abajo se compara la merma real con la de la ficha y lo producido con
+// útil (a mano en la app, escaneando la plantilla impresa o desde los mensajes
+// del grupo de Telegram, siempre aprobando lo leído). Abajo se compara la merma real con la de la ficha y lo producido con
 // lo que dicen las ventas.
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -16,6 +16,7 @@ import { crearLotes, faltaTablaProduccion, listLotes } from "@/lib/data/producci
 import {
   compararCuadre,
   compararMerma,
+  leerMensaje,
   leerPlantilla,
   mermaReal,
   resumirMerma,
@@ -27,9 +28,10 @@ import {
 import { fechaISOEnCaracas, restarDiasISO, salidasDeVenta } from "@/lib/stock-liviano";
 import { displayCantidad, opcionesCantidad } from "@/lib/units";
 import { extractError } from "@/lib/data/error";
+import { listPendientes, marcarPendiente, urlFotoPendiente, type Pendiente } from "@/lib/data/telegram";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { ErrorCarga } from "@/components/ErrorCarga";
-import { CameraIcon, ChevronIcon, DocIcon, PlusIcon, TrashIcon } from "@/components/icons";
+import { CameraIcon, ChatIcon, ChevronIcon, DocIcon, ImageIcon, PlusIcon, TrashIcon } from "@/components/icons";
 
 type Renglon = { key: number; insumoId: string; unidad: string; tomada: string; util: string };
 type Vista = "merma" | "cuadre";
@@ -43,6 +45,16 @@ const renglonVacio = (): Renglon => ({ key: siguienteKey++, insumoId: "", unidad
 function unidadInicial(i: Insumo): string {
   const u = unidadPlantilla(i.unidadBase).unidad;
   return u === "unid" ? "unidad" : u;
+}
+
+function horaCorta(iso: string): string {
+  return new Intl.DateTimeFormat("es-VE", {
+    timeZone: "America/Caracas",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
 }
 
 function pct(n: number): string {
@@ -89,6 +101,9 @@ export function ProduccionClient() {
   const [fotoUrl, setFotoUrl] = useState<string | null>(null);
   const [desdeEscaneo, setDesdeEscaneo] = useState(false);
   const archivoRef = useRef<HTMLInputElement | null>(null);
+  // Mensajes del grupo de Telegram por revisar, y el que se está revisando.
+  const [pendientes, setPendientes] = useState<Pendiente[]>([]);
+  const [revisando, setRevisando] = useState<Pendiente | null>(null);
 
   // ── Comparar ───────────────────────────────────────────────────────
   const [vista, setVista] = useState<Vista>("merma");
@@ -130,6 +145,16 @@ export function ProduccionClient() {
     };
   }, [desde, hoy, version]);
 
+  useEffect(() => {
+    let vivo = true;
+    listPendientes()
+      .then((p) => vivo && setPendientes(p))
+      .catch(() => vivo && setPendientes([])); // sin SQL de Telegram: no hay bandeja
+    return () => {
+      vivo = false;
+    };
+  }, [version]);
+
   // Lo que las ventas dicen que se usó de cada insumo en el período.
   useEffect(() => {
     if (vista !== "cuadre" || insumos.length === 0) return;
@@ -158,6 +183,75 @@ export function ProduccionClient() {
     setRenglones((rs) => rs.map((r) => (r.key === key ? { ...r, ...cambio } : r)));
   }
 
+  function aRenglones(leidos: { insumoId: string; tomada: number | null; util: number | null }[]): Renglon[] {
+    return leidos.map((r) => {
+      const ins = insumoPorId.get(r.insumoId);
+      return {
+        key: siguienteKey++,
+        insumoId: r.insumoId,
+        unidad: ins ? unidadInicial(ins) : "",
+        tomada: r.tomada != null ? String(r.tomada) : "",
+        util: r.util != null ? String(r.util) : "",
+      };
+    });
+  }
+
+  function limpiarRevision() {
+    setRenglones([renglonVacio()]);
+    setDesdeEscaneo(false);
+    setFotoUrl(null);
+    setRevisando(null);
+  }
+
+  /** Pasa un mensaje del grupo al formulario para revisarlo y aprobarlo. */
+  async function revisar(p: Pendiente) {
+    setError(null);
+    setAviso(null);
+    setLeyendo("Leyendo el mensaje");
+    try {
+      const leidos = leerMensaje(p.texto ?? "", insumos);
+      setFotoUrl(null);
+      if (p.tieneFoto) {
+        const r = await fetch(urlFotoPendiente(p.id));
+        if (r.ok) {
+          const blob = await r.blob();
+          setFotoUrl(URL.createObjectURL(blob));
+          const { prepararFoto, leerTrozos } = await import("@/lib/facturas/ocr");
+          const foto = await prepararFoto(new File([blob], "telegram.jpg", { type: blob.type || "image/jpeg" }));
+          const trozos = await leerTrozos(foto, (etapa) => setLeyendo(etapa));
+          const deFoto = leerPlantilla(trozos, insumos);
+          // Lo escrito en el texto manda; la foto agrega los insumos que falten.
+          for (const r2 of deFoto.renglones) {
+            if (!r2.insumoId || !leidos.some((x) => x.insumoId === r2.insumoId)) leidos.push(r2);
+          }
+        }
+      }
+      setFecha(fechaISOEnCaracas(new Date(p.enviadoAt)));
+      if (p.remitente) setResponsable(p.remitente);
+      setRenglones(leidos.length > 0 ? aRenglones(leidos) : [renglonVacio()]);
+      if (leidos.length === 0) setError("No reconocí cantidades en el mensaje. Complétalas a mano o descarta el mensaje.");
+      setDesdeEscaneo(true);
+      setRevisando(p);
+    } catch (e) {
+      setError(extractError(e, "No se pudo leer el mensaje."));
+    } finally {
+      setLeyendo(null);
+    }
+  }
+
+  async function descartar() {
+    const p = revisando;
+    limpiarRevision();
+    if (!p) return;
+    try {
+      await marcarPendiente(p.id, "descartado");
+      setAviso("Mensaje descartado.");
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setError(extractError(e, "No se pudo descartar el mensaje."));
+    }
+  }
+
   async function escanear(archivo: File) {
     setError(null);
     setAviso(null);
@@ -174,18 +268,8 @@ export function ProduccionClient() {
       }
       if (leido.fecha) setFecha(leido.fecha);
       if (leido.responsable) setResponsable(leido.responsable);
-      setRenglones(
-        leido.renglones.map((r) => {
-          const ins = insumoPorId.get(r.insumoId);
-          return {
-            key: siguienteKey++,
-            insumoId: r.insumoId,
-            unidad: ins ? unidadInicial(ins) : "",
-            tomada: r.tomada != null ? String(r.tomada) : "",
-            util: r.util != null ? String(r.util) : "",
-          };
-        }),
-      );
+      setRenglones(aRenglones(leido.renglones));
+      setRevisando(null);
       setDesdeEscaneo(true);
     } catch (e) {
       setError(extractError(e, "No se pudo leer la foto."));
@@ -228,20 +312,20 @@ export function ProduccionClient() {
         tomada,
         util,
         responsable,
-        origen: desdeEscaneo ? ("escaneo" as const) : ("manual" as const),
+        notas: revisando?.texto ? `Telegram: ${revisando.texto}`.slice(0, 500) : undefined,
+        origen: revisando ? ("telegram" as const) : desdeEscaneo ? ("escaneo" as const) : ("manual" as const),
       });
     }
     setGuardando(true);
     try {
       await crearLotes(nuevos);
+      if (revisando) await marcarPendiente(revisando.id, "aprobado");
       try {
         localStorage.setItem(CLAVE_RESPONSABLE, responsable);
       } catch {
         // no pasa nada
       }
-      setRenglones([renglonVacio()]);
-      setDesdeEscaneo(false);
-      setFotoUrl(null);
+      limpiarRevision();
       setAviso(`${nuevos.length} ${nuevos.length === 1 ? "lote guardado" : "lotes guardados"}.`);
       setVersion((v) => v + 1);
     } catch (err) {
@@ -272,6 +356,40 @@ export function ProduccionClient() {
         </p>
       )}
 
+      {/* ── Mensajes del grupo de Telegram por revisar ─────────── */}
+      {pendientes.length > 0 && (
+        <section aria-label="Mensajes por revisar" className="space-y-2">
+          <h2 className="text-[11px] uppercase tracking-widest text-cacao-soft">
+            Del grupo de Telegram · {pendientes.length} por revisar
+          </h2>
+          <ul className="divide-y divide-marfil border-y border-marfil">
+            {pendientes.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 py-2.5">
+                {p.tieneFoto ? (
+                  <ImageIcon className="size-4 shrink-0 text-terracotta" />
+                ) : (
+                  <ChatIcon className="size-4 shrink-0 text-terracotta" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-cacao">{p.texto || "Foto sin texto"}</span>
+                  <span className="block text-xs text-cacao-soft">
+                    {p.remitente ?? "Sin nombre"} · {horaCorta(p.enviadoAt)}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void revisar(p)}
+                  disabled={leyendo !== null || revisando?.id === p.id}
+                  className="min-h-10 shrink-0 rounded-lg px-3 text-sm text-terracotta ring-1 ring-marfil hover:bg-marfil-soft disabled:opacity-50"
+                >
+                  {revisando?.id === p.id ? "Revisando" : "Revisar"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* ── Registro ─────────────────────────────────────────── */}
       <form onSubmit={guardar} className="space-y-4" aria-label="Registrar producción">
         <div className="flex flex-wrap gap-2">
@@ -291,6 +409,13 @@ export function ProduccionClient() {
             <CameraIcon className="size-4 text-terracotta" />
             {leyendo ? `${leyendo}…` : "Escanear plantilla"}
           </button>
+          <Link
+            href="/cocina/produccion/telegram"
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-white px-3 text-sm text-cacao ring-1 ring-marfil hover:bg-marfil-soft"
+          >
+            <ChatIcon className="size-4 text-terracotta" />
+            Grupo de Telegram
+          </Link>
           <input
             ref={archivoRef}
             type="file"
@@ -311,10 +436,24 @@ export function ProduccionClient() {
               // eslint-disable-next-line @next/next/no-img-element
               <img src={fotoUrl} alt="Plantilla escaneada" className="h-28 w-auto rounded-lg ring-1 ring-marfil" />
             )}
-            <p className="min-w-0 flex-1 text-sm text-cacao">
-              Leí la plantilla. Revisa cada renglón contra la foto, corrige lo que haga falta y toca{" "}
-              <b>Aprobar y guardar</b>.
-            </p>
+            <div className="min-w-0 flex-1 space-y-1 text-sm text-cacao">
+              {revisando ? (
+                <>
+                  <p className="text-xs text-cacao-soft">
+                    Mensaje de {revisando.remitente ?? "alguien del grupo"} · {horaCorta(revisando.enviadoAt)}
+                  </p>
+                  {revisando.texto && <p className="whitespace-pre-line">{revisando.texto}</p>}
+                  <p>
+                    Revisa cada renglón contra el mensaje, corrige lo que haga falta y toca <b>Aprobar y guardar</b>.
+                  </p>
+                </>
+              ) : (
+                <p>
+                  Leí la plantilla. Revisa cada renglón contra la foto, corrige lo que haga falta y toca{" "}
+                  <b>Aprobar y guardar</b>.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -442,14 +581,10 @@ export function ProduccionClient() {
           {desdeEscaneo && (
             <button
               type="button"
-              onClick={() => {
-                setRenglones([renglonVacio()]);
-                setDesdeEscaneo(false);
-                setFotoUrl(null);
-              }}
+              onClick={() => void descartar()}
               className="rounded-lg px-4 py-2.5 text-cacao ring-1 ring-marfil hover:bg-marfil-soft"
             >
-              Descartar
+              {revisando ? "Descartar mensaje" : "Descartar"}
             </button>
           )}
         </div>

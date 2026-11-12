@@ -25,7 +25,7 @@ function aLote(r: Row): LoteProduccion {
     util: Number(r.cantidad_util),
     responsable: r.responsable,
     notas: r.notas,
-    origen: r.origen === "escaneo" ? "escaneo" : "manual",
+    origen: r.origen === "escaneo" || r.origen === "telegram" ? r.origen : "manual",
   };
 }
 
@@ -55,7 +55,7 @@ export type NuevoLote = {
   util: number;
   responsable?: string;
   notas?: string;
-  origen: "manual" | "escaneo";
+  origen: "manual" | "escaneo" | "telegram";
 };
 
 export async function crearLotes(lotes: NuevoLote[]): Promise<LoteProduccion[]> {

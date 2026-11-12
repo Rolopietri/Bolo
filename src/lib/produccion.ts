@@ -2,7 +2,7 @@
 // estándar de la ficha, cuadre con lo que dicen las ventas y lectura de la
 // plantilla impresa (escaneada con la cámara).
 
-import { getUnit } from "@/lib/units";
+import { convert, getUnit } from "@/lib/units";
 import { sugerirInsumo } from "@/lib/facturas/parser";
 
 export type LoteProduccion = {
@@ -14,7 +14,7 @@ export type LoteProduccion = {
   util: number;
   responsable: string | null;
   notas: string | null;
-  origen: "manual" | "escaneo";
+  origen: "manual" | "escaneo" | "telegram";
 };
 
 /** Merma real de un lote, en % (0–100). */
@@ -199,4 +199,81 @@ export function leerPlantilla<T extends { id: string; nombre: string }>(
     if (nums.length >= 2) renglones.push({ insumoId: "", tomada: nums[0], util: nums[1] ?? null });
   }
   return { fecha, responsable, renglones };
+}
+
+// Número con unidad opcional, tal como se escribe en un chat: "10 kg", "6,2",
+// "800gr", "3 lts", "12 und".
+const RE_CANTIDAD =
+  /(\d+(?:[.,]\d+)?)\s*(kilogramos?|kilos?|kgs?|k|gramos?|grs?|g|litros?|lts?|l|ml|unidades|unid|und|uds?|u)?(?![a-záéíóúñ])/gi;
+
+const sinTildes = (t: string) =>
+  t
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+/**
+ * En el chat se escribe corto ("Pollo" por "Pollo entero"): si la primera
+ * palabra del nombre de un único insumo aparece en la línea, es ese. Si hay
+ * varios candidatos, gana el que comparte más palabras; si empatan, ninguno.
+ */
+function porPalabraPrincipal<T extends { id: string; nombre: string }>(linea: string, insumos: T[]): T | null {
+  const palabras = new Set(sinTildes(linea).split(/[^a-zñ]+/).filter((w) => w.length >= 3));
+  let mejor: T | null = null;
+  let mejorN = 0;
+  let empate = false;
+  for (const ins of insumos) {
+    const delInsumo = sinTildes(ins.nombre).split(/[^a-zñ]+/).filter((w) => w.length >= 3);
+    if (delInsumo.length === 0 || !palabras.has(delInsumo[0])) continue;
+    const n = delInsumo.filter((w) => palabras.has(w)).length;
+    if (n > mejorN) {
+      mejor = ins;
+      mejorN = n;
+      empate = false;
+    } else if (n === mejorN) empate = true;
+  }
+  return empate ? null : mejor;
+}
+
+/**
+ * Lee un mensaje de texto del grupo de producción. Cada línea con un nombre de
+ * insumo y números es un renglón: el primer número es lo que entró sin
+ * procesar y el segundo lo que quedó procesado. Ejemplos que entiende:
+ *   "Carne molida 10 kg → 6,2 kg"
+ *   "Cebolla: 3 / 2,5"
+ *   "Pollo 12 und quedaron 12"
+ * Si el número trae unidad (800 g) se pasa a la unidad de la plantilla (0,8 kg).
+ * Las líneas con números pero sin insumo reconocible quedan con el insumo en
+ * blanco para elegirlo al revisar.
+ */
+export function leerMensaje<T extends { id: string; nombre: string; unidadBase: string }>(
+  texto: string,
+  insumos: T[],
+): RenglonLeido[] {
+  const out: RenglonLeido[] = [];
+  const vistos = new Set<string>();
+  for (const linea of texto.split(/\n|;/)) {
+    const cantidades = [...linea.matchAll(RE_CANTIDAD)].map((m) => ({
+      n: Number(m[1].replace(",", ".")),
+      u: m[2] ? (m[2].toLowerCase() === "k" ? "kg" : m[2].toLowerCase()) : null,
+    }));
+    if (cantidades.length === 0) continue;
+    const nombre = linea.replace(RE_CANTIDAD, " ").replace(/[^a-záéíóúñü\s]/gi, " ").trim();
+    if (!/[a-záéíóúñ]{3,}/i.test(nombre)) continue;
+    const ins = sugerirInsumo(nombre, insumos) ?? porPalabraPrincipal(nombre, insumos);
+    // Sin insumo reconocido, un número suelto suele ser conversación ("somos 5").
+    if (!ins && cantidades.length < 2) continue;
+    if (ins && vistos.has(ins.id)) continue;
+    if (ins) vistos.add(ins.id);
+    const enPlantilla = (c: { n: number; u: string | null } | undefined): number | null => {
+      if (!c || !Number.isFinite(c.n)) return null;
+      if (!ins || !c.u) return c.n;
+      const p = unidadPlantilla(ins.unidadBase);
+      const destino = p.unidad === "unid" ? "unidad" : p.unidad;
+      const v = convert(c.n, c.u, destino);
+      return v == null ? c.n : Math.round(v * 1000) / 1000;
+    };
+    out.push({ insumoId: ins?.id ?? "", tomada: enPlantilla(cantidades[0]), util: enPlantilla(cantidades[1]) });
+  }
+  return out;
 }

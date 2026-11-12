@@ -16,6 +16,8 @@ const PUBLIC_PATHS = [
   "/auth",
   "/operador",
   "/api/operador",
+  // Avisos del bot de Telegram de Producción: los protege su clave secreta.
+  "/api/telegram/webhook",
   ...(moduloActivo("wifi", process.env.BOLO_MODULOS) ? ["/wifi", "/api/wifi/registro"] : []),
 ];
 
