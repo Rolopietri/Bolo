@@ -204,7 +204,7 @@ export function ProduccionClient() {
     }
     const completos = renglones.filter((r) => r.insumoId && r.tomada.trim() !== "");
     if (completos.length === 0) {
-      setError("Agrega al menos un insumo con lo que tomaste.");
+      setError("Agrega al menos un insumo con su cantidad sin procesar.");
       return;
     }
     const nuevos = [];
@@ -219,7 +219,7 @@ export function ProduccionClient() {
         return;
       }
       if (util > tomada) {
-        setError(`En ${ins.nombre}, lo útil no puede ser más de lo que tomaste.`);
+        setError(`En ${ins.nombre}, lo procesado no puede ser más que lo sin procesar.`);
         return;
       }
       nuevos.push({
@@ -387,7 +387,7 @@ export function ProduccionClient() {
                 {ins && (
                   <div className="grid grid-cols-2 gap-3">
                     <label className="text-xs text-cacao-soft">
-                      Tomé
+                      Sin procesar
                       <CantidadUnidad
                         valor={r.tomada}
                         unidad={unidad}
@@ -396,7 +396,7 @@ export function ProduccionClient() {
                       />
                     </label>
                     <label className="text-xs text-cacao-soft">
-                      Me quedó útil
+                      Procesado
                       <CantidadUnidad
                         valor={r.util}
                         unidad={unidad}
@@ -514,8 +514,8 @@ export function ProduccionClient() {
                     <span className="min-w-0">
                       <span className="block font-medium text-cacao">{ins.nombre}</span>
                       <span className="block text-xs text-cacao-soft">
-                        {r.lotes.length} {r.lotes.length === 1 ? "lote" : "lotes"} · tomado{" "}
-                        {displayCantidad(r.tomada, ins.unidadBase)} · útil {displayCantidad(r.util, ins.unidadBase)}
+                        {r.lotes.length} {r.lotes.length === 1 ? "lote" : "lotes"} · sin procesar{" "}
+                        {displayCantidad(r.tomada, ins.unidadBase)} · procesado {displayCantidad(r.util, ins.unidadBase)}
                       </span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-1">
@@ -564,7 +564,7 @@ export function ProduccionClient() {
                   <span className="min-w-0">
                     <span className="block font-medium text-cacao">{ins.nombre}</span>
                     <span className="block text-xs text-cacao-soft">
-                      Producido útil {displayCantidad(r.util, ins.unidadBase)} · según ventas{" "}
+                      Procesado {displayCantidad(r.util, ins.unidadBase)} · según ventas{" "}
                       {displayCantidad(usado, ins.unidadBase)}
                     </span>
                   </span>

@@ -16,7 +16,7 @@ export default function ProduccionPage() {
               Producción
             </h1>
             <p className="mt-3 font-serif italic text-cacao-soft">
-              Cuánto tomas, cuánto queda útil y cuánto se desecha.
+              Cuánto entra sin procesar, cuánto queda procesado y cuánto se desecha.
             </p>
           </div>
           <Link href="/cocina" className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao">

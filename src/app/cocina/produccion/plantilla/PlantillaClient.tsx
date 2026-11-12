@@ -62,7 +62,7 @@ export function PlantillaClient() {
           </p>
         </div>
         <p className="mt-3 text-sm">
-          Escribe solo números, en la unidad indicada. Tomé = lo que sacaste para procesar. Útil = lo que
+          Escribe solo números, en la unidad indicada. Sin procesar = lo que sacaste tal cual. Procesado = lo que
           quedó listo para usar.
         </p>
 
@@ -70,8 +70,8 @@ export function PlantillaClient() {
           <thead>
             <tr>
               <th className="border border-black px-2 py-2 text-left">Insumo</th>
-              <th className="w-28 border border-black px-2 py-2 text-left">Tomé</th>
-              <th className="w-28 border border-black px-2 py-2 text-left">Útil</th>
+              <th className="w-32 border border-black px-2 py-2 text-left">Sin procesar</th>
+              <th className="w-32 border border-black px-2 py-2 text-left">Procesado</th>
               <th className="border border-black px-2 py-2 text-left">Observaciones</th>
             </tr>
           </thead>
