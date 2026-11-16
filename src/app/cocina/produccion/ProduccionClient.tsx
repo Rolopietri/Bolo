@@ -25,6 +25,7 @@ import {
   type EstadoCuadre,
   type EstadoMerma,
   type LoteProduccion,
+  type RenglonLeido,
 } from "@/lib/produccion";
 import { fechaISOEnCaracas, restarDiasISO, salidasDeVenta } from "@/lib/stock-liviano";
 import { displayCantidad, opcionesCantidad } from "@/lib/units";
@@ -181,16 +182,47 @@ export function ProduccionClient() {
   }, [vista, desde, hoy, insumos]);
 
   const insumoPorId = useMemo(() => new Map(insumos.map((i) => [i.id, i] as const)), [insumos]);
-  // Qué trae cada mensaje de la bandeja: solo la entrada, solo la salida o ambas.
-  const ladoDe = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const p of pendientes) {
-      const rs = leerMensaje(p.texto ?? "", insumos);
-      if (rs.length === 0) continue;
-      if (rs.every((r) => r.tomada != null && r.util == null)) m.set(p.id, "Solo entrada");
-      else if (rs.every((r) => r.util != null && r.tomada == null)) m.set(p.id, "Solo salida");
+  // La bandeja agrupa la entrada y la salida del mismo insumo en un solo
+  // renglón (se revisan y aprueban juntas); lo que no tiene pareja muestra qué
+  // le falta.
+  const grupos = useMemo(() => {
+    const leidos = pendientes.map((p) => ({ p, rs: leerMensaje(p.texto ?? "", insumos) }));
+    const soloEntrada = (rs: RenglonLeido[]) => rs.length > 0 && rs.every((r) => r.insumoId && r.tomada != null && r.util == null);
+    const soloSalida = (rs: RenglonLeido[]) => rs.length > 0 && rs.every((r) => r.insumoId && r.util != null && r.tomada == null);
+    const usados = new Set<string>();
+    const out: { principal: Pendiente; juntos: Pendiente[]; renglones: RenglonLeido[] | null; falta: string | null }[] = [];
+    for (const x of leidos) {
+      if (usados.has(x.p.id)) continue;
+      usados.add(x.p.id);
+      const entrada = soloEntrada(x.rs);
+      const salida = soloSalida(x.rs);
+      const ids = new Set(x.rs.map((r) => r.insumoId));
+      const par =
+        entrada || salida
+          ? leidos.find(
+              (y) =>
+                !usados.has(y.p.id) &&
+                (entrada ? soloSalida(y.rs) : soloEntrada(y.rs)) &&
+                y.rs.every((r) => ids.has(r.insumoId)),
+            )
+          : undefined;
+      if (par) {
+        usados.add(par.p.id);
+        const renglones = x.rs.map((r) => {
+          const otro = par.rs.find((y) => y.insumoId === r.insumoId);
+          return { insumoId: r.insumoId, tomada: r.tomada ?? otro?.tomada ?? null, util: r.util ?? otro?.util ?? null };
+        });
+        out.push({ principal: x.p, juntos: [x.p, par.p], renglones, falta: null });
+      } else {
+        out.push({
+          principal: x.p,
+          juntos: [x.p],
+          renglones: null,
+          falta: entrada ? "Esperando la salida" : salida ? "Esperando la entrada" : null,
+        });
+      }
     }
-    return m;
+    return out;
   }, [pendientes, insumos]);
   const usoVentas = usoCalculado && usoCalculado.desde === desde ? usoCalculado.mapa : null;
 
@@ -220,7 +252,7 @@ export function ProduccionClient() {
   }
 
   /** Pasa un mensaje del grupo al formulario para revisarlo y aprobarlo. */
-  async function revisar(p: Pendiente) {
+  async function revisar(p: Pendiente, pareja?: Pendiente[]) {
     setError(null);
     setAviso(null);
     setLeyendo("Leyendo el mensaje");
@@ -247,7 +279,8 @@ export function ProduccionClient() {
       // se junta un mensaje si todo lo que dice es de insumos de este registro.
       const extra: Pendiente[] = [];
       const t0 = new Date(p.enviadoAt).getTime();
-      const otros = pendientes
+      // Si la bandeja ya agrupó la pareja, se usa esa; si no, se busca.
+      const otros = (pareja ?? pendientes)
         .filter((o) => o.id !== p.id && o.texto)
         .map((o) => ({ o, t: new Date(o.enviadoAt).getTime(), rs: leerMensaje(o.texto ?? "", insumos) }))
         .filter((x) => x.rs.length > 0 && x.rs.every((y) => y.insumoId && leidos.some((l) => l.insumoId === y.insumoId)));
@@ -461,33 +494,52 @@ export function ProduccionClient() {
       {pendientes.length > 0 && (
         <section aria-label="Mensajes por revisar" className="space-y-2">
           <h2 className="text-[11px] uppercase tracking-widest text-cacao-soft">
-            Del grupo de Telegram · {pendientes.length} por revisar
+            Del grupo de Telegram · {grupos.length} por revisar
           </h2>
           <ul className="divide-y divide-marfil border-y border-marfil">
-            {pendientes.map((p) => (
-              <li key={p.id} className="flex items-center gap-3 py-2.5">
-                {p.tieneFoto ? (
-                  <ImageIcon className="size-4 shrink-0 text-terracotta" />
-                ) : (
-                  <ChatIcon className="size-4 shrink-0 text-terracotta" />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm text-cacao">{p.texto || "Foto sin texto"}</span>
-                  <span className="block text-xs text-cacao-soft">
-                    {p.remitente ?? "Sin nombre"} · {horaCorta(p.enviadoAt)}
-                    {ladoDe.get(p.id) && <> · {ladoDe.get(p.id)}</>}
+            {grupos.map((g) => {
+              const p = g.principal;
+              const enRevision = g.juntos.some((m) => m.id === revisando?.id || companeros.some((c) => c.id === m.id));
+              const cantidad = (n: number | null, insumoId: string) => {
+                const ins = insumoPorId.get(insumoId);
+                return n == null ? "—" : `${n.toLocaleString("es-VE")} ${ins ? unidadPlantilla(ins.unidadBase).unidad : ""}`;
+              };
+              return (
+                <li key={p.id} className="flex items-center gap-3 py-2.5">
+                  {p.tieneFoto ? (
+                    <ImageIcon className="size-4 shrink-0 text-terracotta" />
+                  ) : (
+                    <ChatIcon className="size-4 shrink-0 text-terracotta" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    {g.renglones ? (
+                      g.renglones.map((r) => (
+                        <span key={r.insumoId} className="block truncate text-sm text-cacao">
+                          {insumoPorId.get(r.insumoId)?.nombre ?? "Insumo"}: entró {cantidad(r.tomada, r.insumoId)} · salió{" "}
+                          {cantidad(r.util, r.insumoId)}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="block truncate text-sm text-cacao">{p.texto || "Foto sin texto"}</span>
+                    )}
+                    <span className="block text-xs text-cacao-soft">
+                      {[...new Set(g.juntos.map((m) => m.remitente ?? "Sin nombre"))].join(", ")} ·{" "}
+                      {g.juntos.map((m) => horaCorta(m.enviadoAt)).join(" y ")}
+                      {g.juntos.length > 1 && <> · entrada y salida</>}
+                      {g.falta && <> · {g.falta}</>}
+                    </span>
                   </span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void revisar(p)}
-                  disabled={leyendo !== null || revisando?.id === p.id || companeros.some((c) => c.id === p.id)}
-                  className="min-h-10 shrink-0 rounded-lg px-3 text-sm text-terracotta ring-1 ring-marfil hover:bg-marfil-soft disabled:opacity-50"
-                >
-                  {revisando?.id === p.id || companeros.some((c) => c.id === p.id) ? "Revisando" : "Revisar"}
-                </button>
-              </li>
-            ))}
+                  <button
+                    type="button"
+                    onClick={() => void revisar(p, g.juntos)}
+                    disabled={leyendo !== null || enRevision}
+                    className="min-h-10 shrink-0 rounded-lg px-3 text-sm text-terracotta ring-1 ring-marfil hover:bg-marfil-soft disabled:opacity-50"
+                  >
+                    {enRevision ? "Revisando" : "Revisar"}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
