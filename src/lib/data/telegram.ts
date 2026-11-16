@@ -10,6 +10,8 @@ export type EstadoTelegram = {
   bot_usuario?: string | null;
   codigo?: string | null;
   vinculado?: boolean;
+  /** Vinculado al chat privado con el bot (no a un grupo). */
+  privado?: boolean;
   chat_titulo?: string | null;
   activo?: boolean;
 };

@@ -70,6 +70,12 @@ export function TelegramClient() {
 
       {estado.vinculado ? (
         <section className="space-y-4">
+          {estado.privado && (
+            <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900 ring-1 ring-amber-200">
+              Está vinculado al chat privado con el bot, no a un grupo: lo que se escriba en el grupo no llega a
+              Bolo. Para usar el grupo, escribe ahí el mensaje de abajo (Cambiar de chat).
+            </p>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-3 border-y border-marfil py-4">
             <div>
               <p className="flex items-center gap-2 font-medium text-cacao">
@@ -106,6 +112,36 @@ export function TelegramClient() {
               tu aprobación en Producción.
             </p>
           </div>
+          {comando && (
+            <div className="space-y-2 border-t border-marfil pt-4 text-sm text-cacao">
+              <p className="font-medium">Cambiar de chat</p>
+              <p className="text-cacao-soft">
+                Para recibir desde otro grupo: agrega el bot, hazlo <b>administrador</b> y escribe en ese grupo:
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="rounded-lg bg-marfil-soft px-3 py-2 text-sm ring-1 ring-marfil">{comando}</code>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(comando).then(() => {
+                      setCopiado(true);
+                      setTimeout(() => setCopiado(false), 1500);
+                    });
+                  }}
+                  aria-label="Copiar"
+                  className="grid size-10 place-items-center rounded-lg text-cacao-soft ring-1 ring-marfil hover:bg-marfil-soft"
+                >
+                  {copiado ? <CheckIcon className="size-4" /> : <CopyIcon className="size-4" />}
+                </button>
+              </div>
+              <p className="text-xs text-cacao-soft">
+                El bot responde en el grupo y desde ese momento solo se recibe de ahí.{" "}
+                <button type="button" onClick={() => void hacer(estadoTelegram)} className="text-terracotta hover:underline">
+                  Actualizar
+                </button>
+              </p>
+            </div>
+          )}
         </section>
       ) : (
         <ol className="divide-y divide-marfil border-y border-marfil">
