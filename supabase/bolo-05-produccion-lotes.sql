@@ -6,7 +6,8 @@
 -- que se compara con la merma estándar de la ficha del insumo, y lo útil se
 -- compara con lo que las ventas dicen que se usó.
 --
--- Por ahora es solo un registro: no mueve el stock.
+-- Al aprobar un lote, la app descuenta el desecho del inventario como merma
+-- (stock_movimientos, motivo "Producción"); esta tabla guarda el lote.
 -- No borra datos. Idempotente: se puede correr más de una vez.
 
 create table if not exists public.produccion_lotes (
