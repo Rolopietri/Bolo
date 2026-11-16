@@ -140,22 +140,39 @@ export function TelegramClient() {
               {estado.activo ? "Pausar" : "Reanudar"}
             </button>
           </div>
-          <div className="space-y-2 text-sm text-cacao">
-            <p className="font-medium">Cómo escribir en el grupo</p>
-            <p className="text-cacao-soft">
-              Empieza con <b>Entrando</b> o <b>Sin procesar</b> (lo que se saca para procesar) y{" "}
-              <b>Saliendo</b> o <b>Procesado</b> (lo que quedó listo), con el peso y el insumo en cualquier orden
-              («8 kg lomito» o «lomito 8 kg»). Los decimales van con coma o con punto («6,5» o «6.5»). Se pueden mezclar, y la entrada y la salida pueden ir en mensajes
-              distintos: Bolo las junta al revisar.
-            </p>
-            <pre className="rounded-lg bg-marfil-soft px-3 py-2 text-xs text-cacao ring-1 ring-marfil">
-              {"Entrando 8 kg lomito\nLomito 6,5 kg saliendo\n\nSin procesar cebolla 3 kg\nProcesado 2.5 kg cebolla\n\nEntrando 12 unidades pollo, procesado 12"}
-            </pre>
-            <p className="text-xs text-cacao-soft">
-              Solo llegan los mensajes con números o con foto; la conversación normal se ignora. Nada se guarda sin
-              tu aprobación en Producción.
-            </p>
-          </div>
+          <section aria-label="Guía para el equipo" className="space-y-3 text-sm text-cacao">
+            <p className="font-medium">Guía para el equipo</p>
+            <ol className="divide-y divide-marfil border-y border-marfil">
+              <Paso n={1}>
+                <p>
+                  <b>Al sacar el insumo</b>, escribe <b>Entrando</b>, el peso y el insumo.
+                </p>
+                <code className="text-xs text-cacao-soft">Entrando 8 kg lomito</code>
+              </Paso>
+              <Paso n={2}>
+                <p>
+                  <b>Al terminar de procesarlo</b>, escribe <b>Saliendo</b> con lo que quedó listo.
+                </p>
+                <code className="text-xs text-cacao-soft">Saliendo 6 kg lomito</code>
+              </Paso>
+              <Paso n={3}>
+                <p>
+                  <b>Listo.</b> Bolo junta la entrada y la salida, y el lote espera tu aprobación en Producción.
+                </p>
+              </Paso>
+            </ol>
+            <div className="space-y-1.5">
+              <p className="text-xs uppercase tracking-widest text-cacao-soft">Ten en cuenta</p>
+              <ul className="space-y-1 text-cacao-soft">
+                <li>· Un insumo por mensaje o por línea.</li>
+                <li>
+                  · También vale <b className="text-cacao">Sin procesar</b> y <b className="text-cacao">Procesado</b>.
+                </li>
+                <li>· El orden y los decimales dan igual: «lomito 6,5 kg» es lo mismo que «6.5 kg lomito».</li>
+                <li>· Los mensajes sin números se ignoran: el grupo se puede usar para conversar.</li>
+              </ul>
+            </div>
+          </section>
           {comando && (
             <div className="space-y-2 border-t border-marfil pt-4 text-sm text-cacao">
               <p className="font-medium">Cambiar de chat</p>
