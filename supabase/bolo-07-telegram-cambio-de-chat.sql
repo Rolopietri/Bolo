@@ -5,7 +5,14 @@
 --    avisar en Bolo cuando quedó vinculado por error al chat con el bot.
 -- 2) Cuando un grupo se convierte en supergrupo (pasa al dar administradores),
 --    Telegram le cambia el número; Bolo sigue al grupo en vez de perderlo.
+-- 3) Guarda el último aviso que mandó Telegram (de qué chat y qué se hizo con
+--    él), para diagnosticar desde Bolo por qué un mensaje no llegó.
 -- Requiere BOLO-06. No borra datos. Idempotente.
+
+alter table public.produccion_telegram add column if not exists ultimo_aviso_at timestamptz;
+alter table public.produccion_telegram add column if not exists ultimo_aviso_chat text;
+alter table public.produccion_telegram add column if not exists ultimo_aviso_tipo text;
+alter table public.produccion_telegram add column if not exists ultima_accion text;
 
 create or replace function public.telegram_estado()
 returns jsonb language sql stable security definer set search_path = public as $$
@@ -17,12 +24,16 @@ returns jsonb language sql stable security definer set search_path = public as $
        'vinculado', chat_id is not null,
        'privado', chat_id is not null and chat_id > 0,
        'chat_titulo', chat_titulo,
-       'activo', activo)
+       'activo', activo,
+       'ultimo_aviso_at', ultimo_aviso_at,
+       'ultimo_aviso_chat', ultimo_aviso_chat,
+       'ultimo_aviso_tipo', ultimo_aviso_tipo,
+       'ultima_accion', ultima_accion)
      from produccion_telegram where id = 1),
     jsonb_build_object('configurado', false));
 $$;
 
-create or replace function public.telegram_recibir(p_secreto text, p_update jsonb)
+create or replace function public.telegram_recibir_interno(p_secreto text, p_update jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
   c produccion_telegram;
@@ -81,6 +92,27 @@ begin
 end;
 $$;
 
+-- Entrada pública: procesa el aviso y anota qué pasó con él.
+create or replace function public.telegram_recibir(p_secreto text, p_update jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  r jsonb;
+  m jsonb := p_update -> 'message';
+begin
+  r := telegram_recibir_interno(p_secreto, p_update);
+  if r ->> 'accion' <> 'rechazado' and m is not null then
+    update produccion_telegram
+       set ultimo_aviso_at = now(),
+           ultimo_aviso_chat = coalesce(m -> 'chat' ->> 'title', m -> 'chat' ->> 'first_name'),
+           ultimo_aviso_tipo = m -> 'chat' ->> 'type',
+           ultima_accion = r ->> 'accion'
+     where id = 1;
+  end if;
+  return r;
+end;
+$$;
+
+revoke execute on function public.telegram_recibir_interno(text, jsonb) from public, anon, authenticated;
 revoke execute on function public.telegram_estado() from public, anon;
 grant execute on function public.telegram_estado() to authenticated;
 grant execute on function public.telegram_recibir(text, jsonb) to anon, authenticated;

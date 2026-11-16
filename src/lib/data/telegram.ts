@@ -14,7 +14,26 @@ export type EstadoTelegram = {
   privado?: boolean;
   chat_titulo?: string | null;
   activo?: boolean;
+  /** Último aviso que mandó Telegram (para diagnosticar). */
+  ultimo_aviso_at?: string | null;
+  ultimo_aviso_chat?: string | null;
+  ultimo_aviso_tipo?: string | null;
+  ultima_accion?: string | null;
 };
+
+export type DiagnosticoTelegram = {
+  destino: string | null;
+  enCola: number;
+  ultimoError: string | null;
+  ultimoErrorAt: string | null;
+};
+
+export async function diagnosticoTelegram(): Promise<DiagnosticoTelegram> {
+  const r = await fetch("/api/telegram/diagnostico", { cache: "no-store" });
+  const j = (await r.json().catch(() => ({}))) as DiagnosticoTelegram & { error?: string };
+  if (!r.ok) throw new Error(j.error || `Error ${r.status}`);
+  return j;
+}
 
 export type Pendiente = {
   id: string;

@@ -6,13 +6,40 @@ import { useEffect, useState } from "react";
 import {
   activarTelegram,
   conectarTelegram,
+  diagnosticoTelegram,
   desconectarTelegram,
   estadoTelegram,
   faltaSqlTelegram,
+  type DiagnosticoTelegram,
   type EstadoTelegram,
 } from "@/lib/data/telegram";
 import { extractError } from "@/lib/data/error";
 import { CheckIcon, CopyIcon } from "@/components/icons";
+
+const ACCIONES: Record<string, string> = {
+  guardado: "llegó a la bandeja de Producción",
+  ignorado: "se ignoró (no es el chat vinculado, está en pausa o no traía números ni foto)",
+  vinculado: "vinculó ese chat",
+  codigo_invalido: "el código de vincular no coincidía",
+  migrado: "el grupo pasó a supergrupo y Bolo lo siguió",
+};
+
+const TIPOS_CHAT: Record<string, string> = {
+  private: "chat privado",
+  group: "grupo",
+  supergroup: "grupo",
+  channel: "canal",
+};
+
+function cuando(iso: string): string {
+  return new Intl.DateTimeFormat("es-VE", {
+    timeZone: "America/Caracas",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
 
 function Paso({ n, children }: { n: number; children: React.ReactNode }) {
   return (
@@ -32,6 +59,23 @@ export function TelegramClient() {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [diag, setDiag] = useState<DiagnosticoTelegram | null>(null);
+  const [diagError, setDiagError] = useState<string | null>(null);
+  const [diagCargando, setDiagCargando] = useState(false);
+
+  async function revisarConexion() {
+    setDiagError(null);
+    setDiagCargando(true);
+    try {
+      const [d, e] = await Promise.all([diagnosticoTelegram(), estadoTelegram()]);
+      setDiag(d);
+      setEstado(e);
+    } catch (err) {
+      setDiagError(extractError(err, "No se pudo revisar la conexión."));
+    } finally {
+      setDiagCargando(false);
+    }
+  }
 
   useEffect(() => {
     estadoTelegram()
@@ -229,6 +273,61 @@ export function TelegramClient() {
       )}
 
       {error && <p className="text-sm text-terracotta-deep">{error}</p>}
+
+      {estado.configurado && (
+        <section className="space-y-2 border-t border-marfil pt-4 text-sm text-cacao" aria-label="Diagnóstico">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-medium">¿No llega un mensaje?</p>
+            <button
+              type="button"
+              onClick={() => void revisarConexion()}
+              disabled={diagCargando}
+              className="min-h-10 rounded-lg px-3 text-sm text-terracotta ring-1 ring-marfil hover:bg-marfil-soft disabled:opacity-60"
+            >
+              {diagCargando ? "Revisando…" : "Revisar conexión"}
+            </button>
+          </div>
+          {diagError && <p className="text-terracotta-deep">{diagError}</p>}
+          {diag && (
+            <ul className="divide-y divide-marfil border-y border-marfil text-xs">
+              <li className="py-2">
+                <span className="text-cacao-soft">Telegram envía los avisos a: </span>
+                {diag.destino ?? <b className="text-terracotta-deep">ninguna dirección (vuelve a conectar el bot)</b>}
+              </li>
+              <li className="py-2">
+                <span className="text-cacao-soft">Avisos en cola sin entregar: </span>
+                {diag.enCola}
+              </li>
+              <li className="py-2">
+                <span className="text-cacao-soft">Último error de entrega: </span>
+                {diag.ultimoError ? (
+                  <b className="text-terracotta-deep">
+                    {diag.ultimoError}
+                    {diag.ultimoErrorAt && <> · {cuando(diag.ultimoErrorAt)}</>}
+                  </b>
+                ) : (
+                  "ninguno"
+                )}
+              </li>
+              <li className="py-2">
+                <span className="text-cacao-soft">Último mensaje que recibió Bolo: </span>
+                {estado.ultimo_aviso_at ? (
+                  <>
+                    {cuando(estado.ultimo_aviso_at)}, desde «{estado.ultimo_aviso_chat ?? "sin nombre"}» (
+                    {TIPOS_CHAT[estado.ultimo_aviso_tipo ?? ""] ?? "chat"}): {ACCIONES[estado.ultima_accion ?? ""] ?? estado.ultima_accion}
+                  </>
+                ) : (
+                  "ninguno todavía"
+                )}
+              </li>
+            </ul>
+          )}
+          <p className="text-xs text-cacao-soft">
+            Si escribes en el grupo y no aparece aquí como último mensaje, el bot no es administrador del grupo:
+            Telegram no le pasa los mensajes.
+          </p>
+        </section>
+      )}
 
       {estado.configurado && (
         <button
