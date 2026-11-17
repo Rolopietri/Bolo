@@ -1204,7 +1204,7 @@ export function InsumosClient({
       </label>
       {form.seProcesa && (
         <label className="mt-3 block text-sm text-cacao">
-          Planificar para (días)
+          ¿Para cuántos días planeas?
           <input
             type="number"
             min="1"
@@ -1215,7 +1215,7 @@ export function InsumosClient({
             className="mt-1 w-36 rounded-lg ring-1 ring-marfil px-3 py-2"
           />
           <span className="text-[10px] text-cacao-mute block mt-1">
-            Días que cubre el plan de compra y producción para este insumo.
+            Días que quieres cubrir al comprar y procesar este insumo.
           </span>
         </label>
       )}

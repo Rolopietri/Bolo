@@ -83,11 +83,15 @@ export function PedidoSugeridoClient({
   // Confirmación de borrado
   const [confirmDelete, setConfirmDelete] = useState<PedidoCocina | null>(null);
 
+  // Días hacia atrás que se miran para estimar lo que se vende al día (el
+  // usuario lo puede cambiar; por defecto 14).
+  const [ventanaDias, setVentanaDias] = useState<number>(VENTANA_CONSUMO_DIAS);
+
   // Plan por demanda (Fase C): qué procesar y qué comprar por cada insumo que
-  // se procesa, según el ritmo de venta. Solo cálculo, no cambia datos.
+  // se procesa, según lo que se vende. Solo cálculo, no cambia datos.
   const planLineas = useMemo(
-    () => planDemanda(insumos, consumo ?? new Map()),
-    [insumos, consumo],
+    () => planDemanda(insumos, consumo ?? new Map(), ventanaDias),
+    [insumos, consumo, ventanaDias],
   );
   const planConAccion = planLineas.filter(
     (l) => l.faltaProcesar > 0.00005 || l.aComprar > 0.00005,
@@ -107,15 +111,6 @@ export function PedidoSugeridoClient({
         setRecetas(r);
         setInsumos(i);
         setProveedores(p);
-        // Ritmo de venta (para el plan por demanda): se calcula aparte para no
-        // demorar la carga. Si falla, el plan simplemente no muestra ritmo.
-        cargarConsumoYTasa(i)
-          .then((rc) => {
-            if (!cancelled) setConsumo(rc.consumo);
-          })
-          .catch(() => {
-            if (!cancelled) setConsumo(new Map());
-          });
         // Planes de producción (para el modo "generar pedido desde un plan").
         if (planesActivos) {
           try {
@@ -146,6 +141,23 @@ export function PedidoSugeridoClient({
       cancelled = true;
     };
   }, [planesActivos, intento]);
+
+  // Recalcula lo que se vende al día cuando hay insumos o cambia la ventana.
+  // Se hace aparte para no demorar la carga; si falla, el plan no muestra ritmo.
+  useEffect(() => {
+    if (insumos.length === 0) return;
+    let cancelled = false;
+    cargarConsumoYTasa(insumos, ventanaDias)
+      .then((rc) => {
+        if (!cancelled) setConsumo(rc.consumo);
+      })
+      .catch(() => {
+        if (!cancelled) setConsumo(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [insumos, ventanaDias]);
 
   function reintentarCarga() {
     setLoading(true);
@@ -460,12 +472,24 @@ export function PedidoSugeridoClient({
           className="scroll-mt-24 rounded-2xl bg-white ring-1 ring-marfil p-5"
         >
           <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute mb-1">
-            Plan por demanda
+            Qué procesar y qué comprar
           </h2>
-          <p className="mb-3 text-xs text-cacao-soft italic font-serif">
-            Según tu ritmo de venta (últimos {VENTANA_CONSUMO_DIAS} días), cuánto
-            procesar y cuánto comprar de lo que se procesa.
-          </p>
+          <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-cacao-soft">
+            <span>Mirando lo que vendiste en los últimos</span>
+            <select
+              value={ventanaDias}
+              onChange={(e) => setVentanaDias(Number(e.target.value))}
+              className="rounded-lg bg-white px-2 py-1 text-cacao ring-1 ring-marfil"
+              aria-label="Días que se miran para calcular"
+            >
+              {[7, 14, 21, 30].map((d) => (
+                <option key={d} value={d}>
+                  {d} días
+                </option>
+              ))}
+            </select>
+            <span>, esto es lo que te conviene procesar y comprar.</span>
+          </div>
           {planConAccion.length === 0 ? (
             <p className="text-sm text-cacao-soft">
               Todo al día: por ahora no hace falta procesar ni comprar.
@@ -492,33 +516,33 @@ export function PedidoSugeridoClient({
                           <strong>
                             {displayCantidad(l.aComprar, l.unidadBase)}
                           </strong>{" "}
-                          en crudo
+                          sin procesar
                         </>
                       )}
                     </span>
                   </div>
                   <details className="mt-1 text-xs text-cacao-soft">
-                    <summary className="cursor-pointer">Ver el cálculo</summary>
+                    <summary className="cursor-pointer">Ver las cuentas</summary>
                     <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      <dt>Ritmo de venta</dt>
+                      <dt>Vendes al día</dt>
                       <dd>
                         {l.sinDatos
                           ? "sin datos"
                           : `${displayCantidad(l.ritmoDiario, l.unidadBase)}/día`}
                       </dd>
-                      <dt>Horizonte</dt>
+                      <dt>Para cuántos días</dt>
                       <dd>{l.horizonteDias} días</dd>
-                      <dt>Necesidad</dt>
+                      <dt>Vas a vender</dt>
                       <dd>{displayCantidad(l.necesidad, l.unidadBase)}</dd>
-                      <dt>Procesado hoy</dt>
+                      <dt>Ya listo</dt>
                       <dd>{displayCantidad(l.procesado, l.unidadBase)}</dd>
                       <dt>Falta procesar</dt>
                       <dd>{displayCantidad(l.faltaProcesar, l.unidadBase)}</dd>
-                      <dt>Crudo necesario (merma {l.mermaPorc}%)</dt>
+                      <dt>Sin procesar que necesitas</dt>
                       <dd>{displayCantidad(l.crudoNecesario, l.unidadBase)}</dd>
-                      <dt>Crudo hoy</dt>
+                      <dt>Sin procesar que tienes</dt>
                       <dd>{displayCantidad(l.crudo, l.unidadBase)}</dd>
-                      <dt>A comprar</dt>
+                      <dt>Comprar</dt>
                       <dd>{displayCantidad(l.aComprar, l.unidadBase)}</dd>
                     </dl>
                   </details>
@@ -528,8 +552,8 @@ export function PedidoSugeridoClient({
           )}
           {planLineas.some((l) => l.sinDatos) && (
             <p className="mt-3 text-[11px] text-cacao-mute">
-              Algunos insumos todavía no tienen suficientes ventas para estimar su
-              ritmo; aparecerán aquí cuando haya datos.
+              Algunos insumos todavía no tienen suficientes ventas para calcular;
+              aparecerán aquí cuando las haya.
             </p>
           )}
         </section>

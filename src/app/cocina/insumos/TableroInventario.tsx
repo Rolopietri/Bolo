@@ -70,12 +70,15 @@ function preferenciaTasa(): { preferida: PreferenciaTasa | null; personalizada: 
  * tasa para ver el valor en bolívares. Es lo que convierte el catálogo en
  * "cuánto me dura".
  */
-export async function cargarConsumoYTasa(insumos: Insumo[]): Promise<{
+export async function cargarConsumoYTasa(
+  insumos: Insumo[],
+  ventanaDias?: number,
+): Promise<{
   consumo: Map<string, ConsumoInsumo>;
   tasa: TasaInventario;
 }> {
   const hoy = fechaISOEnCaracas();
-  const desde = inicioVentana(hoy);
+  const desde = inicioVentana(hoy, ventanaDias);
   const [recetas, tasa, ventas, movimientos] = await Promise.all([
     listRecetas(),
     getTasaBcvActual().catch(() => null),
