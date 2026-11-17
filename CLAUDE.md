@@ -4,6 +4,8 @@
 
 Plataforma de operaciones del día a día para negocios chicos de gastronomía (empezando por restaurantes chicos). Pensada para gente que hoy lleva todo en papel: **lo más simple posible**. Hablamos en español.
 
+> **Sitio por defecto:** el producto en producción es **usabolo.com**, construido desde ESTE repo (`Rolopietri/Bolo`). Salvo que se diga explícitamente lo contrario, todo el trabajo y los despliegues van aquí. El repo `Rolopietri/Quinta-mama-` (sitio `quinta-mama.vercel.app`) es otro proyecto distinto, no este.
+
 ## Qué es
 
 - Panel en Next.js desplegado en Vercel.
