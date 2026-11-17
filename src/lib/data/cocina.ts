@@ -141,6 +141,8 @@ type InsumoRow = {
   precio_base_usd: number | string | null;
   precio_actualizado: string | null;
   stock_actual: number | string;
+  se_procesa: boolean | null;
+  stock_procesado: number | string | null;
   stock_comprometido: number | string | null;
   stock_minimo: number | string | null;
   merma_coccion_porc: number | string | null;
@@ -175,6 +177,11 @@ function rowToInsumo(r: InsumoRow): Insumo {
     // por compatibilidad (no rompemos triggers existentes) pero en código
     // se llama stockTotal. stock_comprometido es columna nueva.
     stockTotal: Number(r.stock_actual),
+    seProcesa: !!r.se_procesa,
+    stockProcesado:
+      r.stock_procesado === null || r.stock_procesado === undefined
+        ? 0
+        : Number(r.stock_procesado),
     stockComprometido:
       r.stock_comprometido === null || r.stock_comprometido === undefined
         ? 0
@@ -211,6 +218,9 @@ function rowToInsumo(r: InsumoRow): Insumo {
 export type InsumoInput = Omit<
   Insumo,
   | "id"
+  // stockProcesado NO se edita desde el form del insumo: lo mueve el evento de
+  // procesamiento (registrarProcesamiento). Al crear, la DB lo deja en 0.
+  | "stockProcesado"
   | "precioActualizado"
   | "ultimaFecha"
   | "ultimaCantidad"
@@ -247,6 +257,7 @@ export async function createInsumo(input: InsumoInput): Promise<Insumo> {
       precio_compra_usd: input.precioCompraUsd,
       precio_base_usd: input.precioBaseUsd,
       stock_actual: input.stockTotal,
+      se_procesa: input.seProcesa ?? false,
       stock_comprometido: input.stockComprometido ?? 0,
       stock_minimo: input.stockMinimo,
       merma_coccion_porc: input.mermaCoccionPorc ?? null,
@@ -285,6 +296,7 @@ export async function updateInsumo(
   }
   if (patch.precioBaseUsd !== undefined) db.precio_base_usd = patch.precioBaseUsd;
   if (patch.stockTotal !== undefined) db.stock_actual = patch.stockTotal;
+  if (patch.seProcesa !== undefined) db.se_procesa = patch.seProcesa;
   if (patch.stockComprometido !== undefined)
     db.stock_comprometido = patch.stockComprometido;
   if (patch.stockMinimo !== undefined) db.stock_minimo = patch.stockMinimo;

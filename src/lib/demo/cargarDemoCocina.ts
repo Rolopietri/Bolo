@@ -115,6 +115,7 @@ export async function cargarDemoCocina(): Promise<ResumenDemo> {
       precioBaseUsd:
         i.cantidadPorCompra > 0 ? i.precioCompraUsd / i.cantidadPorCompra : i.precioCompraUsd,
       stockTotal: 0,
+      seProcesa: false,
       stockComprometido: 0,
       stockMinimo: i.stockMinimo,
       proveedorId: prov.id,

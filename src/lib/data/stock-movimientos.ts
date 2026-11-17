@@ -138,6 +138,57 @@ export async function registrarPerdida(
   };
 }
 
+// ── Evento de procesamiento (Fase B) ─────────────────────────────────
+export type ProcesamientoInput = {
+  insumoId: string;
+  /** Crudo consumido (positivo), en unidad base. */
+  crudo: number;
+  /** Procesado obtenido (positivo), en unidad base. */
+  procesado: number;
+  fecha?: string;
+  nota?: string;
+};
+
+export type ProcesamientoResultado = {
+  /** Nuevo crudo (stock_actual). */
+  stockCrudo: number;
+  /** Nuevo procesado (stock_procesado). */
+  stockProcesado: number;
+  /** Merma del lote = crudo − procesado (puede ser 0). */
+  merma: number;
+};
+
+/**
+ * Registra un evento de procesamiento: "procesé X crudo → obtuve Y procesado".
+ * Baja el crudo, sube el procesado y deja la merma (X−Y) en el libro como merma
+ * (motivo 'Procesamiento'), todo en UNA transacción atómica (RPC con lock de
+ * fila). Devuelve el nuevo crudo/procesado y la merma del lote.
+ */
+export async function registrarProcesamiento(
+  input: ProcesamientoInput,
+): Promise<ProcesamientoResultado> {
+  if (!(input.crudo > 0)) throw new Error("El crudo procesado debe ser mayor a 0.");
+  if (!(input.procesado >= 0)) throw new Error("El procesado obtenido no puede ser negativo.");
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("registrar_procesamiento", {
+    p_insumo_id: input.insumoId,
+    p_crudo: input.crudo,
+    p_procesado: input.procesado,
+    p_fecha: input.fecha ?? hoyISO(),
+    p_nota: input.nota?.trim() || null,
+  });
+  if (error) throw error;
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { stock_crudo: number | string; stock_procesado: number | string; merma: number | string }
+    | undefined;
+  if (!row) throw new Error("No se pudo registrar el procesamiento.");
+  return {
+    stockCrudo: Number(row.stock_crudo),
+    stockProcesado: Number(row.stock_procesado),
+    merma: Number(row.merma),
+  };
+}
+
 /**
  * Borra un movimiento del historial.
  *

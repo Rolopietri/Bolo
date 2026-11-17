@@ -449,6 +449,14 @@ export type Insumo = {
    *  En DB se persiste como `stock_actual` (no renombramos la columna para
    *  no romper triggers existentes). */
   stockTotal: number;
+  /** ¿Este insumo se procesa? Si es true distingue dos estados físicos: crudo
+   *  (stockTotal) y procesado (stockProcesado). Lo marca el usuario. */
+  seProcesa: boolean;
+  /** Stock YA PROCESADO (listo para vender), en unidad base. Solo aplica a los
+   *  insumos con seProcesa=true; en los demás queda en 0. El crudo vive en
+   *  stockTotal (DB `stock_actual`). Total físico = stockTotal + stockProcesado.
+   *  Lo mueve el evento de procesamiento (no se edita en el form del insumo). */
+  stockProcesado: number;
   /** Stock reservado por planes de producción activos. Disminuye al vender
    *  por Xetux, completar producción o cancelar plan. */
   stockComprometido: number;
@@ -478,6 +486,14 @@ export type Insumo = {
  *  pedidos sugeridos. */
 export function stockLibre(i: Pick<Insumo, "stockTotal" | "stockComprometido">): number {
   return Math.max(0, i.stockTotal - i.stockComprometido);
+}
+
+/** Total físico de un insumo = crudo (stockTotal) + procesado (stockProcesado).
+ *  Para insumos que no se procesan, stockProcesado es 0 → coincide con stockTotal. */
+export function stockFisicoTotal(
+  i: Pick<Insumo, "stockTotal" | "stockProcesado">,
+): number {
+  return i.stockTotal + (i.stockProcesado ?? 0);
 }
 
 // ── Frescura del precio (economía volátil) ──────────────────────────

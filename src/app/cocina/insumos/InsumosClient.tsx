@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   frescuraPrecio,
+  stockFisicoTotal,
   type Insumo,
   type NivelFrescuraPrecio,
   type Proveedor,
@@ -37,6 +38,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { WarningIcon, CameraIcon, ImageIcon, ChevronIcon, SearchIcon } from "@/components/icons";
 import { CamaraCaptura } from "./_CamaraCaptura";
 import { PerdidaInsumoDialog } from "../_PerdidaInsumoDialog";
+import { ProcesarInsumoDialog } from "../_ProcesarInsumoDialog";
 import { DetalleInsumo } from "./DetalleInsumo";
 import { AyudaEtiqueta } from "@/components/AyudaEtiqueta";
 import { sugerirCategoria } from "@/lib/sugerir-categoria";
@@ -123,6 +125,7 @@ type FormState = {
   stockUnidad: string;
   stockMinimo: string;
   mermaCoccionPorc: string;
+  seProcesa: boolean;
   proveedorId: string;
   notas: string;
 };
@@ -138,6 +141,7 @@ const emptyForm: FormState = {
   stockUnidad: "compra",
   stockMinimo: "",
   mermaCoccionPorc: "",
+  seProcesa: false,
   proveedorId: "",
   notas: "",
 };
@@ -254,6 +258,8 @@ export function InsumosClient({
   const fichaVista = useRef<string | null>(null);
   // Insumo al que se le va a registrar una pérdida (abre el modal).
   const [perdidaInsumo, setPerdidaInsumo] = useState<Insumo | null>(null);
+  // Insumo al que se le va a registrar un procesamiento (abre el modal, Fase B).
+  const [procesarInsumo, setProcesarInsumo] = useState<Insumo | null>(null);
   // Insumo cuyo detalle (uso diario, pérdidas, cambios) está abierto.
   const [detalleInsumo, setDetalleInsumo] = useState<Insumo | null>(null);
   // Aviso tras registrar una pérdida, con acceso a la pestaña de Mermas.
@@ -370,6 +376,7 @@ export function InsumosClient({
           precioCompraUsd: precioOk,
           precioBaseUsd: precioOk != null ? precioOk / cant : null,
           stockTotal: stock,
+          seProcesa: false,
           stockComprometido: 0,
           stockMinimo: null,
           activo: true,
@@ -503,6 +510,7 @@ export function InsumosClient({
       precioCompraUsd: ins.precioCompraUsd?.toString() ?? "",
       ...stockEnUnidadLegible(ins),
       mermaCoccionPorc: ins.mermaCoccionPorc?.toString() ?? "",
+      seProcesa: ins.seProcesa,
       proveedorId: ins.proveedorId ?? "",
       notas: ins.notas ?? "",
     });
@@ -586,6 +594,7 @@ export function InsumosClient({
           : Number(form.stockMinimo) * factorStock,
       mermaCoccionPorc:
         form.mermaCoccionPorc === "" ? null : Number(form.mermaCoccionPorc),
+      seProcesa: form.seProcesa,
       proveedorId: form.proveedorId || undefined,
       notas: form.notas.trim() || undefined,
       activo: true,
@@ -1176,6 +1185,24 @@ export function InsumosClient({
       </span>
     </label>
   );
+  const campoSeProcesa = (
+    <label className="flex items-start gap-2 cursor-pointer rounded-lg ring-1 ring-marfil p-3">
+      <input
+        type="checkbox"
+        checked={form.seProcesa}
+        onChange={(e) => setForm({ ...form, seProcesa: e.target.checked })}
+        className="h-4 w-4 mt-0.5 accent-cacao"
+      />
+      <span className="text-sm text-cacao">
+        Se procesa (distingue crudo y procesado)
+        <span className="text-[10px] text-cacao-mute block mt-0.5">
+          Márcalo si el insumo pasa por un proceso antes de venderse (lomito,
+          aguacate, mango…). Así el stock separa lo crudo de lo ya listo para
+          vender y puedes registrar “procesé X → obtuve Y”.
+        </span>
+      </span>
+    </label>
+  );
   const campoNotas = (
     <textarea
       placeholder="Notas (opcional)"
@@ -1431,6 +1458,7 @@ export function InsumosClient({
             {campoMinimo}
             {campoMerma}
           </div>
+          {campoSeProcesa}
           {campoNotas}
           <div className="flex gap-2 pt-2">
             <button
@@ -1510,6 +1538,7 @@ export function InsumosClient({
                 {campoStock}
                 {campoMinimo}
               </div>
+              {campoSeProcesa}
               <details className="text-sm text-cacao" open={form.notas.trim() !== ""}>
                 <summary className="cursor-pointer text-cacao-soft">Notas (opcional)</summary>
                 <div className="mt-2">{campoNotas}</div>
@@ -1623,6 +1652,7 @@ export function InsumosClient({
                   consumoListo={consumo !== null}
                   onDetalle={() => setDetalleInsumo(i)}
                   onPerdida={() => setPerdidaInsumo(i)}
+                  onProcesar={() => setProcesarInsumo(i)}
                   onEditar={() => startEdit(i)}
                   onPrecio={(upd) => setItems((prev) => prev.map((x) => (x.id === upd.id ? upd : x)))}
                   onError={setError}
@@ -1745,6 +1775,23 @@ export function InsumosClient({
           }}
         />
       )}
+
+      {procesarInsumo && (
+        <ProcesarInsumoDialog
+          key={procesarInsumo.id}
+          insumo={procesarInsumo}
+          onClose={() => setProcesarInsumo(null)}
+          onRegistered={(insumoId, r) => {
+            setItems((prev) =>
+              prev.map((x) =>
+                x.id === insumoId
+                  ? { ...x, stockTotal: r.stockCrudo, stockProcesado: r.stockProcesado }
+                  : x,
+              ),
+            );
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1762,6 +1809,7 @@ function FilaInsumo({
   consumoListo,
   onDetalle,
   onPerdida,
+  onProcesar,
   onEditar,
   onPrecio,
   onError,
@@ -1772,6 +1820,7 @@ function FilaInsumo({
   consumoListo: boolean;
   onDetalle: () => void;
   onPerdida: () => void;
+  onProcesar: () => void;
   onEditar: () => void;
   onPrecio: (upd: Insumo) => void;
   onError: (msg: string) => void;
@@ -1818,6 +1867,26 @@ function FilaInsumo({
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">Queda</dt>
           <dd className="text-cacao">{displayCantidad(l.libre, l.unidadBase)}</dd>
+          {i.seProcesa && (
+            // Ventanilla fantasma: el número total NO crece; al pasar el cursor
+            // (o con foco) se asoma el desglose crudo/procesado (Fase A).
+            <dd className="relative inline-block group/vent">
+              <span
+                tabIndex={0}
+                className="text-[11px] text-cacao-soft border-b border-dotted border-cacao-soft/50 cursor-default"
+              >
+                {displayCantidad(stockFisicoTotal(i), i.unidadBase)} total
+              </span>
+              <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden whitespace-nowrap rounded-lg bg-cacao/95 px-3 py-2 text-[11px] text-marfil-light shadow-lg ring-1 ring-cacao group-hover/vent:block group-focus-within/vent:block">
+                <span className="block">
+                  Crudo: <strong>{displayCantidad(i.stockTotal, i.unidadBase)}</strong>
+                </span>
+                <span className="block">
+                  Procesado: <strong>{displayCantidad(i.stockProcesado, i.unidadBase)}</strong>
+                </span>
+              </span>
+            </dd>
+          )}
           {l.comprometido > 0 && (
             <dd className="text-[11px] text-cacao-soft">
               {displayCantidad(l.comprometido, l.unidadBase)} reservados
@@ -1843,6 +1912,16 @@ function FilaInsumo({
         </div>
       </dl>
       <div className="mt-3 flex flex-wrap gap-2 text-[11px] uppercase tracking-widest">
+        {i.seProcesa && (
+          <button
+            type="button"
+            onClick={onProcesar}
+            className="inline-flex min-h-10 items-center rounded-full bg-white px-3 ring-1 ring-marfil text-cacao-soft hover:text-cacao"
+            title="Registrar procesamiento: procesé X crudo → obtuve Y procesado"
+          >
+            Procesar
+          </button>
+        )}
         <button
           type="button"
           onClick={onPerdida}
