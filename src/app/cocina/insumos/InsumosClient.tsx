@@ -1186,21 +1186,14 @@ export function InsumosClient({
     </label>
   );
   const campoSeProcesa = (
-    <label className="flex items-start gap-2 cursor-pointer rounded-lg ring-1 ring-marfil p-3">
+    <label className="flex items-center gap-2 cursor-pointer rounded-lg ring-1 ring-marfil p-3">
       <input
         type="checkbox"
         checked={form.seProcesa}
         onChange={(e) => setForm({ ...form, seProcesa: e.target.checked })}
-        className="h-4 w-4 mt-0.5 accent-cacao"
+        className="h-4 w-4 accent-cacao"
       />
-      <span className="text-sm text-cacao">
-        Se procesa (distingue crudo y procesado)
-        <span className="text-[10px] text-cacao-mute block mt-0.5">
-          Márcalo si el insumo pasa por un proceso antes de venderse (lomito,
-          aguacate, mango…). Así el stock separa lo crudo de lo ya listo para
-          vender y puedes registrar “procesé X → obtuve Y”.
-        </span>
-      </span>
+      <span className="text-sm text-cacao">Se procesa antes de venderse</span>
     </label>
   );
   const campoNotas = (
