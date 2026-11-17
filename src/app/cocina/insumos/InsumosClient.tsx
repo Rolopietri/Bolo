@@ -1909,10 +1909,10 @@ function FilaInsumo({
             <dd className="mt-0.5">
               <Link
                 href="/cocina/pedido#plan-demanda"
-                className="inline-block rounded bg-marfil-soft px-1.5 py-0.5 text-[10px] text-cacao-soft ring-1 ring-marfil hover:text-cacao"
-                title="Ver cuánto procesar y cuánto comprar según el ritmo de venta"
+                className="text-[10px] text-cacao-mute/70 underline decoration-dotted decoration-cacao-mute/50 underline-offset-2 hover:text-cacao hover:decoration-cacao"
+                title="Cuánto procesar y cuánto comprar según el ritmo de venta"
               >
-                Ver plan de compra →
+                ¿Deseas ver el plan de compra?
               </Link>
             </dd>
           )}
