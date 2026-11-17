@@ -1884,16 +1884,15 @@ function FilaInsumo({
       <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
         <div>
           <dt className="text-[10px] uppercase tracking-widest text-cacao-soft">Queda</dt>
-          <dd className="text-cacao">{displayCantidad(l.libre, l.unidadBase)}</dd>
-          {i.seProcesa && (
-            // Ventanilla fantasma: el número total NO crece; al pasar el cursor
-            // (o con foco) se asoma el desglose crudo/procesado (Fase A).
+          {i.seProcesa ? (
+            // Un solo número = total físico (crudo + procesado). Punteado: al
+            // pasar el cursor (o con foco) se asoma el desglose crudo/procesado.
             <dd className="relative inline-block group/vent">
               <span
                 tabIndex={0}
-                className="text-[11px] text-cacao-soft border-b border-dotted border-cacao-soft/50 cursor-default"
+                className="text-cacao border-b border-dotted border-cacao-mute/50 cursor-default"
               >
-                {displayCantidad(stockFisicoTotal(i), i.unidadBase)} total
+                {displayCantidad(stockFisicoTotal(i), i.unidadBase)}
               </span>
               <span className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden whitespace-nowrap rounded-lg bg-cacao/95 px-3 py-2 text-[11px] text-marfil-light shadow-lg ring-1 ring-cacao group-hover/vent:block group-focus-within/vent:block">
                 <span className="block">
@@ -1904,6 +1903,8 @@ function FilaInsumo({
                 </span>
               </span>
             </dd>
+          ) : (
+            <dd className="text-cacao">{displayCantidad(l.libre, l.unidadBase)}</dd>
           )}
           {i.seProcesa && (
             <dd className="mt-0.5">
