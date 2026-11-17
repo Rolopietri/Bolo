@@ -13,6 +13,7 @@
     "test:facturas": "node --no-warnings scripts/check-facturas.mjs",
     "test:reposicion": "node --no-warnings scripts/check-reposicion.mjs",
     "test:stock": "node --no-warnings scripts/check-stock-liviano.mjs",
+    "test:plan": "node --no-warnings scripts/check-plan-demanda.mjs",
     "test:semana": "node --no-warnings scripts/check-semana.mjs",
     "test:gastos": "node --no-warnings scripts/check-gastos.mjs",
     "test:cierre": "node --no-warnings scripts/check-cierre.mjs",

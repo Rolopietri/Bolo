@@ -10,12 +10,18 @@
 // Módulo puro (sin base ni navegador): reutiliza el ritmo que ya calcula
 // stock-liviano, no reinventa el historial de ventas.
 
-import {
-  VENTANA_CONSUMO_DIAS,
-  MIN_DIAS_CON_CONSUMO,
-  type ConsumoInsumo,
-} from "@/lib/stock-liviano";
-import type { Insumo } from "@/lib/types";
+// Módulo puro, sin imports (como stock-liviano/reposicion), para poder probarlo
+// con Node. Las constantes de ventana/umbral y la forma de ConsumoInsumo
+// reflejan las de stock-liviano; si cambian allá, cámbialas aquí.
+import type { Insumo } from "./types";
+
+/** Igual a VENTANA_CONSUMO_DIAS de stock-liviano. */
+export const VENTANA_RITMO_DIAS = 14;
+/** Igual a MIN_DIAS_CON_CONSUMO de stock-liviano. */
+const MIN_DIAS_CON_CONSUMO = 2;
+
+/** Consumo neto de un insumo en la ventana (misma forma que en stock-liviano). */
+export type ConsumoInsumo = { total: number; diasConConsumo: number };
 
 /** Horizonte por defecto si el insumo no define uno propio. */
 export const HORIZONTE_DEFAULT_DIAS = 14;
@@ -49,7 +55,7 @@ export type LineaPlanDemanda = {
  *  Devuelve 0 si no hay datos suficientes (misma regla que "alcanza para"). */
 export function ritmoDiario(
   c: ConsumoInsumo | undefined,
-  ventana: number = VENTANA_CONSUMO_DIAS,
+  ventana: number = VENTANA_RITMO_DIAS,
 ): number {
   if (
     !c ||
@@ -66,7 +72,7 @@ export function ritmoDiario(
 export function planDemandaInsumo(
   i: Insumo,
   c: ConsumoInsumo | undefined,
-  ventana: number = VENTANA_CONSUMO_DIAS,
+  ventana: number = VENTANA_RITMO_DIAS,
 ): LineaPlanDemanda {
   const ritmo = ritmoDiario(c, ventana);
   const horizonteDias =
@@ -101,7 +107,7 @@ export function planDemandaInsumo(
 export function planDemanda(
   insumos: Insumo[],
   consumo: Map<string, ConsumoInsumo>,
-  ventana: number = VENTANA_CONSUMO_DIAS,
+  ventana: number = VENTANA_RITMO_DIAS,
 ): LineaPlanDemanda[] {
   return insumos
     .filter((i) => i.activo && i.seProcesa)
