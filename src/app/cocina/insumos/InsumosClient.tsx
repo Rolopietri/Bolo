@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   frescuraPrecio,
   stockFisicoTotal,
@@ -126,6 +127,7 @@ type FormState = {
   stockMinimo: string;
   mermaCoccionPorc: string;
   seProcesa: boolean;
+  horizonteDias: string;
   proveedorId: string;
   notas: string;
 };
@@ -142,6 +144,7 @@ const emptyForm: FormState = {
   stockMinimo: "",
   mermaCoccionPorc: "",
   seProcesa: false,
+  horizonteDias: "",
   proveedorId: "",
   notas: "",
 };
@@ -511,6 +514,7 @@ export function InsumosClient({
       ...stockEnUnidadLegible(ins),
       mermaCoccionPorc: ins.mermaCoccionPorc?.toString() ?? "",
       seProcesa: ins.seProcesa,
+      horizonteDias: ins.horizonteDias?.toString() ?? "",
       proveedorId: ins.proveedorId ?? "",
       notas: ins.notas ?? "",
     });
@@ -595,6 +599,8 @@ export function InsumosClient({
       mermaCoccionPorc:
         form.mermaCoccionPorc === "" ? null : Number(form.mermaCoccionPorc),
       seProcesa: form.seProcesa,
+      horizonteDias:
+        form.horizonteDias.trim() === "" ? null : Number(form.horizonteDias),
       proveedorId: form.proveedorId || undefined,
       notas: form.notas.trim() || undefined,
       activo: true,
@@ -1186,15 +1192,34 @@ export function InsumosClient({
     </label>
   );
   const campoSeProcesa = (
-    <label className="flex items-center gap-2 cursor-pointer rounded-lg ring-1 ring-marfil p-3">
-      <input
-        type="checkbox"
-        checked={form.seProcesa}
-        onChange={(e) => setForm({ ...form, seProcesa: e.target.checked })}
-        className="h-4 w-4 accent-cacao"
-      />
-      <span className="text-sm text-cacao">Se procesa antes de venderse</span>
-    </label>
+    <div className="rounded-lg ring-1 ring-marfil p-3">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={form.seProcesa}
+          onChange={(e) => setForm({ ...form, seProcesa: e.target.checked })}
+          className="h-4 w-4 accent-cacao"
+        />
+        <span className="text-sm text-cacao">Se procesa antes de venderse</span>
+      </label>
+      {form.seProcesa && (
+        <label className="mt-3 block text-sm text-cacao">
+          Planificar para (días)
+          <input
+            type="number"
+            min="1"
+            step="1"
+            placeholder="14 por defecto"
+            value={form.horizonteDias}
+            onChange={(e) => setForm({ ...form, horizonteDias: e.target.value })}
+            className="mt-1 w-36 rounded-lg ring-1 ring-marfil px-3 py-2"
+          />
+          <span className="text-[10px] text-cacao-mute block mt-1">
+            Días que cubre el plan de compra y producción para este insumo.
+          </span>
+        </label>
+      )}
+    </div>
   );
   const campoNotas = (
     <textarea
@@ -1878,6 +1903,17 @@ function FilaInsumo({
                   Procesado: <strong>{displayCantidad(i.stockProcesado, i.unidadBase)}</strong>
                 </span>
               </span>
+            </dd>
+          )}
+          {i.seProcesa && (
+            <dd className="mt-0.5">
+              <Link
+                href="/cocina/pedido#plan-demanda"
+                className="inline-block rounded bg-marfil-soft px-1.5 py-0.5 text-[10px] text-cacao-soft ring-1 ring-marfil hover:text-cacao"
+                title="Ver cuánto procesar y cuánto comprar según el ritmo de venta"
+              >
+                Ver plan de compra →
+              </Link>
             </dd>
           )}
           {l.comprometido > 0 && (

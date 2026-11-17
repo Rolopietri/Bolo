@@ -468,6 +468,10 @@ export type Insumo = {
    *  el peso cocido a su equivalente crudo (crudo = cocido / (1 - %/100))
    *  antes de descontar del stock, que se lleva en crudo. */
   mermaCoccionPorc?: number | null;
+  /** Horizonte de planificación en días para el plan por demanda (Fase C).
+   *  null/undefined = usar el valor por defecto (14). Solo relevante para
+   *  insumos que se procesan. */
+  horizonteDias?: number | null;
   proveedorId?: string;
   ultimaFecha?: string;
   ultimaCantidad?: number;

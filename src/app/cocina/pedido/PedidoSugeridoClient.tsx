@@ -28,6 +28,10 @@ import {
 } from "@/lib/data/pedidos-cocina";
 import { extractError } from "@/lib/data/error";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
+import { cargarConsumoYTasa } from "../insumos/TableroInventario";
+import { VENTANA_CONSUMO_DIAS, type ConsumoInsumo } from "@/lib/stock-liviano";
+import { planDemanda } from "@/lib/plan-demanda";
+import { displayCantidad } from "@/lib/units";
 
 type Objetivo = { recetaId: string; raciones: string };
 
@@ -46,6 +50,8 @@ export function PedidoSugeridoClient({
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [pedidosGuardados, setPedidosGuardados] = useState<PedidoCocina[]>([]);
+  // Ritmo de venta por insumo (para el plan por demanda, Fase C). Llega aparte.
+  const [consumo, setConsumo] = useState<Map<string, ConsumoInsumo> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   /** Error al CARGAR la pantalla (distinto de los errores al guardar). */
@@ -77,6 +83,16 @@ export function PedidoSugeridoClient({
   // Confirmación de borrado
   const [confirmDelete, setConfirmDelete] = useState<PedidoCocina | null>(null);
 
+  // Plan por demanda (Fase C): qué procesar y qué comprar por cada insumo que
+  // se procesa, según el ritmo de venta. Solo cálculo, no cambia datos.
+  const planLineas = useMemo(
+    () => planDemanda(insumos, consumo ?? new Map()),
+    [insumos, consumo],
+  );
+  const planConAccion = planLineas.filter(
+    (l) => l.faltaProcesar > 0.00005 || l.aComprar > 0.00005,
+  );
+
   // Cargar datos iniciales
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +107,15 @@ export function PedidoSugeridoClient({
         setRecetas(r);
         setInsumos(i);
         setProveedores(p);
+        // Ritmo de venta (para el plan por demanda): se calcula aparte para no
+        // demorar la carga. Si falla, el plan simplemente no muestra ritmo.
+        cargarConsumoYTasa(i)
+          .then((rc) => {
+            if (!cancelled) setConsumo(rc.consumo);
+          })
+          .catch(() => {
+            if (!cancelled) setConsumo(new Map());
+          });
         // Planes de producción (para el modo "generar pedido desde un plan").
         if (planesActivos) {
           try {
@@ -426,6 +451,88 @@ export function PedidoSugeridoClient({
         <div className="rounded-lg bg-[#F1F4ED] ring-1 ring-[#C9D6BC] p-3 text-sm text-[#2F4A1F]">
           {info}
         </div>
+      )}
+
+      {/* ─── Plan por demanda (Fase C): qué procesar y qué comprar ─── */}
+      {planLineas.length > 0 && (
+        <section
+          id="plan-demanda"
+          className="scroll-mt-24 rounded-2xl bg-white ring-1 ring-marfil p-5"
+        >
+          <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute mb-1">
+            Plan por demanda
+          </h2>
+          <p className="mb-3 text-xs text-cacao-soft italic font-serif">
+            Según tu ritmo de venta (últimos {VENTANA_CONSUMO_DIAS} días), cuánto
+            procesar y cuánto comprar de lo que se procesa.
+          </p>
+          {planConAccion.length === 0 ? (
+            <p className="text-sm text-cacao-soft">
+              Todo al día: por ahora no hace falta procesar ni comprar.
+            </p>
+          ) : (
+            <ul className="divide-y divide-marfil">
+              {planConAccion.map((l) => (
+                <li key={l.insumoId} className="py-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium text-cacao">{l.nombre}</span>
+                    <span className="text-sm text-cacao">
+                      {l.faltaProcesar > 0.00005 && (
+                        <>
+                          Procesa{" "}
+                          <strong>
+                            {displayCantidad(l.faltaProcesar, l.unidadBase)}
+                          </strong>
+                        </>
+                      )}
+                      {l.faltaProcesar > 0.00005 && l.aComprar > 0.00005 && " · "}
+                      {l.aComprar > 0.00005 && (
+                        <>
+                          Compra{" "}
+                          <strong>
+                            {displayCantidad(l.aComprar, l.unidadBase)}
+                          </strong>{" "}
+                          en crudo
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <details className="mt-1 text-xs text-cacao-soft">
+                    <summary className="cursor-pointer">Ver el cálculo</summary>
+                    <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      <dt>Ritmo de venta</dt>
+                      <dd>
+                        {l.sinDatos
+                          ? "sin datos"
+                          : `${displayCantidad(l.ritmoDiario, l.unidadBase)}/día`}
+                      </dd>
+                      <dt>Horizonte</dt>
+                      <dd>{l.horizonteDias} días</dd>
+                      <dt>Necesidad</dt>
+                      <dd>{displayCantidad(l.necesidad, l.unidadBase)}</dd>
+                      <dt>Procesado hoy</dt>
+                      <dd>{displayCantidad(l.procesado, l.unidadBase)}</dd>
+                      <dt>Falta procesar</dt>
+                      <dd>{displayCantidad(l.faltaProcesar, l.unidadBase)}</dd>
+                      <dt>Crudo necesario (merma {l.mermaPorc}%)</dt>
+                      <dd>{displayCantidad(l.crudoNecesario, l.unidadBase)}</dd>
+                      <dt>Crudo hoy</dt>
+                      <dd>{displayCantidad(l.crudo, l.unidadBase)}</dd>
+                      <dt>A comprar</dt>
+                      <dd>{displayCantidad(l.aComprar, l.unidadBase)}</dd>
+                    </dl>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          )}
+          {planLineas.some((l) => l.sinDatos) && (
+            <p className="mt-3 text-[11px] text-cacao-mute">
+              Algunos insumos todavía no tienen suficientes ventas para estimar su
+              ritmo; aparecerán aquí cuando haya datos.
+            </p>
+          )}
+        </section>
       )}
 
       {/* ─── Pedidos guardados ─── */}

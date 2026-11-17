@@ -1,0 +1,115 @@
+// Plan por demanda (Fase C): qué procesar y qué comprar según el ritmo de venta.
+//
+// Para cada insumo que SE PROCESA:
+//   ritmo          = venta promedio por día (consumo neto ÷ ventana)
+//   necesidad      = ritmo × horizonte (lo procesado que hace falta para el período)
+//   falta procesar = necesidad − procesado disponible
+//   crudo necesario= falta ÷ (1 − merma)      (para obtener ese procesado)
+//   a comprar      = crudo necesario − crudo disponible
+//
+// Módulo puro (sin base ni navegador): reutiliza el ritmo que ya calcula
+// stock-liviano, no reinventa el historial de ventas.
+
+import {
+  VENTANA_CONSUMO_DIAS,
+  MIN_DIAS_CON_CONSUMO,
+  type ConsumoInsumo,
+} from "@/lib/stock-liviano";
+import type { Insumo } from "@/lib/types";
+
+/** Horizonte por defecto si el insumo no define uno propio. */
+export const HORIZONTE_DEFAULT_DIAS = 14;
+
+export type LineaPlanDemanda = {
+  insumoId: string;
+  nombre: string;
+  unidadBase: string;
+  /** Ritmo de venta estimado, en unidad base por día. 0 si no hay datos. */
+  ritmoDiario: number;
+  /** true si no hubo suficientes ventas en la ventana para estimar el ritmo. */
+  sinDatos: boolean;
+  horizonteDias: number;
+  /** Necesidad de procesado para el horizonte = ritmo × horizonte. */
+  necesidad: number;
+  /** Stock procesado disponible hoy. */
+  procesado: number;
+  /** Stock crudo disponible hoy (stockTotal). */
+  crudo: number;
+  /** Merma por procesamiento usada (0–99). */
+  mermaPorc: number;
+  /** Procesado que falta producir para cubrir la necesidad. */
+  faltaProcesar: number;
+  /** Crudo necesario para producir ese faltante (ya aplicada la merma). */
+  crudoNecesario: number;
+  /** Crudo a comprar = crudo necesario − crudo disponible (nunca negativo). */
+  aComprar: number;
+};
+
+/** Ritmo de venta (unidad base/día) a partir del consumo neto de la ventana.
+ *  Devuelve 0 si no hay datos suficientes (misma regla que "alcanza para"). */
+export function ritmoDiario(
+  c: ConsumoInsumo | undefined,
+  ventana: number = VENTANA_CONSUMO_DIAS,
+): number {
+  if (
+    !c ||
+    !(c.total > 0) ||
+    c.diasConConsumo < MIN_DIAS_CON_CONSUMO ||
+    !(ventana > 0)
+  ) {
+    return 0;
+  }
+  return c.total / ventana;
+}
+
+/** Plan por demanda de UN insumo. */
+export function planDemandaInsumo(
+  i: Insumo,
+  c: ConsumoInsumo | undefined,
+  ventana: number = VENTANA_CONSUMO_DIAS,
+): LineaPlanDemanda {
+  const ritmo = ritmoDiario(c, ventana);
+  const horizonteDias =
+    i.horizonteDias && i.horizonteDias > 0 ? i.horizonteDias : HORIZONTE_DEFAULT_DIAS;
+  const procesado = i.stockProcesado ?? 0;
+  const crudo = i.stockTotal ?? 0;
+  const mermaPorc = Math.min(99, Math.max(0, i.mermaCoccionPorc ?? 0));
+  const necesidad = ritmo * horizonteDias;
+  const faltaProcesar = Math.max(0, necesidad - procesado);
+  const factor = 1 - mermaPorc / 100; // > 0 porque mermaPorc ≤ 99
+  const crudoNecesario = factor > 0 ? faltaProcesar / factor : faltaProcesar;
+  const aComprar = Math.max(0, crudoNecesario - crudo);
+  return {
+    insumoId: i.id,
+    nombre: i.nombre,
+    unidadBase: i.unidadBase,
+    ritmoDiario: ritmo,
+    sinDatos: ritmo <= 0,
+    horizonteDias,
+    necesidad,
+    procesado,
+    crudo,
+    mermaPorc,
+    faltaProcesar,
+    crudoNecesario,
+    aComprar,
+  };
+}
+
+/** Plan por demanda de todos los insumos activos que se procesan.
+ *  Ordenado por lo más urgente de comprar primero. */
+export function planDemanda(
+  insumos: Insumo[],
+  consumo: Map<string, ConsumoInsumo>,
+  ventana: number = VENTANA_CONSUMO_DIAS,
+): LineaPlanDemanda[] {
+  return insumos
+    .filter((i) => i.activo && i.seProcesa)
+    .map((i) => planDemandaInsumo(i, consumo.get(i.id), ventana))
+    .sort(
+      (a, b) =>
+        b.aComprar - a.aComprar ||
+        b.faltaProcesar - a.faltaProcesar ||
+        a.nombre.localeCompare(b.nombre),
+    );
+}
