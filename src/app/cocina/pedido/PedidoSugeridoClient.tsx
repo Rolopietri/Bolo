@@ -86,6 +86,9 @@ export function PedidoSugeridoClient({
   // Días hacia atrás que se miran para estimar lo que se vende al día (el
   // usuario lo puede cambiar; por defecto 14).
   const [ventanaDias, setVentanaDias] = useState<number>(VENTANA_CONSUMO_DIAS);
+  // El plan automático es lo principal; armar el pedido a mano queda detrás de
+  // una opción discreta.
+  const [modoManual, setModoManual] = useState(false);
 
   // Plan por demanda (Fase C): qué procesar y qué comprar por cada insumo que
   // se procesa, según lo que se vende. Solo cálculo, no cambia datos.
@@ -96,6 +99,7 @@ export function PedidoSugeridoClient({
   const planConAccion = planLineas.filter(
     (l) => l.faltaProcesar > 0.00005 || l.aComprar > 0.00005,
   );
+  const totalComprar = planConAccion.reduce((s, l) => s + l.costoCompra, 0);
 
   // Cargar datos iniciales
   useEffect(() => {
@@ -472,9 +476,9 @@ export function PedidoSugeridoClient({
           className="scroll-mt-24 rounded-2xl bg-white ring-1 ring-marfil p-5"
         >
           <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute mb-1">
-            Qué procesar y qué comprar
+            Qué comprar
           </h2>
-          <div className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-cacao-soft">
+          <div className="mb-4 flex flex-wrap items-center gap-1.5 text-xs text-cacao-soft">
             <span>Mirando lo que vendiste en los últimos</span>
             <select
               value={ventanaDias}
@@ -488,67 +492,97 @@ export function PedidoSugeridoClient({
                 </option>
               ))}
             </select>
-            <span>, esto es lo que te conviene procesar y comprar.</span>
+            <span>, esto es lo que te conviene preparar y comprar.</span>
           </div>
           {planConAccion.length === 0 ? (
-            <p className="text-sm text-cacao-soft">
+            <div className="rounded-xl bg-marfil-soft/60 ring-1 ring-marfil px-4 py-6 text-center text-sm text-cacao-soft">
               Todo al día: por ahora no hace falta procesar ni comprar.
-            </p>
+            </div>
           ) : (
-            <ul className="divide-y divide-marfil">
-              {planConAccion.map((l) => (
-                <li key={l.insumoId} className="py-3">
-                  <div className="flex flex-wrap items-baseline justify-between gap-2">
-                    <span className="font-medium text-cacao">{l.nombre}</span>
-                    <span className="text-sm text-cacao">
-                      {l.faltaProcesar > 0.00005 && (
-                        <>
-                          Procesa{" "}
-                          <strong>
-                            {displayCantidad(l.faltaProcesar, l.unidadBase)}
-                          </strong>
-                        </>
-                      )}
-                      {l.faltaProcesar > 0.00005 && l.aComprar > 0.00005 && " · "}
-                      {l.aComprar > 0.00005 && (
-                        <>
-                          Compra{" "}
-                          <strong>
-                            {displayCantidad(l.aComprar, l.unidadBase)}
-                          </strong>{" "}
-                          sin procesar
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <details className="mt-1 text-xs text-cacao-soft">
-                    <summary className="cursor-pointer">Ver las cuentas</summary>
-                    <dl className="mt-1 grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      <dt>Vendes al día</dt>
-                      <dd>
-                        {l.sinDatos
-                          ? "sin datos"
-                          : `${displayCantidad(l.ritmoDiario, l.unidadBase)}/día`}
-                      </dd>
-                      <dt>Para cuántos días</dt>
-                      <dd>{l.horizonteDias} días</dd>
-                      <dt>Vas a vender</dt>
-                      <dd>{displayCantidad(l.necesidad, l.unidadBase)}</dd>
-                      <dt>Ya listo</dt>
-                      <dd>{displayCantidad(l.procesado, l.unidadBase)}</dd>
-                      <dt>Falta procesar</dt>
-                      <dd>{displayCantidad(l.faltaProcesar, l.unidadBase)}</dd>
-                      <dt>Sin procesar que necesitas</dt>
-                      <dd>{displayCantidad(l.crudoNecesario, l.unidadBase)}</dd>
-                      <dt>Sin procesar que tienes</dt>
-                      <dd>{displayCantidad(l.crudo, l.unidadBase)}</dd>
-                      <dt>Comprar</dt>
-                      <dd>{displayCantidad(l.aComprar, l.unidadBase)}</dd>
-                    </dl>
-                  </details>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm text-cacao">
+                  <strong>{planConAccion.length}</strong> insumo
+                  {planConAccion.length === 1 ? "" : "s"} por atender
+                </span>
+                {totalComprar > 0 && (
+                  <span className="text-sm text-cacao-soft">
+                    Compra ≈{" "}
+                    <strong className="text-cacao">${totalComprar.toFixed(2)}</strong>
+                  </span>
+                )}
+              </div>
+              <ul className="space-y-2">
+                {planConAccion.map((l) => (
+                  <li
+                    key={l.insumoId}
+                    className="rounded-xl ring-1 ring-marfil p-3 hover:bg-marfil-soft/40"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium text-cacao">{l.nombre}</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {l.faltaProcesar > 0.00005 && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                            <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
+                            Procesa {displayCantidad(l.faltaProcesar, l.unidadBase)}
+                          </span>
+                        )}
+                        {l.aComprar > 0.00005 && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200">
+                            <span className="size-1.5 rounded-full bg-sky-500" aria-hidden />
+                            Compra {displayCantidad(l.aComprar, l.unidadBase)}
+                            {l.tienePrecio && l.costoCompra > 0
+                              ? ` · $${l.costoCompra.toFixed(2)}`
+                              : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <details className="mt-2 text-xs text-cacao-soft">
+                      <summary className="cursor-pointer select-none hover:text-cacao">
+                        Ver las cuentas
+                      </summary>
+                      <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-marfil pt-1.5">
+                        <dt>Vendes al día</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {l.sinDatos
+                            ? "sin datos"
+                            : `${displayCantidad(l.ritmoDiario, l.unidadBase)}/día`}
+                        </dd>
+                        <dt>Para cuántos días</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {l.horizonteDias} días
+                        </dd>
+                        <dt>Vas a vender</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {displayCantidad(l.necesidad, l.unidadBase)}
+                        </dd>
+                        <dt>Ya listo</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {displayCantidad(l.procesado, l.unidadBase)}
+                        </dd>
+                        <dt>Falta procesar</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {displayCantidad(l.faltaProcesar, l.unidadBase)}
+                        </dd>
+                        <dt>Sin procesar que necesitas</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {displayCantidad(l.crudoNecesario, l.unidadBase)}
+                        </dd>
+                        <dt>Sin procesar que tienes</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {displayCantidad(l.crudo, l.unidadBase)}
+                        </dd>
+                        <dt>Comprar</dt>
+                        <dd className="text-right tabular-nums text-cacao">
+                          {displayCantidad(l.aComprar, l.unidadBase)}
+                        </dd>
+                      </dl>
+                    </details>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
           {planLineas.some((l) => l.sinDatos) && (
             <p className="mt-3 text-[11px] text-cacao-mute">
@@ -750,7 +784,19 @@ export function PedidoSugeridoClient({
         </section>
       )}
 
-      {recetas.length === 0 ? (
+      {/* ─── Armar a mano (discreto): el plan automático es lo principal ─── */}
+      <div className="text-center">
+        <button
+          type="button"
+          onClick={() => setModoManual((v) => !v)}
+          aria-expanded={modoManual}
+          className="text-xs text-cacao-mute underline decoration-dotted underline-offset-2 hover:text-cacao"
+        >
+          {modoManual ? "Ocultar armar a mano" : "¿Prefieres armarlo a mano?"}
+        </button>
+      </div>
+
+      {modoManual && (recetas.length === 0 ? (
         <EstadoVacioCocina
           titulo="Todavía no hay con qué armar un pedido"
           beneficio="Cuando tengas recetas y stock, eliges cuántas raciones preparar y bolo lista lo que falta comprar."
@@ -967,7 +1013,7 @@ export function PedidoSugeridoClient({
         </section>
       )}
       </>
-      )}
+      ))}
 
       {/* ─── Modal: guardar pedido ─── */}
       {savingModal && (

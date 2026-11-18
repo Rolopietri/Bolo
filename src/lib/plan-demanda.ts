@@ -49,6 +49,11 @@ export type LineaPlanDemanda = {
   crudoNecesario: number;
   /** Crudo a comprar = crudo necesario − crudo disponible (nunca negativo). */
   aComprar: number;
+  /** Costo aproximado de lo que hay que comprar (aComprar × precio base). 0 si
+   *  no hay precio conocido. */
+  costoCompra: number;
+  /** true si el insumo tiene un precio base para estimar el costo. */
+  tienePrecio: boolean;
 };
 
 /** Ritmo de venta (unidad base/día) a partir del consumo neto de la ventana.
@@ -85,6 +90,9 @@ export function planDemandaInsumo(
   const factor = 1 - mermaPorc / 100; // > 0 porque mermaPorc ≤ 99
   const crudoNecesario = factor > 0 ? faltaProcesar / factor : faltaProcesar;
   const aComprar = Math.max(0, crudoNecesario - crudo);
+  const precioBase = i.precioBaseUsd ?? null;
+  const tienePrecio = precioBase != null && precioBase > 0;
+  const costoCompra = tienePrecio ? aComprar * (precioBase as number) : 0;
   return {
     insumoId: i.id,
     nombre: i.nombre,
@@ -99,6 +107,8 @@ export function planDemandaInsumo(
     faltaProcesar,
     crudoNecesario,
     aComprar,
+    costoCompra,
+    tienePrecio,
   };
 }
 
