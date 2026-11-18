@@ -47,12 +47,20 @@ export type LineaPlanDemanda = {
   faltaProcesar: number;
   /** Crudo necesario para producir ese faltante (ya aplicada la merma). */
   crudoNecesario: number;
-  /** Crudo a comprar = crudo necesario − crudo disponible (nunca negativo). */
+  /** Crudo a comprar = crudo necesario − crudo disponible (nunca negativo),
+   *  en unidad base, SIN redondear. */
   aComprar: number;
-  /** Costo aproximado de lo que hay que comprar (aComprar × precio base). 0 si
-   *  no hay precio conocido. */
+  /** Nombre de la unidad de compra (empaque): "kg", "saco", "caja"… */
+  unidadCompra: string;
+  /** Cuántas unidades base trae un empaque. */
+  cantidadPorCompra: number;
+  /** Empaques a pedir, redondeado HACIA ARRIBA (la compra realista al proveedor). */
+  empaquesComprar: number;
+  /** A comprar ya redondeado al empaque, en unidad base (empaques × cantidadPorCompra). */
+  aComprarEmpaque: number;
+  /** Costo de la compra realista (empaques × precio de compra). 0 si no hay precio. */
   costoCompra: number;
-  /** true si el insumo tiene un precio base para estimar el costo. */
+  /** true si el insumo tiene precio de compra para estimar el costo. */
   tienePrecio: boolean;
 };
 
@@ -90,9 +98,14 @@ export function planDemandaInsumo(
   const factor = 1 - mermaPorc / 100; // > 0 porque mermaPorc ≤ 99
   const crudoNecesario = factor > 0 ? faltaProcesar / factor : faltaProcesar;
   const aComprar = Math.max(0, crudoNecesario - crudo);
-  const precioBase = i.precioBaseUsd ?? null;
-  const tienePrecio = precioBase != null && precioBase > 0;
-  const costoCompra = tienePrecio ? aComprar * (precioBase as number) : 0;
+  // Redondeo a la realidad del proveedor: se compra por empaques enteros.
+  const cantidadPorCompra = i.cantidadPorCompra > 0 ? i.cantidadPorCompra : 1;
+  const empaquesComprar =
+    aComprar > 0 ? Math.ceil(aComprar / cantidadPorCompra - 1e-9) : 0;
+  const aComprarEmpaque = empaquesComprar * cantidadPorCompra;
+  const precioCompra = i.precioCompraUsd ?? null;
+  const tienePrecio = precioCompra != null && precioCompra > 0;
+  const costoCompra = tienePrecio ? empaquesComprar * (precioCompra as number) : 0;
   return {
     insumoId: i.id,
     nombre: i.nombre,
@@ -107,6 +120,10 @@ export function planDemandaInsumo(
     faltaProcesar,
     crudoNecesario,
     aComprar,
+    unidadCompra: i.unidadCompra,
+    cantidadPorCompra,
+    empaquesComprar,
+    aComprarEmpaque,
     costoCompra,
     tienePrecio,
   };

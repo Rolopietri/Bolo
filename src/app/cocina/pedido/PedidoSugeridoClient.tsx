@@ -31,7 +31,6 @@ import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { cargarConsumoYTasa } from "../insumos/TableroInventario";
 import { VENTANA_CONSUMO_DIAS, type ConsumoInsumo } from "@/lib/stock-liviano";
 import { planDemanda } from "@/lib/plan-demanda";
-import { displayCantidad } from "@/lib/units";
 
 type Objetivo = { recetaId: string; raciones: string };
 
@@ -96,9 +95,8 @@ export function PedidoSugeridoClient({
     () => planDemanda(insumos, consumo ?? new Map(), ventanaDias),
     [insumos, consumo, ventanaDias],
   );
-  const planConAccion = planLineas.filter(
-    (l) => l.faltaProcesar > 0.00005 || l.aComprar > 0.00005,
-  );
+  // Esta área es solo "qué comprar": incluye los insumos que hay que comprar.
+  const planConAccion = planLineas.filter((l) => l.empaquesComprar > 0);
   const totalComprar = planConAccion.reduce((s, l) => s + l.costoCompra, 0);
 
   // Cargar datos iniciales
@@ -494,22 +492,22 @@ export function PedidoSugeridoClient({
                 </option>
               ))}
             </select>
-            <span>, esto es lo que te conviene preparar y comprar.</span>
+            <span>, esto es lo que te conviene comprar.</span>
           </div>
           {planConAccion.length === 0 ? (
             <div className="rounded-xl bg-marfil-soft/60 ring-1 ring-marfil px-4 py-6 text-center text-sm text-cacao-soft">
-              Todo al día: por ahora no hace falta procesar ni comprar.
+              Todo al día: por ahora no hace falta comprar nada.
             </div>
           ) : (
             <>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <span className="text-sm text-cacao">
                   <strong>{planConAccion.length}</strong> insumo
-                  {planConAccion.length === 1 ? "" : "s"} por atender
+                  {planConAccion.length === 1 ? "" : "s"} por comprar
                 </span>
                 {totalComprar > 0 && (
                   <span className="text-sm text-cacao-soft">
-                    Compra ≈{" "}
+                    Total ≈{" "}
                     <strong className="text-cacao">${totalComprar.toFixed(2)}</strong>
                   </span>
                 )}
@@ -518,36 +516,16 @@ export function PedidoSugeridoClient({
                 {planConAccion.map((l) => (
                   <li
                     key={l.insumoId}
-                    className="rounded-xl ring-1 ring-marfil p-3 hover:bg-marfil-soft/40"
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl ring-1 ring-marfil p-3 hover:bg-marfil-soft/40"
                   >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <span className="font-medium text-cacao">{l.nombre}</span>
-                        {!l.sinDatos && (
-                          <span className="block text-[11px] text-cacao-mute">
-                            Vendes ~{displayCantidad(l.ritmoDiario, l.unidadBase)}/día
-                            {" · "}plan a {l.horizonteDias} días
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {l.faltaProcesar > 0.00005 && (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
-                            <span className="size-1.5 rounded-full bg-amber-500" aria-hidden />
-                            Procesa {displayCantidad(l.faltaProcesar, l.unidadBase)}
-                          </span>
-                        )}
-                        {l.aComprar > 0.00005 && (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200">
-                            <span className="size-1.5 rounded-full bg-sky-500" aria-hidden />
-                            Compra {displayCantidad(l.aComprar, l.unidadBase)}
-                            {l.tienePrecio && l.costoCompra > 0
-                              ? ` · $${l.costoCompra.toFixed(2)}`
-                              : ""}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <span className="font-medium text-cacao">{l.nombre}</span>
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200">
+                      <span className="size-1.5 rounded-full bg-sky-500" aria-hidden />
+                      Compra {l.empaquesComprar} {l.unidadCompra}
+                      {l.tienePrecio && l.costoCompra > 0
+                        ? ` · $${l.costoCompra.toFixed(2)}`
+                        : ""}
+                    </span>
                   </li>
                 ))}
               </ul>
