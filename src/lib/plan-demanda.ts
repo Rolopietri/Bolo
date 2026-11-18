@@ -58,6 +58,9 @@ export type LineaPlanDemanda = {
   empaquesComprar: number;
   /** A comprar ya redondeado al empaque, en unidad base (empaques × cantidadPorCompra). */
   aComprarEmpaque: number;
+  /** true si la compra se subió al mínimo (1 unidad de compra) porque la
+   *  necesidad real era menor. */
+  aplicoMinimo: boolean;
   /** Costo de la compra realista (empaques × precio de compra). 0 si no hay precio. */
   costoCompra: number;
   /** true si el insumo tiene precio de compra para estimar el costo. */
@@ -103,6 +106,9 @@ export function planDemandaInsumo(
   const empaquesComprar =
     aComprar > 0 ? Math.ceil(aComprar / cantidadPorCompra - 1e-9) : 0;
   const aComprarEmpaque = empaquesComprar * cantidadPorCompra;
+  // Se aplicó el mínimo cuando la necesidad real cabía en menos de una unidad
+  // de compra, así que se sube a 1 (la compra mínima del proveedor).
+  const aplicoMinimo = aComprar > 1e-9 && aComprar < cantidadPorCompra - 1e-9;
   const precioCompra = i.precioCompraUsd ?? null;
   const tienePrecio = precioCompra != null && precioCompra > 0;
   const costoCompra = tienePrecio ? empaquesComprar * (precioCompra as number) : 0;
@@ -124,6 +130,7 @@ export function planDemandaInsumo(
     cantidadPorCompra,
     empaquesComprar,
     aComprarEmpaque,
+    aplicoMinimo,
     costoCompra,
     tienePrecio,
   };

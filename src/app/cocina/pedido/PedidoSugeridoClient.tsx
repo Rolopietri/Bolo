@@ -522,6 +522,7 @@ export function PedidoSugeridoClient({
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200">
                       <span className="size-1.5 rounded-full bg-sky-500" aria-hidden />
                       Compra {l.empaquesComprar} {l.unidadCompra}
+                      {l.aplicoMinimo ? " (mínimo)" : ""}
                       {l.tienePrecio && l.costoCompra > 0
                         ? ` · $${l.costoCompra.toFixed(2)}`
                         : ""}
