@@ -194,6 +194,8 @@ export function PedidoSugeridoClient({
       },
     ]);
     setPlanOrigenId(params.get("plan"));
+    // Si llegan desde un enlace para armar a mano, abre esa sección.
+    setModoManual(true);
   }, []);
 
   function addObjetivo() {
@@ -519,7 +521,15 @@ export function PedidoSugeridoClient({
                     className="rounded-xl ring-1 ring-marfil p-3 hover:bg-marfil-soft/40"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-medium text-cacao">{l.nombre}</span>
+                      <div className="min-w-0">
+                        <span className="font-medium text-cacao">{l.nombre}</span>
+                        {!l.sinDatos && (
+                          <span className="block text-[11px] text-cacao-mute">
+                            Vendes ~{displayCantidad(l.ritmoDiario, l.unidadBase)}/día
+                            {" · "}plan a {l.horizonteDias} días
+                          </span>
+                        )}
+                      </div>
                       <div className="flex flex-wrap gap-1.5">
                         {l.faltaProcesar > 0.00005 && (
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
@@ -538,47 +548,6 @@ export function PedidoSugeridoClient({
                         )}
                       </div>
                     </div>
-                    <details className="mt-2 text-xs text-cacao-soft">
-                      <summary className="cursor-pointer select-none hover:text-cacao">
-                        Ver las cuentas
-                      </summary>
-                      <dl className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 border-t border-marfil pt-1.5">
-                        <dt>Vendes al día</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {l.sinDatos
-                            ? "sin datos"
-                            : `${displayCantidad(l.ritmoDiario, l.unidadBase)}/día`}
-                        </dd>
-                        <dt>Para cuántos días</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {l.horizonteDias} días
-                        </dd>
-                        <dt>Vas a vender</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {displayCantidad(l.necesidad, l.unidadBase)}
-                        </dd>
-                        <dt>Ya listo</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {displayCantidad(l.procesado, l.unidadBase)}
-                        </dd>
-                        <dt>Falta procesar</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {displayCantidad(l.faltaProcesar, l.unidadBase)}
-                        </dd>
-                        <dt>Sin procesar que necesitas</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {displayCantidad(l.crudoNecesario, l.unidadBase)}
-                        </dd>
-                        <dt>Sin procesar que tienes</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {displayCantidad(l.crudo, l.unidadBase)}
-                        </dd>
-                        <dt>Comprar</dt>
-                        <dd className="text-right tabular-nums text-cacao">
-                          {displayCantidad(l.aComprar, l.unidadBase)}
-                        </dd>
-                      </dl>
-                    </details>
                   </li>
                 ))}
               </ul>
