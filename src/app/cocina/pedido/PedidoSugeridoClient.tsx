@@ -150,7 +150,9 @@ export function PedidoSugeridoClient({
   useEffect(() => {
     if (insumos.length === 0) return;
     let cancelled = false;
-    cargarConsumoYTasa(insumos, ventanaDias)
+    // Solo ventas (sin mermas/pérdidas): el plan de compra se basa en la demanda
+    // real, no en pérdidas puntuales.
+    cargarConsumoYTasa(insumos, ventanaDias, false)
       .then((rc) => {
         if (!cancelled) setConsumo(rc.consumo);
       })

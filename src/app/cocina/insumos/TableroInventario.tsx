@@ -73,6 +73,11 @@ function preferenciaTasa(): { preferida: PreferenciaTasa | null; personalizada: 
 export async function cargarConsumoYTasa(
   insumos: Insumo[],
   ventanaDias?: number,
+  // Por defecto el consumo incluye las salidas por movimientos (mermas,
+  // pérdidas): sirve para "cuánto me dura" el stock. Para el PLAN DE COMPRA se
+  // pasa false, porque ahí el ritmo debe ser solo de VENTAS (la demanda real),
+  // no de pérdidas puntuales.
+  incluirMovimientos = true,
 ): Promise<{
   consumo: Map<string, ConsumoInsumo>;
   tasa: TasaInventario;
@@ -83,14 +88,16 @@ export async function cargarConsumoYTasa(
     listRecetas(),
     getTasaBcvActual().catch(() => null),
     listVentasParaStock(desde, hoy),
-    listMovimientosSalida(desde, hoy),
+    incluirMovimientos ? listMovimientosSalida(desde, hoy) : Promise.resolve([]),
   ]);
   const expandir = (id: string, raciones: number) => calcularConsumoReceta(id, raciones, recetas, insumos);
   const salidas: SalidaStock[] = [];
   for (const v of ventas) salidas.push(...salidasDeVenta(v, expandir));
-  for (const m of movimientos) {
-    const s = salidaDesdeMovimiento(m);
-    if (s) salidas.push(s);
+  if (incluirMovimientos) {
+    for (const m of movimientos) {
+      const s = salidaDesdeMovimiento(m);
+      if (s) salidas.push(s);
+    }
   }
   const prefs = preferenciaTasa();
   const elegida = tasaParaValorarStock({
