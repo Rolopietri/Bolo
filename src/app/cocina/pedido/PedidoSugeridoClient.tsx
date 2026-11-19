@@ -31,6 +31,7 @@ import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { cargarConsumoYTasa } from "../insumos/TableroInventario";
 import { VENTANA_CONSUMO_DIAS, type ConsumoInsumo } from "@/lib/stock-liviano";
 import { planDemanda } from "@/lib/plan-demanda";
+import { displayCantidad } from "@/lib/units";
 
 type Objetivo = { recetaId: string; raciones: string };
 
@@ -518,7 +519,15 @@ export function PedidoSugeridoClient({
                     key={l.insumoId}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl ring-1 ring-marfil p-3 hover:bg-marfil-soft/40"
                   >
-                    <span className="font-medium text-cacao">{l.nombre}</span>
+                    <div className="min-w-0">
+                      <span className="font-medium text-cacao">{l.nombre}</span>
+                      {!l.sinDatos && (
+                        <span className="block text-[11px] text-cacao-mute">
+                          Vendes ~{displayCantidad(l.ritmoDiario, l.unidadBase)}/día
+                          {" "}(últimos {ventanaDias} días)
+                        </span>
+                      )}
+                    </div>
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-900 ring-1 ring-sky-200">
                       <span className="size-1.5 rounded-full bg-sky-500" aria-hidden />
                       Compra {l.empaquesComprar} {l.unidadCompra}
