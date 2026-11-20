@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Insumo } from "@/lib/types";
 import { listProcesamientos, type Procesamiento } from "@/lib/data/procesamientos";
-import { evaluarMerma, umbralDesviacion } from "@/lib/merma-alertas";
+import { evaluarMerma } from "@/lib/merma-alertas";
 import { displayCantidad } from "@/lib/units";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
@@ -79,8 +79,6 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
     );
   }
 
-  const umbral = estandar != null ? umbralDesviacion(estandar) : 0;
-
   // Aviso de arriba, tipo casillas de tabla: "lo usual" vs "lo que está
   // pasando" (resaltado), en gramos además del %. Usa la última producción
   // (puntual) o el promedio de las últimas (deriva).
@@ -107,17 +105,12 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
 
   return (
     <div className="space-y-5">
-      {/* Explicación llana, como en papel */}
-      <p className="text-[13px] leading-relaxed text-cacao-soft">
-        Cada vez que procesas {insumo.nombre}, una parte se pierde: eso es la{" "}
-        <b>merma</b>.
-        {estandar != null ? (
-          <>
-            {" "}
-            En tu casa lo normal es perder <b>{estandar}%</b>.
-          </>
-        ) : null}{" "}
-        Abajo está cada vez que lo procesaste.
+      {/* Explicación discreta, arriba del todo y en letra pequeña */}
+      <p className="text-[11px] leading-relaxed text-cacao-mute">
+        Cada vez que procesas {insumo.nombre}, una parte se pierde: eso es la
+        merma.
+        {estandar != null ? <> Lo normal en tu casa es perder {estandar}%.</> : null}{" "}
+        Abajo, cada vez que lo procesaste.
       </p>
 
       {/* Comparación "lo usual" vs "lo que pasó", resaltando el que se salió */}
@@ -172,13 +165,11 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
         </div>
       ) : null}
 
-      {/* Cada procesamiento, en palabras */}
+      {/* Cada procesamiento, en palabras (sin repetir la comparación: eso ya
+          lo responde el cuadro de arriba). */}
       <ul className="space-y-3">
         {procs.map((p) => {
           const merma = Math.max(0, p.crudo - p.procesado);
-          const fueraDeRango =
-            estandar != null && Math.abs(p.mermaPorc - estandar) > umbral;
-          const alta = estandar != null && p.mermaPorc > estandar;
           return (
             <li
               key={p.id}
@@ -188,13 +179,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
                 <span className="text-sm font-medium capitalize text-cacao">
                   {fFecha(p.fecha)}
                 </span>
-                <span
-                  className={`text-sm tabular-nums ${
-                    fueraDeRango
-                      ? "font-semibold text-[#7A2419]"
-                      : "text-cacao-soft"
-                  }`}
-                >
+                <span className="text-sm tabular-nums text-cacao-soft">
                   se perdió {p.mermaPorc.toFixed(0)}%
                 </span>
               </div>
@@ -204,17 +189,6 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
               </div>
               <div className="mt-0.5 text-[12px] text-cacao-soft">
                 Se perdieron {displayCantidad(merma, u)}
-                {estandar != null ? (
-                  fueraDeRango ? (
-                    <span className="text-[#7A2419]">
-                      {" "}
-                      · {alta ? "más" : "menos"} de lo normal (lo normal es{" "}
-                      {estandar}%)
-                    </span>
-                  ) : (
-                    <span> · en línea con lo normal ({estandar}%)</span>
-                  )
-                ) : null}
               </div>
             </li>
           );
