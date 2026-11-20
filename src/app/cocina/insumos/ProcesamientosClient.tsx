@@ -73,8 +73,8 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
     return (
       <p className="py-8 text-center font-serif italic text-cacao-soft">
         Todavía no has procesado {insumo.nombre}. Cuando uses el botón{" "}
-        <b>Procesar</b>, aquí verás cuánto metiste, cuánto te quedó y cuánto se
-        perdió cada vez.
+        <b>Procesar</b>, aquí verás cuánto procesaste, cuánto te quedó y cuánta
+        merma hubo cada vez.
       </p>
     );
   }
@@ -116,7 +116,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
               <div className="mt-1 font-cinzel text-lg text-cacao tabular-nums">
                 {displayCantidad(comparacion.perdidoNormal, u)}
               </div>
-              <div className="text-[11px] text-cacao-mute">se pierde {estandar}%</div>
+              <div className="text-[11px] text-cacao-mute">merma de {estandar}%</div>
             </div>
             <div className="py-3">
               <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
@@ -134,7 +134,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
                   comparacion.malo ? "text-[#7A2419]" : "text-oliva"
                 }`}
               >
-                se perdió {comparacion.actualPorc.toFixed(0)}%
+                merma de {comparacion.actualPorc.toFixed(0)}%
               </div>
             </div>
           </div>
@@ -151,7 +151,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
             {comparacion.malo
               ? comparacion.n === 1
                 ? "Revisa si fue algo de ese día o si conviene ajustar."
-                : "El proceso viene perdiendo de más; conviene revisarlo."
+                : "El proceso viene con más merma de lo normal; conviene revisarlo."
               : "Rindió mejor de lo esperado."}
           </p>
         </div>
@@ -171,7 +171,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
                 {fFecha(p.fecha)}
               </div>
               <div className="mt-0.5 text-sm text-cacao">
-                Se perdieron <b>{displayCantidad(merma, u)}</b> (
+                Merma de <b>{displayCantidad(merma, u)}</b> (
                 {p.mermaPorc.toFixed(0)}%)
               </div>
               <div className="mt-0.5 text-[12px] text-cacao-soft">

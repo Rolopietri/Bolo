@@ -67,10 +67,10 @@ export function DetalleInsumo({
           {/* Explicación de la merma, arriba del todo y discreta (solo si se procesa). */}
           {insumo.seProcesa && (
             <p className="-mt-1 text-[11px] leading-relaxed text-cacao-mute">
-              Cada vez que procesas {insumo.nombre}, una parte se pierde: eso es
+              Cada vez que procesas {insumo.nombre}, una parte se reduce: eso es
               la merma.
               {insumo.mermaCoccionPorc != null ? (
-                <> Lo normal en tu caso es perder {insumo.mermaCoccionPorc}%.</>
+                <> Lo normal en tu caso es una merma de {insumo.mermaCoccionPorc}%.</>
               ) : null}
             </p>
           )}
