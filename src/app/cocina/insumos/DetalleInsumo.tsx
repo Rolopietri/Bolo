@@ -1,19 +1,15 @@
 "use client";
 
-// Detalle de un insumo: todo lo que se mira de un insumo a la vez, en un solo
-// lugar. Uso diario (lo que salió por ventas cada día), sus pérdidas y los
-// cambios de su stock. Las vistas de todos los insumos siguen en la línea de
-// accesos de arriba del catálogo.
+// Detalle de un insumo en una sola página: arriba, el resumen de uso (cuánto se
+// usa por día); debajo, si el insumo se procesa, cada procesamiento con su
+// merma contada en palabras. Sin números de dinero: esta área es para entender
+// el movimiento del insumo, no su costo.
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { Insumo } from "@/lib/types";
 import { displayCantidad } from "@/lib/units";
 import { UsoDiarioClient } from "./UsoDiarioClient";
-import { MermasClient } from "./MermasClient";
-import { AuditoriaClient } from "./AuditoriaClient";
 import { ProcesamientosClient } from "./ProcesamientosClient";
-
-type Seccion = "uso" | "procesos" | "perdidas" | "cambios";
 
 export function DetalleInsumo({
   insumo,
@@ -29,18 +25,6 @@ export function DetalleInsumo({
   /** Oculta el insumo del inventario sin borrarlo (se puede reactivar). */
   onDesactivar?: () => void;
 }) {
-  const [seccion, setSeccion] = useState<Seccion>("uso");
-
-  // La pestaña "Procesamientos" solo aparece si el insumo se procesa.
-  const secciones: { id: Seccion; label: string }[] = [
-    { id: "uso", label: "Uso diario" },
-    ...(insumo.seProcesa
-      ? [{ id: "procesos" as const, label: "Procesamientos" }]
-      : []),
-    { id: "perdidas", label: "Pérdidas" },
-    { id: "cambios", label: "Cambios de stock" },
-  ];
-
   // Escape cierra; el fondo no se desplaza mientras está abierto.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -82,47 +66,44 @@ export function DetalleInsumo({
               ✕
             </button>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            {secciones.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setSeccion(s.id)}
-                aria-current={seccion === s.id ? "page" : undefined}
-                className={`min-h-10 rounded-full px-4 text-[11px] uppercase tracking-widest ring-1 ${
-                  seccion === s.id
-                    ? "bg-cacao text-white ring-cacao"
-                    : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-            <span className="ml-auto flex gap-2">
-              <button
-                type="button"
-                onClick={onPerdida}
-                className="min-h-10 rounded-full px-3 text-[11px] uppercase tracking-widest text-cacao-soft hover:text-terracotta"
-              >
-                Pérdida
-              </button>
-              <button
-                type="button"
-                onClick={onEditar}
-                className="min-h-10 rounded-full px-3 text-[11px] uppercase tracking-widest text-cacao-soft hover:text-cacao"
-              >
-                Editar
-              </button>
-            </span>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={onPerdida}
+              className="min-h-10 rounded-full px-3 text-[11px] uppercase tracking-widest text-cacao-soft hover:text-terracotta"
+            >
+              Pérdida
+            </button>
+            <button
+              type="button"
+              onClick={onEditar}
+              className="min-h-10 rounded-full px-3 text-[11px] uppercase tracking-widest text-cacao-soft hover:text-cacao"
+            >
+              Editar
+            </button>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto px-5 py-5">
-          {seccion === "uso" && <UsoDiarioClient insumoInicial={insumo.id} fijo />}
-          {seccion === "procesos" && <ProcesamientosClient insumo={insumo} />}
-          {seccion === "perdidas" && <MermasClient insumoId={insumo.id} />}
-          {seccion === "cambios" && <AuditoriaClient insumoInicial={insumo.id} fijo />}
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-8">
+          {/* Resumen de uso (sin dinero en la ficha). */}
+          <section>
+            <h3 className="mb-3 font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">
+              Uso diario
+            </h3>
+            <UsoDiarioClient insumoInicial={insumo.id} fijo />
+          </section>
+
+          {/* Procesamientos y merma, solo si el insumo se procesa. */}
+          {insumo.seProcesa && (
+            <section className="border-t border-marfil pt-6">
+              <h3 className="mb-3 font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">
+                Procesamientos
+              </h3>
+              <ProcesamientosClient insumo={insumo} />
+            </section>
+          )}
+
           {onDesactivar && (
-            <div className="mt-8 border-t border-marfil pt-4">
+            <div className="border-t border-marfil pt-4">
               <button
                 type="button"
                 onClick={onDesactivar}

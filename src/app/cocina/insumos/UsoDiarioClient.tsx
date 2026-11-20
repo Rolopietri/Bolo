@@ -287,7 +287,8 @@ export function UsoDiarioClient({
       {loading ? (
         <p className="py-10 text-center text-cacao-soft">Cargando…</p>
       ) : sel ? (
-        <VistaInsumo insumo={sel} h={hSel} hoy={hoy} costo={costo(sel)} />
+        // En la ficha (fijo) no se muestran números de dinero.
+        <VistaInsumo insumo={sel} h={hSel} hoy={hoy} costo={fijo ? null : costo(sel)} />
       ) : (
         <div className="space-y-6">
           {porDia.every((d) => d.filas.length === 0) && (
