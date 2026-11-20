@@ -154,9 +154,8 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
                 className="text-[#7A2419] underline decoration-dotted underline-offset-2 hover:decoration-solid"
                 title="Ir a Producción para revisar la merma y ver si conviene ajustar"
               >
-                {comparacion.n === 1
-                  ? "Revisa si fue algo de ese día o si conviene ajustar."
-                  : "El proceso viene con más merma de lo normal; conviene revisarlo."}
+                El proceso viene con más merma de lo normal; conviene
+                revisarlo.
               </Link>
             ) : (
               "Rindió mejor de lo esperado."
