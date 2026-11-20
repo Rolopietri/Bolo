@@ -26,14 +26,7 @@ function fFecha(iso: string): string {
   });
 }
 
-export function ProcesamientosClient({
-  insumo,
-  onProcesar,
-}: {
-  insumo: Insumo;
-  /** Abre el registro de un procesamiento para este insumo. */
-  onProcesar?: () => void;
-}) {
+export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
   const [procs, setProcs] = useState<Procesamiento[] | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
@@ -78,21 +71,10 @@ export function ProcesamientosClient({
   }
   if (procs.length === 0) {
     return (
-      <div className="py-8 text-center">
-        <p className="font-serif italic text-cacao-soft">
-          Todavía no has procesado {insumo.nombre}. Aquí verás cuánto
-          procesaste, cuánto te quedó y cuánta merma hubo cada vez.
-        </p>
-        {onProcesar && (
-          <button
-            type="button"
-            onClick={onProcesar}
-            className="mt-3 text-[11px] uppercase tracking-widest text-terracotta hover:underline"
-          >
-            Registrar un procesamiento →
-          </button>
-        )}
-      </div>
+      <p className="py-8 text-center font-serif italic text-cacao-soft">
+        Todavía no has procesado {insumo.nombre}. Aquí verás cuánto procesaste,
+        cuánto te quedó y cuánta merma hubo cada vez.
+      </p>
     );
   }
 
@@ -199,16 +181,6 @@ export function ProcesamientosClient({
           );
         })}
       </ul>
-
-      {onProcesar && (
-        <button
-          type="button"
-          onClick={onProcesar}
-          className="text-[11px] text-cacao-mute underline decoration-dotted decoration-cacao-mute/50 underline-offset-2 hover:text-cacao hover:decoration-cacao"
-        >
-          ¿Registrar un procesamiento? →
-        </button>
-      )}
     </div>
   );
 }
