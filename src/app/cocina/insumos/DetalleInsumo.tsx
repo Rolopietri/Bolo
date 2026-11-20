@@ -63,7 +63,7 @@ export function DetalleInsumo({
             </button>
           </div>
         </header>
-        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-8">
+        <div className="flex-1 overflow-y-auto px-5 py-5 space-y-6">
           {/* Explicación de la merma, arriba del todo y discreta (solo si se procesa). */}
           {insumo.seProcesa && (
             <p className="-mt-1 text-[11px] leading-relaxed text-cacao-mute">
@@ -85,7 +85,7 @@ export function DetalleInsumo({
 
           {/* Procesamientos y merma, solo si el insumo se procesa. */}
           {insumo.seProcesa && (
-            <section className="border-t border-marfil pt-6">
+            <section>
               <h3 className="mb-3 font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">
                 Procesamientos
               </h3>
@@ -94,7 +94,7 @@ export function DetalleInsumo({
           )}
 
           {onDesactivar && (
-            <div className="border-t border-marfil pt-4">
+            <div className="mt-2 border-t border-marfil pt-4">
               <button
                 type="button"
                 onClick={onDesactivar}
