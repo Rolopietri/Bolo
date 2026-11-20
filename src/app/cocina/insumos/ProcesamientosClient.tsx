@@ -81,13 +81,29 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
 
   const umbral = estandar != null ? umbralDesviacion(estandar) : 0;
 
-  // Para el aviso de arriba: los gramos de la última producción y cuánto
-  // habría sido "lo normal", para que la desviación se vea en gramos, no solo %.
-  const ultima = procs[0];
-  const perdidoReal = Math.max(0, ultima.crudo - ultima.procesado);
-  const perdidoNormal = estandar != null ? (ultima.crudo * estandar) / 100 : null;
-  const diferencia =
-    perdidoNormal != null ? Math.abs(perdidoReal - perdidoNormal) : null;
+  // Aviso de arriba, tipo casillas de tabla: "lo usual" vs "lo que está
+  // pasando" (resaltado), en gramos además del %. Usa la última producción
+  // (puntual) o el promedio de las últimas (deriva).
+  const alerta = evaluacion?.puntual ?? evaluacion?.deriva ?? null;
+  const comparacion =
+    alerta && estandar != null
+      ? (() => {
+          const considerados = procs.slice(0, alerta.n);
+          const prom = (f: (p: Procesamiento) => number) =>
+            considerados.reduce((s, p) => s + f(p), 0) / considerados.length;
+          const crudoProm = prom((p) => p.crudo);
+          const perdidoReal = prom((p) => Math.max(0, p.crudo - p.procesado));
+          const perdidoNormal = (crudoProm * estandar) / 100;
+          return {
+            n: alerta.n,
+            malo: alerta.sentido === "alta",
+            actualPorc: alerta.valor,
+            perdidoReal,
+            perdidoNormal,
+            diferencia: Math.abs(perdidoReal - perdidoNormal),
+          };
+        })()
+      : null;
 
   return (
     <div className="space-y-5">
@@ -104,37 +120,55 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
         Abajo está cada vez que lo procesaste.
       </p>
 
-      {/* Aviso amistoso si algo se salió de lo normal */}
-      {evaluacion?.puntual ? (
-        <div className="rounded-xl bg-[#F9EBE7] px-4 py-3 text-sm leading-relaxed text-[#7A2419] ring-1 ring-[#E7C9C0]">
-          La última vez perdiste <b>{displayCantidad(perdidoReal, u)}</b> (
-          {evaluacion.puntual.valor.toFixed(0)}%),{" "}
-          {evaluacion.puntual.sentido === "alta" ? "más" : "menos"} de lo normal.
-          {perdidoNormal != null ? (
-            <>
-              {" "}
-              Con lo normal ({estandar}%) habrían sido unos{" "}
-              <b>{displayCantidad(perdidoNormal, u)}</b>
-              {diferencia != null && diferencia > 0 ? (
-                <>
-                  {" "}
-                  — {displayCantidad(diferencia, u)} de{" "}
-                  {evaluacion.puntual.sentido === "alta" ? "más" : "menos"}
-                </>
-              ) : null}
-              .
-            </>
-          ) : null}{" "}
-          {evaluacion.puntual.sentido === "alta"
-            ? "Revisa si fue algo de ese día o si conviene ajustar."
-            : "Rindió mejor de lo esperado."}
-        </div>
-      ) : evaluacion?.deriva ? (
-        <div className="rounded-xl bg-[#F9EBE7] px-4 py-3 text-sm text-[#7A2419] ring-1 ring-[#E7C9C0]">
-          Tus últimas producciones vienen perdiendo{" "}
-          <b>{evaluacion.deriva.valor.toFixed(0)}%</b> en promedio,{" "}
-          {evaluacion.deriva.sentido === "alta" ? "por encima" : "por debajo"} de
-          lo normal ({estandar}%).
+      {/* Comparación "lo usual" vs "lo que pasó", resaltando el que se salió */}
+      {comparacion ? (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-x-4 border-y border-marfil">
+            <div className="py-3">
+              <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
+                Lo usual
+              </div>
+              <div className="mt-1 font-cinzel text-lg text-cacao tabular-nums">
+                {displayCantidad(comparacion.perdidoNormal, u)}
+              </div>
+              <div className="text-[11px] text-cacao-mute">{estandar}% de merma</div>
+            </div>
+            <div className="py-3">
+              <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
+                {comparacion.n === 1 ? "Esta vez" : `Últimas ${comparacion.n}`}
+              </div>
+              <div
+                className={`mt-1 font-cinzel text-lg tabular-nums ${
+                  comparacion.malo ? "text-[#7A2419]" : "text-oliva"
+                }`}
+              >
+                {displayCantidad(comparacion.perdidoReal, u)}
+              </div>
+              <div
+                className={`text-[11px] ${
+                  comparacion.malo ? "text-[#7A2419]" : "text-oliva"
+                }`}
+              >
+                {comparacion.actualPorc.toFixed(0)}% de merma
+              </div>
+            </div>
+          </div>
+          <p className="text-[12px] text-cacao-soft">
+            {comparacion.diferencia > 0 ? (
+              <>
+                Son{" "}
+                <b className={comparacion.malo ? "text-[#7A2419]" : "text-oliva"}>
+                  {displayCantidad(comparacion.diferencia, u)}
+                </b>{" "}
+                de {comparacion.malo ? "más" : "menos"} de lo usual.{" "}
+              </>
+            ) : null}
+            {comparacion.malo
+              ? comparacion.n === 1
+                ? "Revisa si fue algo de ese día o si conviene ajustar."
+                : "El proceso viene perdiendo de más; conviene revisarlo."
+              : "Rindió mejor de lo esperado."}
+          </p>
         </div>
       ) : null}
 
