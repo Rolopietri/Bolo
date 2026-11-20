@@ -31,7 +31,7 @@ import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { cargarConsumoYTasa } from "../insumos/TableroInventario";
 import { VENTANA_CONSUMO_DIAS, type ConsumoInsumo } from "@/lib/stock-liviano";
 import { planDemanda } from "@/lib/plan-demanda";
-import { displayCantidad } from "@/lib/units";
+import { displayCantidadRedonda } from "@/lib/units";
 
 type Objetivo = { recetaId: string; raciones: string };
 
@@ -525,7 +525,7 @@ export function PedidoSugeridoClient({
                       <span className="font-medium text-cacao">{l.nombre}</span>
                       {!l.sinDatos && (
                         <span className="block text-[11px] text-cacao-mute">
-                          Vendes ~{displayCantidad(l.ritmoDiario, l.unidadBase)}/día
+                          Vendes ~{displayCantidadRedonda(l.ritmoDiario, l.unidadBase)}/día
                           {" "}(últimos {ventanaDias} días)
                         </span>
                       )}

@@ -148,6 +148,34 @@ export function displayCantidad(
 }
 
 /**
+ * Igual que displayCantidad pero REDONDEANDO la cifra a pasos de 0,5 (…, 0, 0.5,
+ * 1, 1.5, …). Para mostrar estimaciones "redondas" (ej. un ritmo de venta
+ * "~0.5 kg/día") sin decimales feos. Solo visual; el cálculo interno no cambia.
+ */
+export function displayCantidadRedonda(
+  value: number,
+  unidadBase: string | undefined | null,
+): string {
+  const info = getUnit(unidadBase);
+  const abs = Math.abs(value);
+  let v = value;
+  let u = unidadBase ?? "";
+  if (info && abs > 0 && abs < 1 && (info.canonica === "kg" || info.canonica === "L")) {
+    v = value * 1000;
+    u = info.canonica === "kg" ? "g" : "ml";
+  } else if (
+    info &&
+    abs >= 1000 &&
+    (info.canonica === "g" || info.canonica === "ml" || info.canonica === "mg")
+  ) {
+    v = value / 1000;
+    u = info.canonica === "g" ? "kg" : info.canonica === "ml" ? "L" : "g";
+  }
+  const r = Math.round(v * 2) / 2; // pasos de 0,5
+  return `${fmtNum(r, 1)} ${u}`.trim();
+}
+
+/**
  * Precio por unidad base expresado en una unidad legible: en vez de
  * "$0.00084 / g" devuelve "$0.84 / kg". Para unidades sin escala (unidad,
  * botella…) deja la unidad tal cual.
