@@ -66,6 +66,10 @@ language plpgsql
 security invoker
 set search_path = public
 as $$
+-- `stock_procesado` es a la vez columna de la tabla y nombre de salida de la
+-- función; sin esto, el UPDATE/RETURNING da "column reference is ambiguous".
+-- (La versión canónica y completa vive en cocina-procesamientos.sql.)
+#variable_conflict use_column
 declare
   v_crudo_nuevo numeric;
   v_proc_nuevo  numeric;
