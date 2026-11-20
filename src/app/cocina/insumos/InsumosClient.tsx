@@ -1779,14 +1779,6 @@ export function InsumosClient({
           key={detalleInsumo.id}
           insumo={detalleInsumo}
           onClose={() => setDetalleInsumo(null)}
-          onPerdida={() => {
-            setPerdidaInsumo(detalleInsumo);
-            setDetalleInsumo(null);
-          }}
-          onEditar={() => {
-            startEdit(detalleInsumo);
-            setDetalleInsumo(null);
-          }}
           onDesactivar={() => {
             setPendienteDesactivar(detalleInsumo.id);
             setDetalleInsumo(null);

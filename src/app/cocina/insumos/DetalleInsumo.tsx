@@ -14,14 +14,10 @@ import { ProcesamientosClient } from "./ProcesamientosClient";
 export function DetalleInsumo({
   insumo,
   onClose,
-  onPerdida,
-  onEditar,
   onDesactivar,
 }: {
   insumo: Insumo;
   onClose: () => void;
-  onPerdida: () => void;
-  onEditar: () => void;
   /** Oculta el insumo del inventario sin borrarlo (se puede reactivar). */
   onDesactivar?: () => void;
 }) {
@@ -64,22 +60,6 @@ export function DetalleInsumo({
               className="grid size-10 shrink-0 place-items-center rounded-full text-cacao-soft hover:bg-marfil-soft hover:text-cacao"
             >
               ✕
-            </button>
-          </div>
-          <div className="mt-3 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onPerdida}
-              className="min-h-10 rounded-full px-3 text-[11px] uppercase tracking-widest text-cacao-soft hover:text-terracotta"
-            >
-              Pérdida
-            </button>
-            <button
-              type="button"
-              onClick={onEditar}
-              className="min-h-10 rounded-full px-3 text-[11px] uppercase tracking-widest text-cacao-soft hover:text-cacao"
-            >
-              Editar
             </button>
           </div>
         </header>
