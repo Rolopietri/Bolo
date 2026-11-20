@@ -116,7 +116,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
               <div className="mt-1 font-cinzel text-lg text-cacao tabular-nums">
                 {displayCantidad(comparacion.perdidoNormal, u)}
               </div>
-              <div className="text-[11px] text-cacao-mute">{estandar}% de merma</div>
+              <div className="text-[11px] text-cacao-mute">se pierde {estandar}%</div>
             </div>
             <div className="py-3">
               <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
@@ -134,7 +134,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
                   comparacion.malo ? "text-[#7A2419]" : "text-oliva"
                 }`}
               >
-                {comparacion.actualPorc.toFixed(0)}% de merma
+                se perdió {comparacion.actualPorc.toFixed(0)}%
               </div>
             </div>
           </div>
@@ -167,20 +167,16 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
               key={p.id}
               className="rounded-xl bg-white px-4 py-3 ring-1 ring-marfil"
             >
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-sm font-medium capitalize text-cacao">
-                  {fFecha(p.fecha)}
-                </span>
-                <span className="text-sm tabular-nums text-cacao-soft">
-                  se perdió {p.mermaPorc.toFixed(0)}%
-                </span>
+              <div className="text-[11px] uppercase tracking-widest capitalize text-cacao-mute">
+                {fFecha(p.fecha)}
               </div>
-              <div className="mt-1 text-sm text-cacao">
-                Metiste <b>{displayCantidad(p.crudo, u)}</b> → te quedaron{" "}
-                <b>{displayCantidad(p.procesado, u)}</b>
+              <div className="mt-0.5 text-sm text-cacao">
+                Se perdieron <b>{displayCantidad(merma, u)}</b> (
+                {p.mermaPorc.toFixed(0)}%)
               </div>
               <div className="mt-0.5 text-[12px] text-cacao-soft">
-                Se perdieron {displayCantidad(merma, u)}
+                De {displayCantidad(p.crudo, u)} que procesaste quedaron{" "}
+                {displayCantidad(p.procesado, u)} para vender.
               </div>
             </li>
           );
