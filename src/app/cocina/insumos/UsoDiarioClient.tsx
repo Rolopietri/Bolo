@@ -22,7 +22,6 @@ import {
 import {
   armarHistorial,
   compararConPromedio,
-  stockAlCierre,
   usoTotalDia,
   type HistorialInsumo,
   type UsoDia,
@@ -388,10 +387,7 @@ function VistaInsumo({
       </p>
     );
   }
-  const cierres = stockAlCierre(insumo.stockTotal, h.dias, hoy);
-  const max = Math.max(...h.dias.map(usoTotalDia), 1e-9);
   const pico = h.dias.reduce((a, b) => (usoTotalDia(b) > usoTotalDia(a) ? b : a), h.dias[0]);
-  const diasRecientes = [...h.dias].reverse();
 
   return (
     <div className="space-y-6">
@@ -422,75 +418,6 @@ function VistaInsumo({
           </div>
         ))}
       </div>
-
-      {/* Barras por día */}
-      <div>
-        <p className="mb-2 text-[12px] text-cacao-soft">
-          Cada barra es un día. Mientras más alta, más {insumo.nombre} se usó ese
-          día.
-        </p>
-        <div className="flex h-28 items-end gap-1" aria-hidden="true">
-          {h.dias.map((d) => {
-            const t = usoTotalDia(d);
-            const c = compararConPromedio(t, h.promedioDiario);
-            return (
-              <div key={d.fecha} className="flex flex-1 flex-col items-center justify-end h-full">
-                <div
-                  className={`w-full rounded-t ${c.tipo === "alto" ? "bg-terracotta" : "bg-naranja-soft"}`}
-                  style={{ height: `${Math.max(t > 0 ? 4 : 0, (t / max) * 100)}%` }}
-                  title={`${fDia(d.fecha, hoy)}: ${fmtCant(t, u)}`}
-                />
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-1 flex justify-between text-[10px] text-cacao-mute">
-          <span className="capitalize">{fDia(h.dias[0].fecha, hoy)}</span>
-          <span>Hoy</span>
-        </div>
-        {h.promedioDiario > 0 && (
-          <p className="mt-1 text-[11px] text-cacao-mute">
-            En naranja fuerte, los días que usaste bastante más que de costumbre
-            (más de la mitad por encima de tu promedio, {fmtCant(h.promedioDiario, u)} al día).
-          </p>
-        )}
-      </div>
-
-      {/* Día por día */}
-      <ul className="divide-y divide-marfil border-y border-marfil">
-        {diasRecientes.map((d) => {
-          const t = usoTotalDia(d);
-          const cierre = cierres.get(d.fecha);
-          return (
-            <li key={d.fecha} className="py-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium text-cacao capitalize">{fDia(d.fecha, hoy)}</div>
-                  <Variacion usado={t} promedio={h.promedioDiario} />
-                </div>
-                <div className="text-right text-sm">
-                  <div className="tabular-nums text-cacao font-medium">
-                    {t > 0 ? `− ${fmtCant(t, u)}` : "sin uso"}
-                  </div>
-                  {d.comprado > 0 && (
-                    <div className="text-[11px] tabular-nums text-oliva">+ {fmtCant(d.comprado, u)} comprado</div>
-                  )}
-                  {cierre != null && (
-                    <div className="text-[11px] tabular-nums text-cacao-mute">
-                      quedó ≈ {fmtCant(cierre, u)}
-                    </div>
-                  )}
-                </div>
-              </div>
-              {t > 0 && <DetalleProductos dia={d} unidad={u} />}
-            </li>
-          );
-        })}
-      </ul>
-      <p className="text-[11px] text-cacao-mute">
-        &ldquo;Quedó&rdquo; es una estimación hacia atrás desde el stock de hoy con las compras y
-        salidas registradas; no incluye cambios hechos a mano en la ficha.
-      </p>
     </div>
   );
 }
