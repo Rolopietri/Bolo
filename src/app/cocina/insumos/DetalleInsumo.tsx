@@ -6,7 +6,6 @@
 // el movimiento del insumo, no su costo.
 
 import { useEffect } from "react";
-import Link from "next/link";
 import type { Insumo } from "@/lib/types";
 import { displayCantidad } from "@/lib/units";
 import { UsoDiarioClient } from "./UsoDiarioClient";
@@ -87,13 +86,9 @@ export function DetalleInsumo({
           {/* Procesamientos y merma, solo si el insumo se procesa. */}
           {insumo.seProcesa && (
             <section>
-              <Link
-                href="/cocina/produccion"
-                className="mb-3 inline-flex items-center gap-1 font-display text-xs uppercase tracking-[0.3em] text-cacao-mute hover:text-cacao"
-                title="Ir a Producción para revisar la merma y ver si conviene ajustar"
-              >
-                Procesamientos <span aria-hidden>→</span>
-              </Link>
+              <h3 className="mb-3 font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">
+                Procesamientos
+              </h3>
               <ProcesamientosClient insumo={insumo} />
             </section>
           )}

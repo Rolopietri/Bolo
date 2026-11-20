@@ -7,6 +7,7 @@
 // salió de lo normal. Solo aparecen los días en que sí procesaste.
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import type { Insumo } from "@/lib/types";
 import { listProcesamientos, type Procesamiento } from "@/lib/data/procesamientos";
 import { evaluarMerma } from "@/lib/merma-alertas";
@@ -147,11 +148,19 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
                 de {comparacion.malo ? "más" : "menos"} de lo usual.{" "}
               </>
             ) : null}
-            {comparacion.malo
-              ? comparacion.n === 1
-                ? "Revisa si fue algo de ese día o si conviene ajustar."
-                : "El proceso viene con más merma de lo normal; conviene revisarlo."
-              : "Rindió mejor de lo esperado."}
+            {comparacion.malo ? (
+              <Link
+                href="/cocina/produccion"
+                className="text-[#7A2419] underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                title="Ir a Producción para revisar la merma y ver si conviene ajustar"
+              >
+                {comparacion.n === 1
+                  ? "Revisa si fue algo de ese día o si conviene ajustar."
+                  : "El proceso viene con más merma de lo normal; conviene revisarlo."}
+              </Link>
+            ) : (
+              "Rindió mejor de lo esperado."
+            )}
           </p>
         </div>
       ) : null}
