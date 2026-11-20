@@ -13,7 +13,6 @@ import { listRecetas } from "@/lib/data/recetas";
 import { calcularConsumoReceta } from "@/lib/data/ventas";
 import { listVentasUso } from "@/lib/data/uso-diario";
 import { crearLotes, faltaTablaProduccion, listLotes } from "@/lib/data/produccion";
-import { registrarPerdida } from "@/lib/data/stock-movimientos";
 import {
   compararCuadre,
   compararMerma,
@@ -422,45 +421,22 @@ export function ProduccionClient() {
       } catch {
         // no pasa nada
       }
-      // El desecho aprobado sale del inventario como merma (queda en el
-      // historial de pérdidas del insumo, con el lote en la nota).
-      const descontados: string[] = [];
-      const fallidos: string[] = [];
-      for (const l of nuevos) {
-        const desecho = l.tomada - l.util;
-        if (!(desecho > 0)) continue;
-        const ins = insumoPorId.get(l.insumoId);
-        const nombre = ins?.nombre ?? "insumo";
-        try {
-          await registrarPerdida({
-            insumoId: l.insumoId,
-            cantidad: desecho,
-            tipo: "merma",
-            motivo: "Producción",
-            fecha: l.fecha,
-            nota: [
-              `Lote de producción: sin procesar ${displayCantidad(l.tomada, ins?.unidadBase ?? "")} → procesado ${displayCantidad(l.util, ins?.unidadBase ?? "")}`,
-              l.responsable?.trim() ? `Responsable: ${l.responsable.trim()}` : "",
-              l.origen === "telegram" ? "Desde Telegram" : l.origen === "escaneo" ? "Desde plantilla escaneada" : "",
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          });
-          descontados.push(`${displayCantidad(desecho, ins?.unidadBase ?? "")} de ${nombre}`);
-        } catch {
-          fallidos.push(nombre);
-        }
-      }
+      // La merma del desecho ya quedó descontada del inventario al registrar
+      // cada procesamiento (crudo→procesado, con la merma en el libro). Solo
+      // armamos el aviso con lo descontado.
+      const descontados = nuevos
+        .map((l) => {
+          const desecho = l.tomada - l.util;
+          if (!(desecho > 0)) return null;
+          const ins = insumoPorId.get(l.insumoId);
+          return `${displayCantidad(desecho, ins?.unidadBase ?? "")} de ${ins?.nombre ?? "insumo"}`;
+        })
+        .filter((x): x is string => x !== null);
       limpiarRevision();
       setAviso(
         `${nuevos.length} ${nuevos.length === 1 ? "lote guardado" : "lotes guardados"}.` +
           (descontados.length > 0 ? ` Merma descontada del inventario: ${descontados.join(", ")}.` : ""),
       );
-      if (fallidos.length > 0) {
-        setError(
-          `El lote se guardó, pero no se pudo descontar la merma de ${fallidos.join(", ")}. Regístrala desde Inventario → Registrar pérdida.`,
-        );
-      }
       setVersion((v) => v + 1);
     } catch (err) {
       if (faltaTablaProduccion(err)) setFaltaTabla(true);

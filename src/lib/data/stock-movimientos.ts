@@ -147,6 +147,10 @@ export type ProcesamientoInput = {
   procesado: number;
   fecha?: string;
   nota?: string;
+  /** Quién lo hizo (opcional). Lo usa el módulo de Producción. */
+  responsable?: string;
+  /** Cómo se registró: manual (por defecto), escaneo o telegram. */
+  origen?: "manual" | "escaneo" | "telegram";
 };
 
 export type ProcesamientoResultado = {
@@ -176,6 +180,8 @@ export async function registrarProcesamiento(
     p_procesado: input.procesado,
     p_fecha: input.fecha ?? hoyISO(),
     p_nota: input.nota?.trim() || null,
+    p_responsable: input.responsable?.trim() || null,
+    p_origen: input.origen ?? "manual",
   });
   if (error) throw error;
   const row = (Array.isArray(data) ? data[0] : data) as

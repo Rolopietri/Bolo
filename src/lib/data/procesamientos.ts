@@ -11,6 +11,8 @@ export type Procesamiento = {
   procesado: number;
   mermaPorc: number;
   nota?: string;
+  responsable?: string;
+  origen: "manual" | "escaneo" | "telegram";
 };
 
 type Row = {
@@ -21,7 +23,11 @@ type Row = {
   procesado: number | string;
   merma_porc: number | string;
   nota: string | null;
+  responsable: string | null;
+  origen: string | null;
 };
+
+const COLS = "id, insumo_id, fecha, crudo, procesado, merma_porc, nota, responsable, origen";
 
 function toProc(r: Row): Procesamiento {
   return {
@@ -32,6 +38,9 @@ function toProc(r: Row): Procesamiento {
     procesado: Number(r.procesado),
     mermaPorc: Number(r.merma_porc),
     nota: r.nota ?? undefined,
+    responsable: r.responsable ?? undefined,
+    origen:
+      r.origen === "escaneo" || r.origen === "telegram" ? r.origen : "manual",
   };
 }
 
@@ -44,7 +53,7 @@ export async function listProcesamientos(
   const sb = createSupabaseBrowserClient();
   let q = sb
     .from("procesamientos")
-    .select("id, insumo_id, fecha, crudo, procesado, merma_porc, nota")
+    .select(COLS)
     .order("fecha", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -52,6 +61,31 @@ export async function listProcesamientos(
   const { data, error } = await q;
   if (error) return [];
   return (data as Row[]).map(toProc);
+}
+
+/** Lista procesamientos en un rango de fechas (más reciente primero). Lo usa el
+ *  módulo de Producción, que lee de esta misma tabla. */
+export async function listProcesamientosRango(
+  desde: string,
+  hasta: string,
+): Promise<Procesamiento[]> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb
+    .from("procesamientos")
+    .select(COLS)
+    .gte("fecha", desde)
+    .lte("fecha", hasta)
+    .order("fecha", { ascending: false })
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return ((data ?? []) as Row[]).map(toProc);
+}
+
+/** Borra un procesamiento por id (no revierte el stock ni la merma del libro). */
+export async function borrarProcesamiento(id: string): Promise<void> {
+  const sb = createSupabaseBrowserClient();
+  const { error } = await sb.from("procesamientos").delete().eq("id", id);
+  if (error) throw error;
 }
 
 /** Mapa insumoId → mermas % recientes (más reciente primero), para evaluar las
