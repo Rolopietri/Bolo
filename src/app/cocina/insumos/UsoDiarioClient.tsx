@@ -425,6 +425,10 @@ function VistaInsumo({
 
       {/* Barras por día */}
       <div>
+        <p className="mb-2 text-[12px] text-cacao-soft">
+          Cada barra es un día. Mientras más alta, más {insumo.nombre} se usó ese
+          día.
+        </p>
         <div className="flex h-28 items-end gap-1" aria-hidden="true">
           {h.dias.map((d) => {
             const t = usoTotalDia(d);
@@ -446,7 +450,8 @@ function VistaInsumo({
         </div>
         {h.promedioDiario > 0 && (
           <p className="mt-1 text-[11px] text-cacao-mute">
-            Barras en naranja fuerte: días con 50 % o más sobre el promedio ({fmtCant(h.promedioDiario, u)}).
+            En naranja fuerte, los días que usaste bastante más que de costumbre
+            (más de la mitad por encima de tu promedio, {fmtCant(h.promedioDiario, u)} al día).
           </p>
         )}
       </div>

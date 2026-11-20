@@ -11,14 +11,9 @@ import { displayCantidad } from "@/lib/units";
 import { UsoDiarioClient } from "./UsoDiarioClient";
 import { MermasClient } from "./MermasClient";
 import { AuditoriaClient } from "./AuditoriaClient";
+import { ProcesamientosClient } from "./ProcesamientosClient";
 
-type Seccion = "uso" | "perdidas" | "cambios";
-
-const SECCIONES: { id: Seccion; label: string }[] = [
-  { id: "uso", label: "Uso diario" },
-  { id: "perdidas", label: "Pérdidas" },
-  { id: "cambios", label: "Cambios de stock" },
-];
+type Seccion = "uso" | "procesos" | "perdidas" | "cambios";
 
 export function DetalleInsumo({
   insumo,
@@ -35,6 +30,16 @@ export function DetalleInsumo({
   onDesactivar?: () => void;
 }) {
   const [seccion, setSeccion] = useState<Seccion>("uso");
+
+  // La pestaña "Procesamientos" solo aparece si el insumo se procesa.
+  const secciones: { id: Seccion; label: string }[] = [
+    { id: "uso", label: "Uso diario" },
+    ...(insumo.seProcesa
+      ? [{ id: "procesos" as const, label: "Procesamientos" }]
+      : []),
+    { id: "perdidas", label: "Pérdidas" },
+    { id: "cambios", label: "Cambios de stock" },
+  ];
 
   // Escape cierra; el fondo no se desplaza mientras está abierto.
   useEffect(() => {
@@ -78,7 +83,7 @@ export function DetalleInsumo({
             </button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {SECCIONES.map((s) => (
+            {secciones.map((s) => (
               <button
                 key={s.id}
                 type="button"
@@ -113,6 +118,7 @@ export function DetalleInsumo({
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-5">
           {seccion === "uso" && <UsoDiarioClient insumoInicial={insumo.id} fijo />}
+          {seccion === "procesos" && <ProcesamientosClient insumo={insumo} />}
           {seccion === "perdidas" && <MermasClient insumoId={insumo.id} />}
           {seccion === "cambios" && <AuditoriaClient insumoInicial={insumo.id} fijo />}
           {onDesactivar && (
