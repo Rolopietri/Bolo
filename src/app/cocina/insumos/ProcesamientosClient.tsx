@@ -81,6 +81,14 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
 
   const umbral = estandar != null ? umbralDesviacion(estandar) : 0;
 
+  // Para el aviso de arriba: los gramos de la última producción y cuánto
+  // habría sido "lo normal", para que la desviación se vea en gramos, no solo %.
+  const ultima = procs[0];
+  const perdidoReal = Math.max(0, ultima.crudo - ultima.procesado);
+  const perdidoNormal = estandar != null ? (ultima.crudo * estandar) / 100 : null;
+  const diferencia =
+    perdidoNormal != null ? Math.abs(perdidoReal - perdidoNormal) : null;
+
   return (
     <div className="space-y-5">
       {/* Explicación llana, como en papel */}
@@ -98,10 +106,25 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
 
       {/* Aviso amistoso si algo se salió de lo normal */}
       {evaluacion?.puntual ? (
-        <div className="rounded-xl bg-[#F9EBE7] px-4 py-3 text-sm text-[#7A2419] ring-1 ring-[#E7C9C0]">
-          La última vez se perdió <b>{evaluacion.puntual.valor.toFixed(0)}%</b>,{" "}
-          {evaluacion.puntual.sentido === "alta" ? "más" : "menos"} de lo normal (
-          {estandar}%).{" "}
+        <div className="rounded-xl bg-[#F9EBE7] px-4 py-3 text-sm leading-relaxed text-[#7A2419] ring-1 ring-[#E7C9C0]">
+          La última vez perdiste <b>{displayCantidad(perdidoReal, u)}</b> (
+          {evaluacion.puntual.valor.toFixed(0)}%),{" "}
+          {evaluacion.puntual.sentido === "alta" ? "más" : "menos"} de lo normal.
+          {perdidoNormal != null ? (
+            <>
+              {" "}
+              Con lo normal ({estandar}%) habrían sido unos{" "}
+              <b>{displayCantidad(perdidoNormal, u)}</b>
+              {diferencia != null && diferencia > 0 ? (
+                <>
+                  {" "}
+                  — {displayCantidad(diferencia, u)} de{" "}
+                  {evaluacion.puntual.sentido === "alta" ? "más" : "menos"}
+                </>
+              ) : null}
+              .
+            </>
+          ) : null}{" "}
           {evaluacion.puntual.sentido === "alta"
             ? "Revisa si fue algo de ese día o si conviene ajustar."
             : "Rindió mejor de lo esperado."}
