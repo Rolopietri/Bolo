@@ -64,6 +64,17 @@ export function DetalleInsumo({
           </div>
         </header>
         <div className="flex-1 overflow-y-auto px-5 py-5 space-y-8">
+          {/* Explicación de la merma, arriba del todo y discreta (solo si se procesa). */}
+          {insumo.seProcesa && (
+            <p className="-mt-1 text-[11px] leading-relaxed text-cacao-mute">
+              Cada vez que procesas {insumo.nombre}, una parte se pierde: eso es
+              la merma.
+              {insumo.mermaCoccionPorc != null ? (
+                <> Lo normal en tu caso es perder {insumo.mermaCoccionPorc}%.</>
+              ) : null}
+            </p>
+          )}
+
           {/* Resumen de uso (sin dinero en la ficha). */}
           <section>
             <h3 className="mb-3 font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">

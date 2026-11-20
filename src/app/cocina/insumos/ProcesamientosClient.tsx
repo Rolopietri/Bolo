@@ -105,14 +105,6 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
 
   return (
     <div className="space-y-5">
-      {/* Explicación discreta, arriba del todo y en letra pequeña */}
-      <p className="text-[11px] leading-relaxed text-cacao-mute">
-        Cada vez que procesas {insumo.nombre}, una parte se pierde: eso es la
-        merma.
-        {estandar != null ? <> Lo normal en tu caso es perder {estandar}%.</> : null}{" "}
-        Abajo, cada vez que lo procesaste.
-      </p>
-
       {/* Comparación "lo usual" vs "lo que pasó", resaltando el que se salió */}
       {comparacion ? (
         <div className="space-y-2">
