@@ -109,7 +109,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
       <p className="text-[11px] leading-relaxed text-cacao-mute">
         Cada vez que procesas {insumo.nombre}, una parte se pierde: eso es la
         merma.
-        {estandar != null ? <> Lo normal en tu casa es perder {estandar}%.</> : null}{" "}
+        {estandar != null ? <> Lo normal en tu caso es perder {estandar}%.</> : null}{" "}
         Abajo, cada vez que lo procesaste.
       </p>
 
