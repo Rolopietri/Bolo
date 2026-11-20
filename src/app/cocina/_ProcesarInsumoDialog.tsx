@@ -8,6 +8,7 @@ import { displayCantidad } from "@/lib/units";
 import { extractError } from "@/lib/data/error";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
+import { umbralDesviacion } from "@/lib/merma-alertas";
 
 /**
  * Modal para registrar un EVENTO DE PROCESAMIENTO (Fase B):
@@ -188,16 +189,11 @@ export function ProcesarInsumoDialog({
               ) : (
                 <div className="text-[11px] text-cacao-mute">
                   Estándar del insumo: {estandar}%.{" "}
-                  {desviacion != null && Math.abs(desviacion) >= 0.5 ? (
-                    <span
-                      className={
-                        Math.abs(desviacion) >= 3
-                          ? "text-terracotta font-medium"
-                          : "text-cacao-soft"
-                      }
-                    >
-                      Desviación {desviacion > 0 ? "+" : ""}
-                      {desviacion.toFixed(1)} pts.
+                  {desviacion != null && Math.abs(desviacion) > umbralDesviacion(estandar) ? (
+                    <span className="text-terracotta font-medium">
+                      Esta producción mermó {desviacion > 0 ? "más" : "menos"} de lo
+                      normal ({desviacion > 0 ? "+" : ""}
+                      {desviacion.toFixed(1)} pts). Revisa si fue algo puntual.
                     </span>
                   ) : (
                     <span className="text-cacao-soft">En línea con el estándar.</span>

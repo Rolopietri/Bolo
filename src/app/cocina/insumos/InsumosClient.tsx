@@ -43,6 +43,8 @@ import { ProcesarInsumoDialog } from "../_ProcesarInsumoDialog";
 import { DetalleInsumo } from "./DetalleInsumo";
 import { AyudaEtiqueta } from "@/components/AyudaEtiqueta";
 import { sugerirCategoria } from "@/lib/sugerir-categoria";
+import { mermasRecientesPorInsumo } from "@/lib/data/procesamientos";
+import { evaluarMerma, textoAlertaMerma, type EvaluacionMerma } from "@/lib/merma-alertas";
 import {
   PastillaEstado,
   TableroInventario,
@@ -228,6 +230,8 @@ export function InsumosClient({
   const [verValor, setVerValor] = useState(false);
   // Consumo reciente (ventas + pérdidas) y tasa: llegan después del catálogo.
   const [consumo, setConsumo] = useState<Map<string, ConsumoInsumo> | null>(null);
+  // Mermas recientes por insumo (para las alertas de merma, Fase E).
+  const [mermas, setMermas] = useState<Map<string, number[]>>(new Map());
   const [tasa, setTasa] = useState<TasaInventario>(null);
   const listaRef = useRef<HTMLElement | null>(null);
   const [adding, setAdding] = useState(false);
@@ -296,6 +300,13 @@ export function InsumosClient({
             .catch(() => {
               if (!cancelled) setConsumo(new Map());
             });
+          // Historial de merma (para avisar si un insumo se está yendo del
+          // estándar). Aparte, para no demorar la lista.
+          mermasRecientesPorInsumo()
+            .then((m) => {
+              if (!cancelled) setMermas(m);
+            })
+            .catch(() => {});
           if (
             insumoInicial &&
             ins.some((i) => i.id === insumoInicial && !i.activo)
@@ -1668,6 +1679,11 @@ export function InsumosClient({
                   insumo={i}
                   hoy={hoy}
                   consumoListo={consumo !== null}
+                  alertaMerma={
+                    i.seProcesa
+                      ? evaluarMerma(i.mermaCoccionPorc, mermas.get(i.id) ?? [])
+                      : null
+                  }
                   onDetalle={() => setDetalleInsumo(i)}
                   onPerdida={() => setPerdidaInsumo(i)}
                   onProcesar={() => setProcesarInsumo(i)}
@@ -1825,6 +1841,7 @@ function FilaInsumo({
   insumo: i,
   hoy,
   consumoListo,
+  alertaMerma,
   onDetalle,
   onPerdida,
   onProcesar,
@@ -1836,6 +1853,7 @@ function FilaInsumo({
   insumo: Insumo;
   hoy: string;
   consumoListo: boolean;
+  alertaMerma: EvaluacionMerma | null;
   onDetalle: () => void;
   onPerdida: () => void;
   onProcesar: () => void;
@@ -1870,6 +1888,25 @@ function FilaInsumo({
               revisar unidades
             </button>
           )}
+          {(() => {
+            const a = alertaMerma?.deriva ?? alertaMerma?.puntual;
+            if (!a) return null;
+            return (
+              <button
+                type="button"
+                onClick={onDetalle}
+                title={
+                  alertaMerma?.deriva
+                    ? `Las últimas ${a.n} producciones vienen con ${textoAlertaMerma(a)} (estándar ${alertaMerma.estandar}%)`
+                    : `La última producción tuvo ${textoAlertaMerma(a)} (estándar ${alertaMerma?.estandar}%)`
+                }
+                className="mt-1 ml-1 rounded-full bg-[#F9EBE7] px-2 py-0.5 text-[10px] uppercase tracking-widest text-[#7A2419] ring-1 ring-[#E8C5BC] hover:bg-[#f3ddd6]"
+              >
+                <WarningIcon className="inline size-3 align-[-0.1em] mr-0.5" />
+                {alertaMerma?.deriva ? "merma fuera de rango" : "merma rara"}
+              </button>
+            );
+          })()}
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <PastillaEstado estado={l.estado} />
