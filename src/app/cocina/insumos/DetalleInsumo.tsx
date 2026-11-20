@@ -14,10 +14,13 @@ import { ProcesamientosClient } from "./ProcesamientosClient";
 export function DetalleInsumo({
   insumo,
   onClose,
+  onProcesar,
   onDesactivar,
 }: {
   insumo: Insumo;
   onClose: () => void;
+  /** Abre el registro de un procesamiento para este insumo. */
+  onProcesar?: () => void;
   /** Oculta el insumo del inventario sin borrarlo (se puede reactivar). */
   onDesactivar?: () => void;
 }) {
@@ -86,9 +89,20 @@ export function DetalleInsumo({
           {/* Procesamientos y merma, solo si el insumo se procesa. */}
           {insumo.seProcesa && (
             <section>
-              <h3 className="mb-3 font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">
-                Procesamientos
-              </h3>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="font-display text-xs uppercase tracking-[0.3em] text-cacao-mute">
+                  Procesamientos
+                </h3>
+                {onProcesar && (
+                  <button
+                    type="button"
+                    onClick={onProcesar}
+                    className="text-[11px] uppercase tracking-widest text-terracotta hover:underline"
+                  >
+                    Procesar →
+                  </button>
+                )}
+              </div>
               <ProcesamientosClient insumo={insumo} />
             </section>
           )}

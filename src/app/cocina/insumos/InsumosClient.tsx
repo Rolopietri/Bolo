@@ -1779,6 +1779,14 @@ export function InsumosClient({
           key={detalleInsumo.id}
           insumo={detalleInsumo}
           onClose={() => setDetalleInsumo(null)}
+          onProcesar={
+            detalleInsumo.seProcesa
+              ? () => {
+                  setProcesarInsumo(detalleInsumo);
+                  setDetalleInsumo(null);
+                }
+              : undefined
+          }
           onDesactivar={() => {
             setPendienteDesactivar(detalleInsumo.id);
             setDetalleInsumo(null);
