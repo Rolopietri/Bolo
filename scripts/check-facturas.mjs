@@ -17,6 +17,7 @@ import {
   contenidoDe,
   tipoResumen,
   mismoNumeroFactura,
+  compraConMismaFactura,
   buscarEquivalencia,
   cantidadParaCuadre,
 } from "../src/lib/facturas/parser.ts";
@@ -728,6 +729,42 @@ igual("mismo numero con ceros", mismoNumeroFactura("00012847", "12847"), true);
 igual("numeros distintos", mismoNumeroFactura("00012847", "00012848"), false);
 igual("numero vacio no coincide", mismoNumeroFactura("", "00012847"), false);
 igual("A-0012 es A-12", mismoNumeroFactura("A-0012", "A-12"), true);
+igual("N° 3391 es 3391", mismoNumeroFactura("N° 3391", "3391"), true);
+igual("3.391 es 3391", mismoNumeroFactura("3.391", "3391"), true);
+igual(
+  "nota partida en dos renglones",
+  parseFactura("QA VERDURAS\nRIF J-40987654-1\nNOTA DE ENTREGA\nN° 3391\nTOTAL $ 12,46").numero,
+  "3391",
+);
+igual(
+  "nota con punto de miles",
+  parseFactura("QA VERDURAS\nRIF J-40987654-1\nNOTA DE ENTREGA N° 3.391\nTOTAL $ 12,46").numero,
+  "3391",
+);
+const comprasDup = [
+  { id: "a", numeroFactura: "00012847", proveedorId: "carnes" },
+  { id: "b", numeroFactura: "3391", proveedorId: "verduras" },
+];
+igual(
+  "duplicado aunque el proveedor no coincida",
+  compraConMismaFactura(comprasDup, "12847", "otro")?.compra.id,
+  "a",
+);
+igual(
+  "duplicado del mismo proveedor",
+  compraConMismaFactura(comprasDup, "N° 3391", "verduras")?.mismoProveedor,
+  true,
+);
+igual(
+  "duplicado no se confunde con la que se edita",
+  compraConMismaFactura(comprasDup, "3391", "verduras", "b"),
+  null,
+);
+igual(
+  "numero corto de otro proveedor no avisa",
+  compraConMismaFactura([{ id: "c", numeroFactura: "12", proveedorId: "x" }], "12", "y"),
+  null,
+);
 igual(
   "CONTROL N° se lee",
   parseFactura("FACTURA N° A-0012\nCONTROL N° 00-0045126\nRIF J-41258963-7").numeroControl,
@@ -824,6 +861,16 @@ const memoria = [
 igual("memoria con cantidad pegada", buscarEquivalencia("LOMITO DE RES LIMPIO", memoria)?.insumoId, "lomito");
 igual("memoria exacta", buscarEquivalencia("QUESO BLANCO DURO", memoria)?.insumoId, "queso");
 igual("memoria no confunde", buscarEquivalencia("TOMATE PERITA", memoria), null);
+igual(
+  "queso amarillo no es queso blanco duro",
+  buscarEquivalencia("QUESO AMARILLO", [{ descripcionNorm: "queso blanco duro", insumoId: "blanco" }]),
+  null,
+);
+igual(
+  "queso blanco si cabe en queso blanco duro",
+  buscarEquivalencia("QUESO BLANCO", [{ descripcionNorm: "queso blanco duro", insumoId: "blanco" }])?.insumoId,
+  "blanco",
+);
 
 // Forma de pago: una factura en Bs no salta a USD efectivo si el proveedor
 // solo tiene esa forma marcada. Elegir el insumo tampoco la pisa.
@@ -838,19 +885,19 @@ igual(
   "bcv_dolar",
 );
 igual(
-  "bs usa la forma en bs que el proveedor si acepta",
+  "bs no cambia a otra forma en bs",
   modalidadAlElegirProveedor("bcv_dolar", ["paralela", "efectivo"], "bs"),
-  "paralela",
-);
-igual(
-  "usd puede pasar a la otra forma en usd",
-  modalidadAlElegirProveedor("divisa", ["efectivo"], "usd"),
-  "efectivo",
-);
-igual(
-  "la forma ya elegida se respeta si el proveedor la acepta",
-  modalidadAlElegirProveedor("bcv_dolar", ["bcv_dolar", "efectivo"], null),
   "bcv_dolar",
+);
+igual(
+  "usd divisa no pasa a efectivo",
+  modalidadAlElegirProveedor("divisa", ["efectivo"], "usd"),
+  "divisa",
+);
+igual(
+  "la forma ya elegida se queda al elegir proveedor",
+  modalidadAlElegirProveedor("divisa", ["efectivo"], null),
+  "divisa",
 );
 
 if (fallas > 0) {
