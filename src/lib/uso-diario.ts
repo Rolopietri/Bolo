@@ -5,7 +5,9 @@
 //     vendieron 10 hamburguesas, salen 10 panes ese día (con la fecha de la
 //     venta, aunque se haya importado después);
 //   • mermas de receta (ventas marcadas es_merma);
-//   • pérdidas anotadas a mano (stock_movimientos);
+//   • pérdidas anotadas a mano (stock_movimientos), menos la merma de
+//     "Procesamiento": eso es crudo que pasó a procesado, no una salida.
+//     La venta de un insumo que se procesa ya descuenta el procesado.
 //   • compras (entradas).
 // Con eso se compara un día contra otro y contra el promedio del período.
 

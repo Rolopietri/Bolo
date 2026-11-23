@@ -16,6 +16,7 @@ import { listMovimientosSalida } from "@/lib/data/stock-liviano";
 import { listVentasUso } from "@/lib/data/uso-diario";
 import {
   costoPorUnidadBase,
+  esTransformacionCrudo,
   fechaISOEnCaracas,
   restarDiasISO,
 } from "@/lib/stock-liviano";
@@ -153,7 +154,11 @@ export function UsoDiarioClient({
             fecha: c.fecha,
             cantidad: c.cantidad * (porId.get(c.insumoId)?.cantidadPorCompra || 1),
           })),
-          perdidas: salidas.filter((m) => TIPOS_PERDIDA_SET.has(m.tipo)),
+          // La merma de "Procesamiento" es el paso crudo→procesado, no una salida.
+          // Contarla aquí infla el uso (y el "$ en insumos" de un día sin ventas).
+          perdidas: salidas.filter(
+            (m) => TIPOS_PERDIDA_SET.has(m.tipo) && !esTransformacionCrudo(m.motivo),
+          ),
         });
       } catch (e) {
         if (vivo) setErrorCarga(extractError(e, "Error cargando el uso diario"));
