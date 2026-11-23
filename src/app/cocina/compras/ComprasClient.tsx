@@ -774,7 +774,14 @@ export function ComprasClient() {
 
   // Abre el formulario manual. Prefijamos la tasa BCV $ del día (modalidad
   // default: USD divisa) para que el convertidor Bs↔$ funcione desde el inicio.
+  // Si veníamos de una edición, se suelta: si no, guardar pisaría esa compra.
   function abrirManual() {
+    editandoRef.current = null;
+    setEditingId(null);
+    setFiscalCarga(null);
+    setCreandoProveedor(false);
+    setNuevoProveedor("");
+    setProveedorAuto(false);
     setForm({
       ...emptyForm,
       fecha: todayISO(),
@@ -783,12 +790,13 @@ export function ComprasClient() {
     setAdding(true);
   }
 
-  // Auto-rellenar la tasa del día cuando cambia la modalidad. Todas las
-  // modalidades reciben una tasa sugerida (las de USD usan la BCV $) para que el
-  // convertidor Bs↔$ funcione siempre. Recalcula el monto derivado con la tasa
-  // nueva para que los dos campos queden consistentes.
+  // Auto-rellenar la tasa del día cuando cambia la modalidad, solo en una
+  // compra nueva. Al editar, la tasa guardada se queda: cambiar "USD divisa"
+  // por otra forma no la sustituye por la de hoy. El usuario la cambia en el
+  // campo de la tasa, o con "usar la del día".
   function setModalidad(m: ModalidadPago) {
     setForm((prev) => {
+      if (editandoRef.current) return { ...prev, modalidadPago: m };
       let tasaDef = prev.tasaBcvUsada;
       if (m === "bcv_dolar" && tasa) tasaDef = String(tasa.usdBs);
       else if (m === "bcv_euro" && tasa?.eurBs) tasaDef = String(tasa.eurBs);
