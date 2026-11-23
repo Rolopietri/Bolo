@@ -14,7 +14,7 @@ import type {
 } from "@/lib/types";
 import { convertirParaCosto } from "@/lib/units";
 import { stockLibre } from "@/lib/types";
-import { montoVenta } from "@/lib/semana";
+import { montoVenta, sumarTotalesPorMes } from "@/lib/semana";
 
 type Row = {
   id: string;
@@ -162,28 +162,52 @@ export async function listVentasDiasCompletos(dias = 30): Promise<Venta[]> {
  */
 export async function totalesVentasPorMes(): Promise<Record<string, number>> {
   const sb = createSupabaseBrowserClient();
-  const out: Record<string, number> = {};
   // Supabase/PostgREST devuelve máx. 1000 filas por request. Con más de 1000
   // ventas en total, un select "a secas" sumaba solo una parte (total recortado).
-  // Paginamos con .range() hasta traerlas TODAS.
+  // Paginamos con .range() hasta traerlas TODAS. El orden incluye id para que
+  // dos filas del mismo día no se pierdan al pasar de página.
+  // es_merma null cuenta como venta: el import del POS no manda la columna y,
+  // si en la base quedó vacía, .eq(false) la dejaba fuera del total del mes.
   const PAGE = 1000;
+  const filas: {
+    fecha: string | null;
+    esMerma: boolean;
+    totalUsd: number | null;
+    precioUnitarioUsd: number | null;
+    cantidad: number;
+  }[] = [];
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb
       .from("ventas")
-      .select("fecha, total_usd")
-      .eq("es_merma", false)
+      .select("fecha, total_usd, precio_unitario_usd, cantidad, es_merma")
+      .or("es_merma.eq.false,es_merma.is.null")
       .order("fecha", { ascending: true })
+      .order("id", { ascending: true })
       .range(from, from + PAGE - 1);
     if (error) throw error;
-    const rows = (data as { fecha: string | null; total_usd: number | string | null }[]) ?? [];
+    const rows =
+      (data as {
+        fecha: string | null;
+        total_usd: number | string | null;
+        precio_unitario_usd: number | string | null;
+        cantidad: number | string | null;
+        es_merma: boolean | null;
+      }[]) ?? [];
     for (const r of rows) {
-      if (!r.fecha) continue;
-      const mes = String(r.fecha).slice(0, 7);
-      out[mes] = (out[mes] ?? 0) + (r.total_usd === null ? 0 : Number(r.total_usd));
+      filas.push({
+        fecha: r.fecha,
+        esMerma: r.es_merma === true,
+        totalUsd: r.total_usd === null || r.total_usd === undefined ? null : Number(r.total_usd),
+        precioUnitarioUsd:
+          r.precio_unitario_usd === null || r.precio_unitario_usd === undefined
+            ? null
+            : Number(r.precio_unitario_usd),
+        cantidad: r.cantidad === null || r.cantidad === undefined ? 0 : Number(r.cantidad),
+      });
     }
     if (rows.length < PAGE) break;
   }
-  return out;
+  return sumarTotalesPorMes(filas);
 }
 
 /**
