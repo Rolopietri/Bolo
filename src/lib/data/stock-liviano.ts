@@ -12,6 +12,7 @@ export type MovimientoSalida = {
   fecha: string;
   tipo: string;
   cantidad: number;
+  motivo: string | null;
 };
 
 function num(v: unknown): number {
@@ -72,7 +73,7 @@ export async function listMovimientosSalida(desde: string, hasta: string): Promi
   for (let from = 0; ; from += PAGE) {
     const { data, error } = await sb
       .from("stock_movimientos")
-      .select("id, insumo_id, fecha, tipo, cantidad")
+      .select("id, insumo_id, fecha, tipo, cantidad, motivo")
       .in("tipo", [...TIPOS_SALIDA_STOCK])
       .lt("cantidad", 0)
       .gte("fecha", desde)
@@ -88,6 +89,7 @@ export async function listMovimientosSalida(desde: string, hasta: string): Promi
         fecha: fecha(r.fecha),
         tipo: String(r.tipo ?? ""),
         cantidad: num(r.cantidad),
+        motivo: r.motivo == null || r.motivo === "" ? null : String(r.motivo),
       });
     }
     if (rows.length < PAGE) break;

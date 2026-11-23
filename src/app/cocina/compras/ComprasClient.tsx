@@ -1442,8 +1442,8 @@ export function ComprasClient() {
         title="¿Eliminar compra?"
         message={
           <>
-            ¿Eliminar este registro de compra? (No revierte el stock
-            automáticamente — ajustar manualmente si hace falta)
+            Se borra este registro. El stock se ajusta solo, y el precio del
+            insumo pasa a ser el de la compra que quede más reciente.
           </>
         }
         onConfirm={() => {

@@ -9,13 +9,22 @@
 -- cocina-pos-modificador-sustitucion.sql, pero cocina-pos-sustitucion-insumo.sql
 -- ordena después y la degradaría).
 --
--- El nombre "cocina-zzz-…" hace que este archivo se aplique de ÚLTIMO en orden
--- alfabético, así estas definiciones SIEMPRE ganan y no pueden ser pisadas por
--- una versión vieja al reaplicar el repo.
+-- El nombre "cocina-zzz-…" hace que este archivo se aplique después de los
+-- otros de cocina, así estas definiciones ganan al reaplicar el repo en orden
+-- alfabético.
+--
+-- Fase D (bolo-08): descontar_stock_por_venta y revertir_stock_por_venta
+-- mueven stock_procesado (no el crudo) cuando el insumo tiene se_procesa.
+-- bolo-08-fase-d-ventas-descuentan-procesado.sql ordena ANTES (la b va antes
+-- que la c). Si la Fase D viviera solo ahí, reaplicar los SQL en orden
+-- alfabético la pisaría con la versión de este archivo sin se_procesa.
+-- Por eso esas dos funciones están copiadas aquí, con se_procesa y con el
+-- motivo del libro (bolo.motivo). Un archivo bolo-09b-*.sql no evita el pisón:
+-- también ordena antes que cocina-zzz-*.
 --
 -- Funciones canónicas aquí:
---   • descontar_stock_por_venta        (venta → baja stock; insumo/receta/extra/swap)
---   • revertir_stock_por_venta         (borrar venta → repone stock)
+--   • descontar_stock_por_venta        (venta → baja stock; insumo/receta/extra/swap; Fase D)
+--   • revertir_stock_por_venta         (borrar venta → repone el mismo bolsillo; Fase D)
 --   • flatten_receta_insumos           (expande receta+subrecetas con conversión y porciones)
 --   • flatten_receta_planes            (idem para planes de producción)
 --   • liberar_comprometido_por_venta   (venta/merma → libera reserva de planes, fracción)
@@ -27,24 +36,28 @@
 --
 -- Idempotente (CREATE OR REPLACE). Ver README-migraciones.md.
 
--- ─── descontar_stock_por_venta ──────────────────────────────────────────
+-- ─── descontar_stock_por_venta (Fase D: procesado si se_procesa) ────────
 CREATE OR REPLACE FUNCTION public.descontar_stock_por_venta()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 declare
   r record;
   v_qty numeric;
   v_target uuid;
 begin
+  perform set_config('bolo.motivo', case when coalesce(new.es_merma, false) then 'merma_receta' else 'venta' end, true);
   if new.insumo_id is not null then
     v_qty := coalesce(new.insumo_cantidad, 1) * new.cantidad;
     update public.insumos
-       set stock_actual = greatest(0, stock_actual - v_qty)
+       set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - v_qty) end,
+           stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - v_qty) else stock_procesado end
      where id = new.insumo_id;
     if new.swap_from_insumo_id is not null then
       update public.insumos
-         set stock_actual = stock_actual + v_qty
+         set stock_actual    = case when se_procesa then stock_actual else stock_actual + v_qty end,
+             stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + v_qty else stock_procesado end
        where id = new.swap_from_insumo_id;
     end if;
     return new;
@@ -68,7 +81,8 @@ begin
          and new.swap_to_insumo_id is not null
         then new.swap_to_insumo_id else r.insumo_id end;
       update public.insumos
-      set stock_actual = greatest(0, stock_actual - r.total)
+      set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - r.total) end,
+          stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - r.total) else stock_procesado end
       where id = v_target;
     end loop;
   end if;
@@ -92,7 +106,8 @@ begin
          and new.swap_to_insumo_id is not null
         then new.swap_to_insumo_id else r.insumo_id end;
       update public.insumos
-      set stock_actual = greatest(0, stock_actual - r.total)
+      set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - r.total) end,
+          stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - r.total) else stock_procesado end
       where id = v_target;
     end loop;
   end if;
@@ -101,24 +116,28 @@ begin
 end;
 $function$;
 
--- ─── revertir_stock_por_venta ───────────────────────────────────────────
+-- ─── revertir_stock_por_venta (Fase D: repone el mismo bolsillo) ────────
 CREATE OR REPLACE FUNCTION public.revertir_stock_por_venta()
  RETURNS trigger
  LANGUAGE plpgsql
+ SET search_path TO 'public', 'pg_temp'
 AS $function$
 declare
   r record;
   v_qty numeric;
   v_target uuid;
 begin
+  perform set_config('bolo.motivo', 'venta_revertida', true);
   if old.insumo_id is not null then
     v_qty := coalesce(old.insumo_cantidad, 1) * old.cantidad;
     update public.insumos
-       set stock_actual = stock_actual + v_qty
+       set stock_actual    = case when se_procesa then stock_actual else stock_actual + v_qty end,
+           stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + v_qty else stock_procesado end
      where id = old.insumo_id;
     if old.swap_from_insumo_id is not null then
       update public.insumos
-         set stock_actual = greatest(0, stock_actual - v_qty)
+         set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - v_qty) end,
+             stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - v_qty) else stock_procesado end
        where id = old.swap_from_insumo_id;
     end if;
     return old;
@@ -143,7 +162,8 @@ begin
          and old.swap_to_insumo_id is not null
         then old.swap_to_insumo_id else r.insumo_id end;
       update public.insumos
-      set stock_actual = stock_actual + r.total
+      set stock_actual    = case when se_procesa then stock_actual else stock_actual + r.total end,
+          stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + r.total else stock_procesado end
       where id = v_target;
     end loop;
   end if;
@@ -168,7 +188,8 @@ begin
          and old.swap_to_insumo_id is not null
         then old.swap_to_insumo_id else r.insumo_id end;
       update public.insumos
-      set stock_actual = stock_actual + r.total
+      set stock_actual    = case when se_procesa then stock_actual else stock_actual + r.total end,
+          stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + r.total else stock_procesado end
       where id = v_target;
     end loop;
   end if;

@@ -17,6 +17,7 @@ import {
   losQueHayQuePedir,
   ordenarLineas,
   resumirConsumo,
+  esTransformacionCrudo,
   salidaDesdeMovimiento,
   salidasDeVenta,
   seAgotaPronto,
@@ -141,6 +142,42 @@ igual(
   salidaDesdeMovimiento({ insumoId: "harina", fecha: hoy, tipo: "perdida", cantidad: -2 }),
   { insumoId: "harina", fecha: hoy, cantidad: 2 },
 );
+igual("procesamiento es transformación, no consumo", esTransformacionCrudo("Procesamiento"), true);
+igual("una merma anotada sí cuenta", esTransformacionCrudo("Se quemó"), false);
+igual(
+  "la merma de procesar no entra al ritmo",
+  salidaDesdeMovimiento({
+    insumoId: "lomito",
+    fecha: hoy,
+    tipo: "merma",
+    cantidad: -8684,
+    motivo: "Procesamiento",
+  }),
+  null,
+);
+// QA: ventas 6,710 kg + merma de procesar 8,684 kg no deben sumar 15,394.
+const lomito = resumirConsumo(
+  [
+    { insumoId: "lomito", fecha: hoy, cantidad: 6710 },
+    salidaDesdeMovimiento({
+      insumoId: "lomito",
+      fecha: hoy,
+      tipo: "merma",
+      cantidad: -8684,
+      motivo: "Procesamiento",
+    }),
+    salidaDesdeMovimiento({
+      insumoId: "lomito",
+      fecha: "2026-10-29",
+      tipo: "merma",
+      cantidad: -200,
+      motivo: "Se echó a perder",
+    }),
+  ].filter(Boolean),
+  desde,
+  hoy,
+);
+igual("el ritmo es ventas más merma real, sin el crudo que pasó a procesado", lomito.get("lomito").total, 6910);
 
 const salidas = [
   { insumoId: "harina", fecha: "2026-10-16", cantidad: 100 },

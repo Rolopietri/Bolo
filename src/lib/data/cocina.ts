@@ -561,8 +561,9 @@ export async function createComprasLote(inputs: CompraInput[]): Promise<Compra[]
 
 /**
  * Edita una compra. Se implementa como BORRAR + RECREAR para reutilizar los
- * triggers ya probados: al borrar, la base revierte el stock (y el precio si era
- * la última compra); al recrear con los datos nuevos, los vuelve a aplicar. Así
+ * triggers ya probados: al borrar, la base revierte el stock y deja el precio
+ * de la compra más reciente que siga existiendo; al recrear con los datos
+ * nuevos, los vuelve a aplicar. Así
  * corregir la cantidad o el precio ajusta el inventario por la diferencia sin
  * lógica nueva. Devuelve la compra recreada (nuevo id).
  */

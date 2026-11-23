@@ -41,6 +41,14 @@ con `pg_get_functiondef`). Se consolidó así:
 - Al reaplicar el repo, hazlo en orden alfabético; `cocina-zzz-…` va de último.
 - Si necesitas cambiar una función del **motor**, cámbiala en
   `cocina-zzz-motor-canonico.sql` (es la que gana).
+- `descontar_stock_por_venta` y `revertir_stock_por_venta` incluyen la Fase D
+  (`se_procesa` → descuenta o repone `stock_procesado`). `bolo-08-…` tiene la
+  misma lógica pero ordena antes; no dejes la Fase D solo ahí, porque `zzz` la
+  pisaría. Un archivo `bolo-09b-*.sql` tampoco gana: la `b` va antes que la `c`.
+- `revertir_compra_de_insumo`: la que gana es
+  `cocina-compra-zzzz-revertir-precio-anterior.sql` (después de
+  `cocina-compra-snapshot-factor.sql`). Reconstruye ultima/penultima y el
+  precio desde las compras que quedan, no desde un caché de dos.
 - Las columnas (`alter table … add column`) de los archivos `cocina-pos-*` y
   `cocina-subrecetas.sql` **sí son necesarias** — solo se quitaron de ahí las
   funciones duplicadas viejas, no las columnas.

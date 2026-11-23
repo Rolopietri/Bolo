@@ -13,6 +13,7 @@ import { listRecetas } from "@/lib/data/recetas";
 import { getTasaBcvActual, listProveedores, listInsumos } from "@/lib/data/cocina";
 import { leerAjustesVentas, type AjustesVentas } from "@/lib/data/ajustes-ventas";
 import { fmtUsd, fmtUsdBs } from "@/lib/moneda";
+import { montoVenta } from "@/lib/semana";
 import { ComoRegistras } from "./ComoRegistras";
 import { CierreCajaForm } from "./CierreCajaForm";
 import { RegistroPlatos } from "./RegistroPlatos";
@@ -527,16 +528,10 @@ export function VentasClient() {
           c.tipo === "insumo" ? c.clasif?.swapToInsumoId : undefined,
         };
       });
-      const created = await createVentasBatch(ventasInput);
-      // Si hubo reemplazo (o fechas de varios días), recargamos desde la BD para
-      // reflejar los borrados/nuevas fechas con fidelidad; si no, basta con anteponer.
-      if (reemplazarRango && usarFechaLinea) {
-        // La importación ya quedó guardada; si la recarga falla, el historial
-        // se marca como no actualizado (no como error de importación).
-        await recargarHistorial();
-      } else {
-        setVentas((prev) => [...created, ...prev]);
-      }
+      await createVentasBatch(ventasInput);
+      // Siempre desde la base: anteponer las filas nuevas dejaba el "total del
+      // mes" en el número viejo (no veía el POS recién importado).
+      await recargarHistorial();
       setCsvText("");
       setClasif(null);
       setUsarFechaLinea(false);
@@ -553,6 +548,7 @@ export function VentasClient() {
     try {
       await deleteVenta(id);
       setVentas((prev) => prev.filter((v) => v.id !== id));
+      await recargarHistorial();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error eliminando");
     }
@@ -570,7 +566,7 @@ export function VentasClient() {
     return Array.from(map.entries()).map(([fecha, items]) => ({
       fecha,
       items,
-      totalUsd: items.reduce((s, v) => s + (v.totalUsd ?? 0), 0),
+      totalUsd: items.reduce((s, v) => s + montoVenta(v), 0),
     }));
   }, [ventas]);
 
@@ -1377,7 +1373,7 @@ export function VentasClient() {
                             <div className="text-right shrink-0">
                               <div className="text-cacao font-medium">
                                 {v.cantidad}× ·{" "}
-                                {v.totalUsd ? fmtUsd(v.totalUsd) : ""}
+                                {montoVenta(v) ? fmtUsd(montoVenta(v)) : ""}
                               </div>
                               <button
                                 onClick={() => setPendienteBorrar(v.id)}

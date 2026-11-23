@@ -186,6 +186,31 @@ export function montoVenta(v: {
 }
 
 /**
+ * Total de ventas por mes "YYYY-MM". No incluye mermas. Si la fila no trae
+ * total, usa precio × cantidad (el import del POS a veces deja solo el
+ * unitario). Una fecha que no es YYYY-MM-DD no entra en ningún mes.
+ */
+export function sumarTotalesPorMes(
+  ventas: {
+    fecha?: string | null;
+    esMerma?: boolean | null;
+    totalUsd?: number | null;
+    precioUnitarioUsd?: number | null;
+    cantidad: number;
+  }[],
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const v of ventas) {
+    if (v.esMerma) continue;
+    const fecha = String(v.fecha ?? "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
+    const mes = fecha.slice(0, 7);
+    out[mes] = (out[mes] ?? 0) + montoVenta(v);
+  }
+  return out;
+}
+
+/**
  * USD de una baja. Manda el valor congelado al registrarla.
  * Si no existe, se estima con el precio base actual × cantidad (en positivo).
  */

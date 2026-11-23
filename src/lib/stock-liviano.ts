@@ -468,13 +468,26 @@ export function salidasDeVenta(venta: VentaParaStock, expandir: ExpandirReceta):
   return out;
 }
 
+/**
+ * La transformación crudo → procesado no es consumo. El libro guarda solo la
+ * merma de ese paso con motivo "Procesamiento": el resto sigue en stock, ahora
+ * procesado, y sale de verdad cuando se vende. En un insumo con se_procesa la
+ * venta descuenta ese procesado (Fase D), así que el ritmo se arma con las
+ * ventas, no volviendo a contar el crudo que cambió de estado.
+ */
+export function esTransformacionCrudo(motivo: string | null | undefined): boolean {
+  return (motivo ?? "").trim().toLowerCase() === "procesamiento";
+}
+
 /** Una fila del libro de stock, si es una salida de consumo. */
 export function salidaDesdeMovimiento(m: {
   insumoId: string;
   fecha: string;
   tipo: string;
   cantidad: number;
+  motivo?: string | null;
 }): SalidaStock | null {
+  if (esTransformacionCrudo(m.motivo)) return null;
   if (!TIPOS_SALIDA.has(m.tipo)) return null;
   if (!(m.cantidad < 0) || !Number.isFinite(m.cantidad)) return null;
   if (!m.insumoId) return null;

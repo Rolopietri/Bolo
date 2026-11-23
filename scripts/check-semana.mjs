@@ -10,6 +10,7 @@ import {
   lunesDe,
   lunesSemanaActual,
   montoVenta,
+  sumarTotalesPorMes,
   moverSemana,
   semanaDesdeLunes,
   sumarPerdidas,
@@ -75,6 +76,19 @@ igual("sin base si ambas son 0", variacion(0, 0), null);
 igual("total guardado", montoVenta({ totalUsd: 12, precioUnitarioUsd: 3, cantidad: 2 }), 12);
 igual("precio × cantidad si falta el total", montoVenta({ totalUsd: null, precioUnitarioUsd: 3, cantidad: 2 }), 6);
 igual("sin precio es 0", montoVenta({ cantidad: 2 }), 0);
+
+// QA 23 nov: el total de noviembre solo veía el registro manual (196,25)
+// y dejaba fuera el POS (97,50 + 114,50), a veces sin total_usd.
+const noviembre = sumarTotalesPorMes([
+  { fecha: "2026-11-20", totalUsd: 92.25, cantidad: 1 },
+  { fecha: "2026-11-21", totalUsd: 104, cantidad: 1 },
+  { fecha: "2026-11-22", totalUsd: null, precioUnitarioUsd: 97.5, cantidad: 1, esMerma: false },
+  { fecha: "2026-11-23", totalUsd: null, precioUnitarioUsd: 57.25, cantidad: 2 },
+  { fecha: "2026-11-23", totalUsd: null, cantidad: 3, esMerma: true },
+  { fecha: "22/11/2026", totalUsd: 10, cantidad: 1 },
+]);
+igual("noviembre incluye el POS", noviembre["2026-11"], 408.25);
+igual("la merma no entra al mes", Object.keys(noviembre).length, 1);
 
 const cat = {
   porPorcion: new Map([
