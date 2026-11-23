@@ -27,6 +27,7 @@ import {
 } from "@/lib/data/facturas";
 import {
   buscarEquivalencia,
+  cantidadParaCuadre,
   mismoNumeroFactura,
   normalizarDescripcion,
   parseFactura,
@@ -37,7 +38,7 @@ import {
   type UnidadLeida,
 } from "@/lib/facturas/parser";
 import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
-import { desgloseIva } from "@/lib/iva-compra";
+import { desgloseIva, modoIvaDeFactura } from "@/lib/iva-compra";
 import { sugerirCategoria } from "@/lib/sugerir-categoria";
 import { SUELTO, armarPresentacion } from "@/lib/presentacion";
 import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto, type FilaLeida } from "@/lib/facturas/ocr";
@@ -92,7 +93,7 @@ type Cabecera = {
   fecha: string;
   modalidadPago: ModalidadPago;
   moneda: "bs" | "usd";
-  ivaModo: "con" | "sin";
+  ivaModo: "con" | "sin" | "exento";
   ivaPorc: string;
   tasa: string;
   numeroFactura: string;
@@ -118,7 +119,7 @@ const cabeceraVacia: Cabecera = {
   fecha: hoyISO(),
   modalidadPago: "bcv_dolar",
   moneda: "bs",
-  ivaModo: "con",
+  ivaModo: "exento",
   ivaPorc: "16",
   tasa: "",
   numeroFactura: "",
@@ -337,7 +338,12 @@ function importeLineaCuadra(p: Producto, ins: Insumo | undefined): boolean {
   const precio = p.precioUnit;
   const monto = Number(p.monto);
   if (!(precio && precio > 0) || !(monto > 0)) return true;
-  const cant = cantidadEnUnidadFactura(p, ins) ?? (p.cantidadFactura > 0 ? p.cantidadFactura : null);
+  const cant = cantidadParaCuadre({
+    cantidadFactura: p.cantidadFactura,
+    contenido: p.contenido,
+    unidadLeida: p.unidadLeida,
+    cantidadConvertida: cantidadEnUnidadFactura(p, ins),
+  });
   if (!(cant && cant > 0)) return true;
   return Math.abs(cant * precio - monto) <= Math.max(0.05, monto * 0.02);
 }
@@ -583,7 +589,8 @@ export function EscanearFactura({
       notas: f.numeroControl ? `N° de control ${f.numeroControl}` : "",
       // Si la factura muestra el IVA aparte, los montos de los productos son
       // la base: "Sin IVA" (el sistema lo suma). Si no, ya lo traen.
-      ivaModo: f.iva !== undefined || f.base !== undefined || f.ivaPorc !== undefined ? "sin" : "con",
+      // Sin IVA impreso (nota de entrega, ticket) el monto es el costo: no se divide entre 1,16.
+      ivaModo: modoIvaDeFactura(f),
       ivaPorc: String(f.ivaPorc ?? 16),
       numeroFactura: f.numero ?? "",
       tasa: f.tasa ? String(f.tasa) : "",
@@ -1319,13 +1326,16 @@ export function EscanearFactura({
           <div className="text-sm text-cacao">
             ¿Los montos llevan IVA?
             <div className="mt-1 flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => setCab({ ...cab, ivaModo: "exento" })} className={boton(cab.ivaModo === "exento")}>
+                Sin IVA
+              </button>
+              <button type="button" onClick={() => setCab({ ...cab, ivaModo: "sin" })} className={boton(cab.ivaModo === "sin")}>
+                IVA aparte (+{Number(cab.ivaPorc) || 0}%)
+              </button>
               <button type="button" onClick={() => setCab({ ...cab, ivaModo: "con" })} className={boton(cab.ivaModo === "con")}>
                 Con IVA
               </button>
-              <button type="button" onClick={() => setCab({ ...cab, ivaModo: "sin" })} className={boton(cab.ivaModo === "sin")}>
-                Sin IVA (+{Number(cab.ivaPorc) || 0}%)
-              </button>
-              {cab.ivaModo === "sin" && (
+              {cab.ivaModo !== "exento" && (
                 <label className="flex items-center gap-1.5 text-xs text-cacao-mute">
                   IVA
                   <input
@@ -1340,11 +1350,15 @@ export function EscanearFactura({
               )}
             </div>
             <span className="text-xs text-cacao-mute block mt-1">
-              {cab.ivaModo === "con"
-                ? "Los montos ya incluyen el IVA. Al guardar se separan la base y el IVA."
-                : recuperaIva
-                  ? "Los montos son la base. El IVA se guarda aparte y no entra en el costo, porque lo recuperas. Lo exento no lleva IVA."
-                  : "Los montos son la base. El IVA se guarda aparte y sí entra en el costo, porque no lo recuperas. Lo exento no lleva IVA."}
+              {cab.ivaModo === "exento"
+                ? "La factura no muestra IVA. Los montos se guardan tal cual y no se les resta nada."
+                : cab.ivaModo === "con"
+                  ? recuperaIva
+                    ? "Los montos ya incluyen el IVA. Como lo recuperas, el costo queda sin esa parte."
+                    : "Los montos ya incluyen el IVA. Como no lo recuperas, el costo queda con el IVA."
+                  : recuperaIva
+                    ? "Los montos son la base. El IVA se guarda aparte y no entra en el costo, porque lo recuperas. Lo exento no lleva IVA."
+                    : "Los montos son la base. El IVA se guarda aparte y sí entra en el costo, porque no lo recuperas. Lo exento no lleva IVA."}
             </span>
           </div>
 

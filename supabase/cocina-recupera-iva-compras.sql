@@ -86,6 +86,11 @@ as $$
 declare
   v_recupera boolean;
 begin
+  -- Una edición que ya trae el costo congelado no lo recalcula: si no, abrir
+  -- y guardar una compra vieja le cambiaría el precio con el ajuste de hoy.
+  if new.costo_usd is not null then
+    return new;
+  end if;
   if new.base_usd is null and new.iva_usd is null and new.exento_usd is null then
     return new;
   end if;
@@ -283,6 +288,61 @@ drop trigger if exists compra_revert_from_insumo on public.compras;
 create trigger compra_revert_from_insumo
   after delete on public.compras
   for each row execute function public.revertir_compra_de_insumo();
+
+-- Reemplaza una compra en una sola transacción: si el insert falla, el
+-- delete se deshace y la compra original sigue ahí. El cliente lo usa al
+-- editar. Si esta función no existe, el cliente inserta primero y borra
+-- después, para no perder la compra.
+create or replace function public.reemplazar_compra(
+  p_id uuid,
+  p_insumo_id uuid,
+  p_proveedor_id uuid,
+  p_fecha date,
+  p_cantidad numeric,
+  p_precio_total_usd numeric,
+  p_precio_total_bs numeric,
+  p_tasa_bcv_usada numeric,
+  p_modalidad_pago text,
+  p_notas text,
+  p_numero_factura text,
+  p_flete_usd numeric,
+  p_pagada boolean,
+  p_fecha_pago date,
+  p_base_usd numeric,
+  p_iva_usd numeric,
+  p_exento_usd numeric,
+  p_costo_usd numeric
+) returns public.compras
+language plpgsql
+security invoker
+set search_path = public, pg_temp
+as $$
+declare
+  v_nueva public.compras;
+begin
+  delete from public.compras where id = p_id;
+  if not found then
+    raise exception 'No está la compra a editar';
+  end if;
+  insert into public.compras (
+    insumo_id, proveedor_id, fecha, cantidad,
+    precio_total_usd, precio_total_bs, tasa_bcv_usada, modalidad_pago,
+    notas, numero_factura, flete_usd, pagada, fecha_pago,
+    base_usd, iva_usd, exento_usd, costo_usd
+  ) values (
+    p_insumo_id, p_proveedor_id, p_fecha, p_cantidad,
+    p_precio_total_usd, p_precio_total_bs, p_tasa_bcv_usada, p_modalidad_pago,
+    p_notas, nullif(btrim(p_numero_factura), ''), p_flete_usd, coalesce(p_pagada, true), p_fecha_pago,
+    p_base_usd, p_iva_usd, p_exento_usd, p_costo_usd
+  )
+  returning * into v_nueva;
+  return v_nueva;
+end;
+$$;
+
+grant execute on function public.reemplazar_compra(
+  uuid, uuid, uuid, date, numeric, numeric, numeric, numeric, text, text, text, numeric, boolean, date, numeric, numeric, numeric, numeric
+) to authenticated;
 
 notify pgrst, 'reload schema';
 

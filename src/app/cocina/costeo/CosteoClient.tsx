@@ -606,8 +606,8 @@ function ConfigEditor({
         </div>
         <span className="text-[10px] text-cacao-mute block mt-1">
           {recuperaIva
-            ? "El costo de los insumos queda sin IVA. Las compras igual guardan la base, el IVA y lo exento."
-            : "El IVA de las compras entra en el costo del insumo. Las compras igual guardan la base, el IVA y lo exento."}
+            ? "El costo de los insumos queda sin IVA, desde la próxima compra. Las ya guardadas no cambian. La base, el IVA y lo exento se anotan igual."
+            : "El IVA entra en el costo del insumo, desde la próxima compra. Las ya guardadas no cambian. La base, el IVA y lo exento se anotan igual."}
         </span>
       </div>
       <div className="text-right">

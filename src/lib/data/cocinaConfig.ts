@@ -1,6 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { esColumnaAusente } from "@/lib/iva-compra";
 import type { CocinaConfig } from "@/lib/types";
 
 type Row = {
@@ -66,11 +67,24 @@ export async function updateCocinaConfig(
   if (patch.ivaPorc !== undefined) db.iva_porc = patch.ivaPorc;
   if (patch.recuperaIvaCompras !== undefined) db.recupera_iva_compras = patch.recuperaIvaCompras;
   db.updated_at = new Date().toISOString();
-  const { data, error } = await sb
+  let { data, error } = await sb
     .from("cocina_config")
     .upsert(db, { onConflict: "id" })
     .select("*")
     .single();
+  // La columna del ajuste puede no existir todavía: se guardan los otros
+  // parámetros. Si lo único que se quería cambiar era ese sí/no, se avisa.
+  if (error && esColumnaAusente(error) && patch.recuperaIvaCompras !== undefined) {
+    const resto: Record<string, unknown> = { ...db };
+    delete resto.recupera_iva_compras;
+    const otros = Object.keys(resto).filter((k) => k !== "id" && k !== "updated_at");
+    if (otros.length === 0) {
+      throw new Error(
+        "Para guardar si recuperas el IVA, primero corre supabase/cocina-recupera-iva-compras.sql.",
+      );
+    }
+    ({ data, error } = await sb.from("cocina_config").upsert(resto, { onConflict: "id" }).select("*").single());
+  }
   if (error) throw error;
   return rowToConfig(data as Row);
 }

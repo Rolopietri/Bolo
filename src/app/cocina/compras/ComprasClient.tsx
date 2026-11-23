@@ -38,7 +38,7 @@ import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
 import { mismoNumeroFactura } from "@/lib/facturas/parser";
-import { desgloseIva } from "@/lib/iva-compra";
+import { desgloseIva, fiscalAlGuardar, modoIvaDeCompra, porcIvaDeCompra, type FiscalGuardado } from "@/lib/iva-compra";
 import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { EscanearFactura } from "./_EscanearFactura";
 
@@ -60,7 +60,7 @@ type FormState = {
   montoAnchor: "bs" | "usd";
   // IVA: "con" = el monto ya lo incluye (se guarda tal cual);
   // "sin" = el monto es la base y el sistema le suma el IVA para el costo real.
-  ivaModo: "con" | "sin";
+  ivaModo: "con" | "sin" | "exento";
   ivaPorc: string;
   notas: string;
   numeroFactura: string;
@@ -123,7 +123,7 @@ const emptyForm: FormState = {
   precioTotalBs: "",
   tasaBcvUsada: "",
   montoAnchor: "usd",
-  ivaModo: "con",
+  ivaModo: "exento",
   ivaPorc: "16",
   notas: "",
   numeroFactura: "",
@@ -170,6 +170,19 @@ export function ComprasClient() {
   // Contribuyente ordinario: el IVA de la compra no entra en el costo.
   // Hasta cargar la configuración se asume que sí (el valor por defecto).
   const [recuperaIva, setRecuperaIva] = useState(true);
+  /** Desglose de la compra que se está editando, para no recalcularlo si no
+   *  se tocó el monto. */
+  const [fiscalCarga, setFiscalCarga] = useState<
+    | (FiscalGuardado & {
+        precioTotalBs?: number;
+        precioTotalUsdTxt: string;
+        precioTotalBsTxt: string;
+        tasaTxt: string;
+        ivaModo: FormState["ivaModo"];
+        ivaPorc: string;
+      })
+    | null
+  >(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -245,6 +258,7 @@ export function ComprasClient() {
     setCreandoProveedor(false);
     setNuevoProveedor("");
     setProveedorAuto(false);
+    setFiscalCarga(null);
   }
 
   // Alta rápida de proveedor (solo nombre) desde el desplegable; queda guardado
@@ -278,15 +292,21 @@ export function ComprasClient() {
     }
   }
 
-  // Abre el formulario para editar una compra existente. Se precarga el total
-  // en USD (que es el canónico ya con IVA) con ivaModo="con", así al guardar
-  // queda igual salvo lo que cambies.
+  // Abre el formulario para editar. El modo de IVA se deduce del desglose
+  // guardado. Si la compra es vieja y no lo tiene, se abre como "sin IVA" para
+  // no partirle el monto entre 1,16. Mientras no se toque el monto, al guardar
+  // se escriben otra vez la misma base, el mismo IVA y el mismo exento.
   function startEdit(c: Compra) {
     setEscaneando(false);
     setEditingId(c.id);
     setAdding(true);
     setError(null);
     setCreandoProveedor(false);
+    const modo = modoIvaDeCompra(c);
+    const porc = porcIvaDeCompra(c);
+    const precioUsd = fmtMoney(c.precioTotalUsd);
+    const precioBs = c.precioTotalBs ? fmtMoney(c.precioTotalBs) : "";
+    const tasa = c.tasaBcvUsada ? String(c.tasaBcvUsada) : "";
     setForm({
       insumoId: c.insumoId,
       proveedorId: c.proveedorId ?? "",
@@ -294,16 +314,29 @@ export function ComprasClient() {
       cantidad: String(c.cantidad),
       unidadEntrada: "compra",
       modalidadPago: c.modalidadPago ?? "divisa",
-      precioTotalUsd: fmtMoney(c.precioTotalUsd),
-      precioTotalBs: c.precioTotalBs ? fmtMoney(c.precioTotalBs) : "",
-      tasaBcvUsada: c.tasaBcvUsada ? String(c.tasaBcvUsada) : "",
+      precioTotalUsd: precioUsd,
+      precioTotalBs: precioBs,
+      tasaBcvUsada: tasa,
       montoAnchor: "usd",
-      ivaModo: "con",
-      ivaPorc: "16",
+      ivaModo: modo,
+      ivaPorc: porc,
       notas: c.notas ?? "",
       numeroFactura: c.numeroFactura ?? "",
       fleteUsd: c.fleteUsd ? String(c.fleteUsd) : "",
       pagarDespues: !c.pagada,
+    });
+    setFiscalCarga({
+      baseUsd: c.baseUsd,
+      ivaUsd: c.ivaUsd,
+      exentoUsd: c.exentoUsd,
+      costoUsd: c.costoUsd,
+      precioTotalUsd: c.precioTotalUsd,
+      precioTotalBs: c.precioTotalBs,
+      precioTotalUsdTxt: precioUsd,
+      precioTotalBsTxt: precioBs,
+      tasaTxt: tasa,
+      ivaModo: modo,
+      ivaPorc: porc,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -410,6 +443,19 @@ export function ComprasClient() {
   });
   const usdConIva = desglose.pagado;
   const bsConIva = desgloseBs.pagado;
+  const fiscalIntacto =
+    fiscalCarga != null &&
+    form.precioTotalUsd === fiscalCarga.precioTotalUsdTxt &&
+    form.precioTotalBs === fiscalCarga.precioTotalBsTxt &&
+    form.tasaBcvUsada === fiscalCarga.tasaTxt &&
+    form.ivaModo === fiscalCarga.ivaModo &&
+    form.ivaPorc === fiscalCarga.ivaPorc;
+  const fiscal = fiscalAlGuardar({
+    recalculado: desglose,
+    original: fiscalCarga ?? undefined,
+    intacto: fiscalIntacto,
+  });
+  const costoLinea = fiscalIntacto && fiscal.costoUsd != null ? fiscal.costoUsd : desglose.costo;
 
   // Contenido del empaque del insumo elegido (unidades base por unidad de compra).
   const cantPorCompra = insumoSeleccionado?.cantidadPorCompra ?? 0;
@@ -435,7 +481,7 @@ export function ComprasClient() {
   // Precio por unidad base que dejaría esta compra, frente al actual. Si cambia
   // mucho suele ser un error de tipeo (ej. monto en el campo de Bs en vez de $).
   const precioNuevoBase =
-    cantidadEnBase > 0 && desglose.costo > 0 ? desglose.costo / cantidadEnBase : null;
+    cantidadEnBase > 0 && costoLinea > 0 ? costoLinea / cantidadEnBase : null;
   const precioActualBase = insumoSeleccionado?.precioBaseUsd ?? null;
   const cambioPrecio =
     precioNuevoBase !== null && precioActualBase && precioActualBase > 0
@@ -623,8 +669,13 @@ export function ComprasClient() {
     // lo fija la base al insertar, según si se recupera el IVA. Base, IVA y
     // exento se guardan siempre, aparte.
     const t = Number(form.tasaBcvUsada) || 0;
-    const precioUsd = desglose.pagado;
-    const precioBs = desgloseBs.pagado > 0 ? desgloseBs.pagado : undefined;
+    const precioUsd = fiscalIntacto && fiscalCarga ? fiscalCarga.precioTotalUsd : desglose.pagado;
+    const precioBs =
+      fiscalIntacto && fiscalCarga
+        ? fiscalCarga.precioTotalBs
+        : desgloseBs.pagado > 0
+          ? desgloseBs.pagado
+          : undefined;
     const tasaUsada = t > 0 ? t : undefined;
 
     if (!(precioUsd > 0)) {
@@ -656,9 +707,10 @@ export function ComprasClient() {
       cantidad: Math.round(cantidadEnCompra * 1e6) / 1e6,
       precioTotalUsd: precioUsd,
       precioTotalBs: precioBs,
-      baseUsd: desglose.base,
-      ivaUsd: desglose.iva,
-      exentoUsd: desglose.exento,
+      baseUsd: fiscal.baseUsd,
+      ivaUsd: fiscal.ivaUsd,
+      exentoUsd: fiscal.exentoUsd,
+      costoUsd: fiscal.costoUsd ?? undefined,
       tasaBcvUsada: tasaUsada,
       modalidadPago: form.modalidadPago,
       notas: notasFinal || undefined,
@@ -1006,14 +1058,14 @@ export function ComprasClient() {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                onClick={() => setForm({ ...form, ivaModo: "con" })}
+                onClick={() => setForm({ ...form, ivaModo: "exento" })}
                 className={
-                  form.ivaModo === "con"
+                  form.ivaModo === "exento"
                     ? "rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium"
                     : "rounded-lg ring-1 ring-marfil px-3 py-2 text-sm text-cacao hover:bg-marfil-soft"
                 }
               >
-                Con IVA
+                Sin IVA
               </button>
               <button
                 type="button"
@@ -1024,9 +1076,20 @@ export function ComprasClient() {
                     : "rounded-lg ring-1 ring-marfil px-3 py-2 text-sm text-cacao hover:bg-marfil-soft"
                 }
               >
-                Sin IVA (+{Number(form.ivaPorc) || 0}%)
+                IVA aparte (+{Number(form.ivaPorc) || 0}%)
               </button>
-              {form.ivaModo === "sin" && (
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, ivaModo: "con" })}
+                className={
+                  form.ivaModo === "con"
+                    ? "rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium"
+                    : "rounded-lg ring-1 ring-marfil px-3 py-2 text-sm text-cacao hover:bg-marfil-soft"
+                }
+              >
+                Con IVA
+              </button>
+              {form.ivaModo !== "exento" && (
                 <label className="flex items-center gap-1.5 text-xs text-cacao-mute">
                   IVA
                   <input
@@ -1043,11 +1106,15 @@ export function ComprasClient() {
               )}
             </div>
             <span className="text-xs text-cacao-mute block mt-1">
-              {form.ivaModo === "con"
-                ? "El monto ya incluye el IVA. Al guardar se separan la base y el IVA."
-                : recuperaIva
-                  ? "El monto es la base. El IVA se guarda aparte y no entra en el costo, porque lo recuperas."
-                  : "El monto es la base. El IVA se guarda aparte y sí entra en el costo, porque no lo recuperas."}
+              {form.ivaModo === "exento"
+                ? "Este monto no tiene IVA. Se guarda tal cual y no se le resta nada."
+                : form.ivaModo === "con"
+                  ? recuperaIva
+                    ? "El monto ya incluye el IVA. Como lo recuperas, el costo queda sin esa parte."
+                    : "El monto ya incluye el IVA. Como no lo recuperas, el costo queda con el IVA."
+                  : recuperaIva
+                    ? "El monto es la base. El IVA se guarda aparte y no entra en el costo, porque lo recuperas."
+                    : "El monto es la base. El IVA se guarda aparte y sí entra en el costo, porque no lo recuperas."}
             </span>
           </div>
 

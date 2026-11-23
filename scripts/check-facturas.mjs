@@ -18,6 +18,7 @@ import {
   tipoResumen,
   mismoNumeroFactura,
   buscarEquivalencia,
+  cantidadParaCuadre,
 } from "../src/lib/facturas/parser.ts";
 import { modalidadAlElegirProveedor } from "../src/lib/modalidad-pago.ts";
 
@@ -726,6 +727,35 @@ igual(
 igual("mismo numero con ceros", mismoNumeroFactura("00012847", "12847"), true);
 igual("numeros distintos", mismoNumeroFactura("00012847", "00012848"), false);
 igual("numero vacio no coincide", mismoNumeroFactura("", "00012847"), false);
+igual("A-0012 es A-12", mismoNumeroFactura("A-0012", "A-12"), true);
+igual(
+  "CONTROL N° se lee",
+  parseFactura("FACTURA N° A-0012\nCONTROL N° 00-0045126\nRIF J-41258963-7").numeroControl,
+  "00-0045126",
+);
+igual(
+  "CONTROL N° no pisa el numero",
+  parseFactura("FACTURA N° A-0012\nCONTROL N° 00-0045126\nRIF J-41258963-7").numero,
+  "A-0012",
+);
+igual(
+  "harina 5kg no es harina 1kg",
+  buscarEquivalencia("HARINA PAN 5KG", [{ descripcionNorm: "harina pan 1kg", insumoId: "pan1" }]),
+  null,
+);
+const azucar = parseFactura("RIF J-1234567-8\nAZUCAR 500 GR 2 10,00 20,00").lineas[0];
+igual("azucar 500gr es empaque, cantidad 2", azucar?.cantidad, 2);
+igual("azucar contenido 500", azucar?.contenido?.valor, 500);
+igual(
+  "azucar no compara los gramos contra el precio",
+  cantidadParaCuadre({
+    cantidadFactura: azucar?.cantidad ?? 0,
+    contenido: azucar?.contenido,
+    unidadLeida: azucar?.unidadLeida,
+    cantidadConvertida: 1,
+  }),
+  2,
+);
 
 // ── QA 23-nov: nota de entrega en USD (cantidad, unidad, descripción) ──
 const qaVerduras = parseFactura(`

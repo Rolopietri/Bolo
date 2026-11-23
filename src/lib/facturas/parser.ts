@@ -782,8 +782,9 @@ export function parseFactura(texto: string): FacturaLeida {
   // esa cláusula, se lee el N° de factura, y el de control aparte.
   const RE_NUM_DOC =
     /(?:factura|invoice|inv\.?|nota\s+de\s+(?:entrega|cr[eé]dito|d[eé]bito)|orden\s+de\s+entrega|gu[ií]a(?:\s+de\s+\w+)?|boleta|recibo|receipt|ticket|comprobante|folio|documento|ncf)\s*(?:electr[oó]nica\s*)?(?:de\s+venta\s*)?(?:n[°ºo.*]*|nro\.?|num\.?|no\.?|#|\S{1,2}(?=\s*:))?\s*:?\s*([A-Z]{0,4}\d{0,3}-?\d[\d-]{2,})/i;
+  // "N° de Control: 00-…" y también "CONTROL N° 00-…" (el número va después).
   const RE_CONTROL_DOC =
-    /(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?\s*(?:de\s+)?control\b[\s:.#°º*-]*([A-Z]{0,4}\d[\d-]{2,})/i;
+    /control\b[\s:.#°º*-]*(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?[\s:.#°º*-]*([A-Z]{0,4}\d[\d-]{2,})/i;
   for (const l of lineas) {
     if (!out.numeroControl) {
       const c = l.match(RE_CONTROL_DOC);
@@ -791,7 +792,7 @@ export function parseFactura(texto: string): FacturaLeida {
     }
     if (out.numero) continue;
     const sinControl = l.replace(
-      /(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?\s*(?:de\s+)?control\b[\s:.#°º*-]*[A-Z]{0,4}\d[\d-]{2,}/gi,
+      /control\b[\s:.#°º*-]*(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?[\s:.#°º*-]*[A-Z]{0,4}\d[\d-]{2,}/gi,
       " ",
     );
     const m = sinControl.match(RE_NUM_DOC);
@@ -1203,13 +1204,13 @@ export function totalProductos(f: Pick<FacturaLeida, "total" | "igtf">): number 
   return f.total - (f.igtf ?? 0);
 }
 
-/** El mismo N° de factura, aunque uno traiga ceros a la izquierda ("00012847"
- *  y "12847"). Vacío no coincide con nada. */
+/** El mismo N° de factura, aunque uno traiga ceros de más ("00012847" y
+ *  "12847", "A-0012" y "A-12"). Vacío no coincide con nada. */
 export function mismoNumeroFactura(a: string | undefined | null, b: string | undefined | null): boolean {
   const norm = (s: string) => {
     const t = s.trim().toLowerCase().replace(/\s+/g, "");
     if (!t) return "";
-    return t.replace(/^([a-z]*)0+(?=\d)/, "$1");
+    return t.replace(/0+(?=\d)/g, "");
   };
   const x = a ? norm(a) : "";
   const y = b ? norm(b) : "";
@@ -1238,6 +1239,34 @@ function palabrasClave(s: string): string[] {
     .filter((w) => w.length >= 3 && !/^\d+$/.test(w));
 }
 
+/** "1kg", "5kg", "600ml": el tamaño pegado al nombre. Una sola, si hay. */
+function medidaDeNombre(palabras: string[]): string | undefined {
+  const ms = palabras.filter((w) => /^\d+(?:kg|g|gr|grs|ml|l|lt|lts|cc)$/.test(w));
+  return ms.length === 1 ? ms[0] : undefined;
+}
+
+/** Cantidad con la que se comprueba cantidad × precio = importe.
+ *  "AZUCAR 500 GR" × 2: el 500 g es el empaque, no la cantidad de la factura.
+ *  Comparar los kilos convertidos contra el precio del renglón da un falso
+ *  "no cuadra". Ahí se usa la cantidad de la factura (2). */
+export function cantidadParaCuadre(p: {
+  cantidadFactura: number;
+  contenido?: { valor: number; unidad: string };
+  unidadLeida?: string;
+  /** Cantidad ya pasada a la unidad que la factura escribió junto al número. */
+  cantidadConvertida: number | null;
+}): number | null {
+  if (
+    p.contenido &&
+    p.unidadLeida &&
+    Math.abs(p.contenido.valor - p.cantidadFactura) > Math.max(0.001, p.cantidadFactura * 0.02)
+  ) {
+    return p.cantidadFactura > 0 ? p.cantidadFactura : null;
+  }
+  if (p.cantidadConvertida != null && p.cantidadConvertida > 0) return p.cantidadConvertida;
+  return p.cantidadFactura > 0 ? p.cantidadFactura : null;
+}
+
 /** Equivalencia guardada que corresponde a esta descripción: la misma clave,
  *  o la misma con tokens de más (la cantidad "4 265kg" pegada al nombre).
  *  Si ninguna cubre al menos el 60 % de las palabras, null: ahí manda la
@@ -1256,6 +1285,10 @@ export function buscarEquivalencia<T extends { descripcionNorm: string }>(
     const a = palabrasClave(e.descripcionNorm);
     const b = palabrasClave(descripcion);
     if (a.length === 0 || b.length === 0) continue;
+    // "HARINA PAN 1KG" y "HARINA PAN 5KG" no son el mismo producto.
+    const medA = medidaDeNombre(a);
+    const medB = medidaDeNombre(b);
+    if (medA && medB && medA !== medB) continue;
     const sa = new Set(a);
     const sb = new Set(b);
     let comunes = 0;
