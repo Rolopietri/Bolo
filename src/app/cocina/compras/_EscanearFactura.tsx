@@ -13,6 +13,7 @@ import {
 } from "@/lib/types";
 import {
   createComprasLote,
+  createInsumo,
   createProveedor,
   getTasaBcvPorFecha,
   type CompraInput,
@@ -25,8 +26,9 @@ import {
   type Equivalencia,
 } from "@/lib/data/facturas";
 import {
+  buscarEquivalencia,
+  mismoNumeroFactura,
   normalizarDescripcion,
-  parecido,
   parseFactura,
   sugerirInsumo,
   variantesDigito,
@@ -34,6 +36,9 @@ import {
   type FacturaLeida,
   type UnidadLeida,
 } from "@/lib/facturas/parser";
+import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
+import { sugerirCategoria } from "@/lib/sugerir-categoria";
+import { SUELTO, armarPresentacion } from "@/lib/presentacion";
 import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto, type FilaLeida } from "@/lib/facturas/ocr";
 import { CameraIcon, DocIcon, ImageIcon, PencilIcon, PlusIcon, SearchIcon, TrashIcon, WarningIcon } from "@/components/icons";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
@@ -70,6 +75,9 @@ type Producto = {
   sinPrecio?: boolean;
   /** La factura traía la cantidad con decimales: es peso o volumen. */
   pesable: boolean;
+  /** Precio unitario impreso (sin IVA). Sirve para ver si cantidad × precio
+   *  da el importe del renglón. */
+  precioUnit?: number;
   /** Unidad que la factura escribe junto a la cantidad, si la escribe. */
   unidadLeida?: UnidadLeida;
   /** Unidades por empaque y contenido de cada una, si el nombre lo dice. */
@@ -101,6 +109,7 @@ type Leido = {
   alicuotas?: FacturaLeida["alicuotas"];
   tipo?: FacturaLeida["tipo"];
   monedaOtra?: string;
+  numeroControl?: string;
 };
 
 const cabeceraVacia: Cabecera = {
@@ -144,6 +153,7 @@ function ResumenFactura({
   cuadra,
   diferencia,
   pista,
+  avisoCantidad,
 }: {
   resumen: Leido["resumen"];
   moneda: "bs" | "usd";
@@ -152,6 +162,8 @@ function ResumenFactura({
   diferencia?: number;
   /** El renglón que probablemente explica la diferencia. */
   pista?: string;
+  /** Cantidad × precio no da el importe de algún renglón. */
+  avisoCantidad?: string;
 }) {
   const partes: [string, number | undefined][] = [
     ["Subtotal", resumen.subtotal],
@@ -180,7 +192,9 @@ function ResumenFactura({
           {!cuadra && <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />}
           {cuadra
             ? "Los productos cuadran con la factura."
-            : diferencia !== undefined
+            : avisoCantidad && (diferencia === undefined || Math.abs(diferencia) <= Math.max(0.05, (resumen.total ?? 0) * 0.01))
+              ? avisoCantidad
+              : diferencia !== undefined
               ? `${diferencia > 0 ? "Faltan" : "Sobran"} ${fmtMonto(Math.abs(diferencia), moneda)} para cuadrar con la factura${resumen.igtf ? " (sin contar el IGTF)" : ""}.`
               : `Los productos no cuadran con la factura${resumen.igtf ? " (sin contar el IGTF)" : ""}: revisa montos o si falta alguno.`}
           {!cuadra && pista && <span className="block font-normal">{pista}</span>}
@@ -220,15 +234,24 @@ function cantidadPorEmpaque(p: Producto, ins: Insumo): { cantidad: string; unida
   const dimIns = dimension(ins.unidadBase);
   // "24 UND": la cantidad ya está en unidades sueltas (no en empaques).
   const enUnidades = p.unidadLeida === "unidad" && dimIns === "conteo";
-  if (!p.porEmpaque && !p.contenido && !enUnidades) return null;
+  // "4,265 KG" leído como contenido del paquete: es la cantidad, no el tamaño.
+  const contenido =
+    p.contenido &&
+    p.unidadLeida &&
+    p.unidadLeida !== "unidad" &&
+    dimension(p.contenido.unidad) === dimension(p.unidadLeida) &&
+    Math.abs(p.contenido.valor - p.cantidadFactura) <= Math.max(0.001, p.cantidadFactura * 0.02)
+      ? undefined
+      : p.contenido;
+  if (!p.porEmpaque && !contenido && !enUnidades) return null;
   const opciones = opcionesCantidad(ins);
   const cpc = ins.cantidadPorCompra ?? 0;
   let total = 0; // en la unidad base del insumo
   if (enUnidades) {
     total = p.cantidadFactura;
-  } else if (p.contenido && dimIns !== "conteo" && dimension(p.contenido.unidad) === dimIns) {
+  } else if (contenido && dimIns !== "conteo" && dimension(contenido.unidad) === dimIns) {
     total =
-      (p.cantidadFactura * (p.porEmpaque ?? 1) * cantidadEnBase(p.contenido.valor, p.contenido.unidad)) /
+      (p.cantidadFactura * (p.porEmpaque ?? 1) * cantidadEnBase(contenido.valor, contenido.unidad)) /
       cantidadEnBase(1, ins.unidadBase);
   } else if (dimIns === "conteo" && p.porEmpaque) {
     total = p.cantidadFactura * p.porEmpaque;
@@ -294,11 +317,51 @@ function conversion(p: Producto, ins: Insumo | undefined, usd = 0) {
   return { opciones, unidad, enBase, enCompra };
 }
 
+/** Cantidad escrita, pasada a la unidad de la factura (kg, g, L, ml). */
+function cantidadEnUnidadFactura(p: Producto, ins: Insumo | undefined): number | null {
+  if (!p.unidadLeida || p.unidadLeida === "unidad") return null;
+  if (!ins || dimension(ins.unidadBase) !== dimension(p.unidadLeida)) {
+    const n = Number(p.cantidad);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  }
+  const { enBase } = conversion(p, ins, 0);
+  const factor = cantidadEnBase(1, p.unidadLeida);
+  if (!(enBase > 0) || !(factor > 0)) return null;
+  return (enBase * cantidadEnBase(1, ins.unidadBase)) / factor;
+}
+
+/** true si cantidad × precio unitario da el importe del renglón. Sin precio
+ *  impreso no se puede saber y se da por bueno (no es el cuadre de montos). */
+function importeLineaCuadra(p: Producto, ins: Insumo | undefined): boolean {
+  const precio = p.precioUnit;
+  const monto = Number(p.monto);
+  if (!(precio && precio > 0) || !(monto > 0)) return true;
+  const cant = cantidadEnUnidadFactura(p, ins) ?? (p.cantidadFactura > 0 ? p.cantidadFactura : null);
+  if (!(cant && cant > 0)) return true;
+  return Math.abs(cant * precio - monto) <= Math.max(0.05, monto * 0.02);
+}
+
+/** Unidad con la que se propone un insumo nuevo a partir del renglón. */
+function unidadInferida(p: Producto): "kg" | "g" | "L" | "ml" | "unidad" {
+  if (p.unidadLeida) return p.unidadLeida;
+  if (p.contenido && (p.contenido.unidad === "kg" || p.contenido.unidad === "g" || p.contenido.unidad === "L" || p.contenido.unidad === "ml"))
+    return p.contenido.unidad;
+  if (p.pesable) return "kg";
+  return "unidad";
+}
+
+function textoEspera(segundos: number): string {
+  if (segundos >= 45) return `Sigue leyendo (${segundos} s). Con una foto puede pasar de un minuto.`;
+  if (segundos >= 20) return `Sigue leyendo… van ${segundos} segundos.`;
+  return "Puede tardar cerca de un minuto, sobre todo la primera vez o con una foto.";
+}
+
 export function EscanearFactura({
   insumos,
   proveedores,
   compras,
   onProveedorCreado,
+  onInsumoCreado,
   onGuardado,
   onCancelar,
   onManual,
@@ -307,6 +370,7 @@ export function EscanearFactura({
   proveedores: Proveedor[];
   compras: Compra[];
   onProveedorCreado: (p: Proveedor) => void;
+  onInsumoCreado: (i: Insumo) => void;
   onGuardado: (nuevas: Compra[]) => void | Promise<void>;
   onCancelar: () => void;
   /** Abre el formulario manual de siempre (contingencia). */
@@ -336,13 +400,23 @@ export function EscanearFactura({
   const [avisos, setAvisos] = useState<string[] | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [creandoProveedor, setCreandoProveedor] = useState(false);
+  /** Insumos creados desde un renglón, antes de que el padre recargue la lista. */
+  const [insumosNuevos, setInsumosNuevos] = useState<Insumo[]>([]);
+  const [creandoInsumoKey, setCreandoInsumoKey] = useState<string | null>(null);
+  const [borradorInsumo, setBorradorInsumo] = useState<{ nombre: string; unidad: string }>({ nombre: "", unidad: "unidad" });
+  const [guardandoInsumo, setGuardandoInsumo] = useState(false);
+  const [segundosLectura, setSegundosLectura] = useState(0);
   const [nuevoProveedor, setNuevoProveedor] = useState("");
   const [guardandoProveedor, setGuardandoProveedor] = useState(false);
   const fotoRef = useRef<HTMLInputElement>(null);
   const [camara, setCamara] = useState(false);
   const galeriaRef = useRef<HTMLInputElement>(null);
 
-  const insumoPorId = useMemo(() => new Map(insumos.map((i) => [i.id, i])), [insumos]);
+  const insumosTodos = useMemo(() => {
+    const ids = new Set(insumos.map((i) => i.id));
+    return [...insumos, ...insumosNuevos.filter((i) => !ids.has(i.id))];
+  }, [insumos, insumosNuevos]);
+  const insumoPorId = useMemo(() => new Map(insumosTodos.map((i) => [i.id, i])), [insumosTodos]);
 
   // Memoria de compras por proveedor: qué insumos se le compran y a qué precio
   // se le compró cada uno la última vez (USD por unidad de compra).
@@ -366,6 +440,16 @@ export function EscanearFactura({
       if (fotoUrl) URL.revokeObjectURL(fotoUrl);
     };
   }, [fotoUrl]);
+
+  // El aviso de "medio minuto" se queda corto: se cuenta el tiempo real.
+  // El cero se pone al empezar a leer (no aquí: un setState sincrónico en el
+  // efecto dispara un render de más).
+  useEffect(() => {
+    if (paso !== "leyendo") return;
+    const t0 = Date.now();
+    const id = window.setInterval(() => setSegundosLectura(Math.floor((Date.now() - t0) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [paso]);
 
   // La tasa sigue la FECHA de la factura (como el formulario manual).
   useEffect(() => {
@@ -413,24 +497,15 @@ export function EscanearFactura({
     const habituales = historial.compradosA.get(proveedorId);
     return lista.map((p) => {
       if (p.origen === "" && p.insumoId) return p; // elegido a mano
-      // Primero igual; si no, la más parecida (el OCR no lee igual cada vez).
-      let eq = mem.get(normalizarDescripcion(p.descripcion));
-      if (!eq) {
-        let mejor = 0.6;
-        for (const e of mem.values()) {
-          const sim = parecido(e.descripcionNorm, p.descripcion);
-          if (sim >= mejor) {
-            mejor = sim;
-            eq = e;
-          }
-        }
-      }
+      // Primero la memoria del proveedor (aunque el nombre traiga la cantidad
+      // de más o de menos); si no hay, se sugiere por nombre y hay que confirmar.
+      const eq = buscarEquivalencia(p.descripcion, mem.values());
       if (eq && insumoPorId.has(eq.insumoId)) {
         return { ...p, insumoId: eq.insumoId, cantidad: fmtQty(p.cantidadFactura * eq.factorCantidad), unidad: "", origen: "memoria" };
       }
       if (p.origen === "memoria" || !p.insumoId) {
         // Entre nombres parecidos gana el que ya se le compra a este proveedor.
-        const sug = sugerirInsumo(p.descripcion, insumos, (ins) => coincideEmpaque(p, ins) || !!habituales?.has(ins.id));
+        const sug = sugerirInsumo(p.descripcion, insumosTodos, (ins) => coincideEmpaque(p, ins) || !!habituales?.has(ins.id));
         const porEmpaque = sug ? cantidadPorEmpaque(p, sug) : null;
         return sug
           ? {
@@ -468,9 +543,11 @@ export function EscanearFactura({
     setCab((c) => {
       const p = proveedores.find((x) => x.id === id);
       const acepta = p ? modalidadesQueAcepta(p) : [];
-      return acepta.length > 0 && !acepta.includes(c.modalidadPago)
-        ? { ...c, proveedorId: id, modalidadPago: acepta[0] }
-        : { ...c, proveedorId: id };
+      return {
+        ...c,
+        proveedorId: id,
+        modalidadPago: modalidadAlElegirProveedor(c.modalidadPago, acepta, c.moneda),
+      };
     });
     const mem = id ? await listEquivalencias(id) : new Map<string, Equivalencia>();
     setMemoria(mem);
@@ -491,12 +568,14 @@ export function EscanearFactura({
       alicuotas: f.alicuotas,
       tipo: f.tipo,
       monedaOtra: f.monedaOtra,
+      numeroControl: f.numeroControl,
     });
     setCab({
       ...cabeceraVacia,
       fecha: f.fecha ?? hoyISO(),
       moneda,
       modalidadPago: moneda === "bs" ? "bcv_dolar" : "divisa",
+      notas: f.numeroControl ? `N° de control ${f.numeroControl}` : "",
       // Si la factura muestra el IVA aparte, los montos de los productos son
       // la base: "Sin IVA" (el sistema lo suma). Si no, ya lo traen.
       ivaModo: f.iva !== undefined || f.base !== undefined || f.ivaPorc !== undefined ? "sin" : "con",
@@ -532,6 +611,7 @@ export function EscanearFactura({
         sinPrecio: l.sinPrecio,
         exento: l.exento,
         pesable: l.pesable,
+        precioUnit: l.precioUnit,
         porEmpaque: l.porEmpaque,
         contenido: l.contenido,
         unidadLeida: l.unidadLeida,
@@ -547,6 +627,7 @@ export function EscanearFactura({
   async function leerFoto(archivo: File | undefined) {
     if (!archivo) return;
     setError(null);
+    setSegundosLectura(0);
     setPaso("leyendo");
     setProgreso({ etapa: "Preparando la foto", pct: 0 });
     try {
@@ -629,6 +710,79 @@ export function EscanearFactura({
     setProductos((ps) => ps.map((p) => (p.key === key ? { ...p, ...patch } : p)));
   }
 
+  function empezarInsumo(p: Producto) {
+    const unidad = unidadInferida(p);
+    setCreandoInsumoKey(p.key);
+    setBorradorInsumo({
+      nombre: p.descripcion.trim(),
+      unidad: p.porEmpaque && p.porEmpaque >= 2 && unidad === "unidad" ? "unidad" : unidad,
+    });
+    setError(null);
+  }
+
+  async function guardarInsumo(p: Producto) {
+    const nombre = borradorInsumo.nombre.trim();
+    if (!nombre) return;
+    const ya = insumosTodos.find(
+      (i) => normalizarDescripcion(i.nombre) === normalizarDescripcion(nombre),
+    );
+    if (ya) {
+      const porEmpaque = cantidadPorEmpaque(p, ya);
+      setProducto(p.key, {
+        insumoId: ya.id,
+        origen: "",
+        cantidad: porEmpaque?.cantidad ?? fmtQty(p.cantidadFactura),
+        unidad: porEmpaque?.unidad ?? "",
+      });
+      setCreandoInsumoKey(null);
+      return;
+    }
+    const unidad = borradorInsumo.unidad || "unidad";
+    const presentacion =
+      p.porEmpaque && p.porEmpaque >= 2 && unidad === "unidad"
+        ? armarPresentacion({ tipo: "Paquete", cantidad: String(p.porEmpaque), unidad: "unidad" })
+        : armarPresentacion({ tipo: SUELTO, cantidad: "1", unidad });
+    if (!presentacion) {
+      setError("Elige la unidad del insumo.");
+      return;
+    }
+    const cant = Number(presentacion.cantidadPorCompra) || 1;
+    setGuardandoInsumo(true);
+    setError(null);
+    try {
+      const nuevo = await createInsumo({
+        nombre,
+        categoria: "",
+        categoriaCompra: sugerirCategoria(nombre) ?? undefined,
+        unidadCompra: presentacion.unidadCompra,
+        cantidadPorCompra: cant,
+        unidadBase: presentacion.unidadBase,
+        precioCompraUsd: null,
+        precioBaseUsd: null,
+        stockTotal: 0,
+        seProcesa: false,
+        stockComprometido: 0,
+        stockMinimo: null,
+        proveedorId: cab.proveedorId || undefined,
+        activo: true,
+      });
+      setInsumosNuevos((prev) => [...prev, nuevo]);
+      onInsumoCreado(nuevo);
+      const porEmpaque = cantidadPorEmpaque(p, nuevo);
+      setProducto(p.key, {
+        insumoId: nuevo.id,
+        origen: "",
+        cantidad: porEmpaque?.cantidad ?? fmtQty(p.cantidadFactura),
+        unidad: porEmpaque?.unidad ?? "",
+      });
+      setCreandoInsumoKey(null);
+    } catch (e) {
+      setError(extractError(e, "No se pudo crear el insumo"));
+    } finally {
+      setGuardandoInsumo(false);
+    }
+  }
+
   async function agregarProveedor() {
     const nombre = nuevoProveedor.trim();
     if (!nombre) return;
@@ -691,8 +845,12 @@ export function EscanearFactura({
   const totalMoneda = productos.reduce((s, p) => s + costo(p).enMoneda, 0);
   const totalUsd = productos.reduce((s, p) => s + costo(p).usd, 0);
   const esperado = totalProductos(leido.resumen);
-  const cuadra =
+  const cuadraMontos =
     esperado === undefined ? null : Math.abs(totalMoneda - esperado) <= Math.max(0.05, esperado * 0.01);
+  const lineasSinCuadrar = productos.filter((p) => !importeLineaCuadra(p, insumoPorId.get(p.insumoId)));
+  // Los montos pueden sumar el total y, aun así, una cantidad no dar el
+  // importe de su renglón (cantidad × precio). Eso también es "no cuadra".
+  const cuadra = lineasSinCuadrar.length > 0 ? false : cuadraMontos;
   /** Qué renglón explica la diferencia: uno leído aparte que falta, un
    *  producto que sobra, o un monto con un dígito o una coma mal leídos. */
   const pistaCuadre = useMemo(() => {
@@ -725,7 +883,7 @@ export function EscanearFactura({
     return (
       compras.find(
         (c) =>
-          (c.numeroFactura ?? "").trim().toLowerCase() === num &&
+          mismoNumeroFactura(c.numeroFactura, num) &&
           (!cab.proveedorId || c.proveedorId === cab.proveedorId),
       ) ?? null
     );
@@ -798,9 +956,15 @@ export function EscanearFactura({
       if (leido.tipo === "nota_credito")
         a.push("Este documento es una NOTA DE CRÉDITO (una devolución o un descuento del proveedor), no una compra: si lo registras, sumará stock.");
       if (facturaLock) a.push(`La factura ${cab.numeroFactura} de este proveedor ya tiene compras registradas (${fmtFecha(facturaLock.fecha)}).`);
-      if (cuadra === false && esperado !== undefined)
+      if (cuadraMontos === false && esperado !== undefined)
         a.push(
           `La suma (${fmtMonto(totalMoneda, cab.moneda)}) no coincide con la factura (${fmtMonto(esperado, cab.moneda)}). Puede faltar un producto o haber un monto mal leído.`,
+        );
+      if (lineasSinCuadrar.length > 0)
+        a.push(
+          lineasSinCuadrar.length === 1
+            ? `${lineasSinCuadrar[0].descripcion || insumoPorId.get(lineasSinCuadrar[0].insumoId)?.nombre || "Un renglón"}: la cantidad por el precio no da el importe de la factura.`
+            : `${lineasSinCuadrar.length} renglones: la cantidad por el precio no da el importe de la factura.`,
         );
       for (const p of productos) {
         const info = precioInfo(p);
@@ -977,7 +1141,7 @@ export function EscanearFactura({
           <div className="h-2 w-full overflow-hidden rounded-full bg-marfil">
             <div className="h-full rounded-full bg-terracotta transition-all" style={{ width: `${Math.max(4, progreso.pct)}%` }} />
           </div>
-          <p className="text-xs text-cacao-soft">En teléfonos más viejos puede tardar hasta medio minuto.</p>
+          <p className="text-xs text-cacao-soft">{textoEspera(segundosLectura)}</p>
         </div>
       )}
 
@@ -1206,6 +1370,9 @@ export function EscanearFactura({
                 placeholder="Ej: 00012345"
                 className={campo}
               />
+              {leido.numeroControl && (
+                <span className="text-[11px] text-cacao-mute block mt-1">N° de control: {leido.numeroControl}</span>
+              )}
             </label>
             <label className="text-sm text-cacao block">
               Flete / delivery ($) <span className="text-cacao-soft font-normal">(opcional)</span>
@@ -1233,8 +1400,13 @@ export function EscanearFactura({
                   <li key={p.key} className="py-3 space-y-1.5">
                     <div className="flex items-center gap-2">
                       <select
-                        value={p.insumoId}
+                        value={creandoInsumoKey === p.key ? "__nuevo__" : p.insumoId}
                         onChange={(e) => {
+                          if (e.target.value === "__nuevo__") {
+                            empezarInsumo(p);
+                            return;
+                          }
+                          setCreandoInsumoKey((k) => (k === p.key ? null : k));
                           // Al elegir el insumo a mano, la cantidad se ajusta a su
                           // presentación si la factura dice el empaque.
                           const elegido = insumoPorId.get(e.target.value);
@@ -1252,11 +1424,12 @@ export function EscanearFactura({
                         }`}
                       >
                         <option value="">— Selecciona insumo —</option>
-                        {insumos.map((i) => (
+                        {insumosTodos.map((i) => (
                           <option key={i.id} value={i.id}>
                             {i.nombre} ({i.unidadCompra})
                           </option>
                         ))}
+                        <option value="__nuevo__">+ Crear insumo…</option>
                       </select>
                       <button
                         type="button"
@@ -1267,6 +1440,55 @@ export function EscanearFactura({
                         <TrashIcon className="size-4" />
                       </button>
                     </div>
+                    {creandoInsumoKey === p.key && (
+                      <div className="rounded-lg bg-marfil-soft ring-1 ring-marfil p-2 space-y-2">
+                        <p className="text-xs text-cacao">Insumo nuevo, con el nombre de la factura.</p>
+                        <input
+                          type="text"
+                          value={borradorInsumo.nombre}
+                          onChange={(e) => setBorradorInsumo({ ...borradorInsumo, nombre: e.target.value })}
+                          aria-label="Nombre del insumo"
+                          className="w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white text-sm"
+                        />
+                        <label className="text-xs text-cacao block">
+                          Unidad
+                          <select
+                            value={borradorInsumo.unidad}
+                            onChange={(e) => setBorradorInsumo({ ...borradorInsumo, unidad: e.target.value })}
+                            aria-label="Unidad del insumo"
+                            className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 bg-white text-sm"
+                          >
+                            <option value="kg">kg</option>
+                            <option value="g">g</option>
+                            <option value="L">L</option>
+                            <option value="ml">ml</option>
+                            <option value="unidad">unidad</option>
+                          </select>
+                        </label>
+                        <p className="text-[11px] text-cacao-mute">
+                          {p.porEmpaque && p.porEmpaque >= 2 && borradorInsumo.unidad === "unidad"
+                            ? `Se guarda como paquete de ${p.porEmpaque}.`
+                            : `Se guarda suelto, por ${borradorInsumo.unidad}.`}
+                        </p>
+                        <div className="flex gap-3">
+                          <button
+                            type="button"
+                            disabled={guardandoInsumo || !borradorInsumo.nombre.trim()}
+                            onClick={() => void guardarInsumo(p)}
+                            className="rounded-lg bg-cacao text-white px-3 py-1.5 text-sm font-medium hover:bg-terracotta disabled:opacity-50"
+                          >
+                            {guardandoInsumo ? "Guardando…" : "Crear y usar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCreandoInsumoKey(null)}
+                            className="text-sm text-cacao-soft hover:text-cacao"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     <div className="grid grid-cols-2 gap-2">
                       {ins ? (
                         <CantidadUnidad
@@ -1362,6 +1584,12 @@ export function EscanearFactura({
                     </p>
                     {/* El precio solo se muestra cuando cambia mucho (suele ser un
                         número mal leído o la cantidad en otra unidad). */}
+                    {!importeLineaCuadra(p, ins) && (
+                      <p className="text-[11px] text-terracotta font-medium">
+                        <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />
+                        La cantidad por el precio no da {fmtMonto(Number(p.monto) || 0, cab.moneda)}. Revisa la cantidad.
+                      </p>
+                    )}
                     {info?.fuerte && (
                       <p className="text-[11px] text-terracotta font-medium">
                         <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />
@@ -1461,6 +1689,11 @@ export function EscanearFactura({
                 cuadra={cuadra}
                 diferencia={esperado !== undefined ? esperado - totalMoneda : undefined}
                 pista={pistaCuadre}
+                avisoCantidad={
+                  lineasSinCuadrar.length > 0
+                    ? "La cantidad por el precio no da el importe de algún renglón. Revisa las cantidades marcadas."
+                    : undefined
+                }
               />
             </div>
           )}
@@ -1536,13 +1769,13 @@ export function EscanearFactura({
               Volver a leer este texto (se pierden los cambios)
             </button>
           </details>
-          {insumos.length === 0 && (
+          {insumosTodos.length === 0 && (
             <p className="text-xs text-cacao-soft">
-              Aún no tienes insumos. Créalos en{" "}
+              Aún no tienes insumos. En cada renglón puedes crear uno con «+ Crear insumo…», o hacerlo en{" "}
               <Link href="/cocina/insumos" className="underline">
                 Insumos
-              </Link>{" "}
-              para poder registrar la factura.
+              </Link>
+              .
             </p>
           )}
           </div>

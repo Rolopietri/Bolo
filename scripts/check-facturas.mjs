@@ -16,7 +16,10 @@ import {
   empaqueDe,
   contenidoDe,
   tipoResumen,
+  mismoNumeroFactura,
+  buscarEquivalencia,
 } from "../src/lib/facturas/parser.ts";
+import { modalidadAlElegirProveedor } from "../src/lib/modalidad-pago.ts";
 
 let fallas = 0;
 function igual(nombre, real, esperado) {
@@ -653,6 +656,172 @@ igual(
   "cero",
 );
 igual("prefiere el empaque", sugerirInsumo("PEPSI ZERO LAT355x24U", cajas, (i) => i.id === "caja")?.id, "caja");
+
+// ── QA 23-nov: factura en Bs con renglones en KG (la cantidad no se eleva al cuadrado) ──
+// "4,265 KG" es la columna de cantidad, no el contenido del paquete ("1KG").
+const qaCarnes = parseFactura(`
+QA CARNES CARACAS, C.A.
+RIF: J-41258963-7
+Av. Francisco de Miranda, Chacao, Caracas
+FACTURA
+N° de Factura: 00012847        N° de Control: 00-0045126
+Fecha de emision: 21/11/2026
+Cliente: BOLO PRUEBAS   RIF: J-50123456-2
+DESCRIPCION                 CANT  UND   P.UNIT      TOTAL Bs
+LOMITO DE RES LIMPIO (E)    4,265 KG  3.468,27    14.792,17
+QUESO BLANCO DURO (G)       1,437 KG  2.196,05     3.155,72
+SUB-TOTAL Bs 17.947,89
+EXENTO Bs 14.792,17
+BASE IMPONIBLE G 16% Bs 3.155,72
+IVA G 16% Bs 504,92
+TOTAL A PAGAR Bs 18.452,81
+Tipo de cambio BCV Bs. 287,4613
+Equivalente: USD 64,19
+Condicion de pago: Contado
+`);
+igual("qa carnes numero", qaCarnes.numero, "00012847");
+igual("qa carnes control", qaCarnes.numeroControl, "00-0045126");
+igual("qa carnes el control no pisa el numero", qaCarnes.numero !== qaCarnes.numeroControl, true);
+igual("qa carnes fecha", qaCarnes.fecha, "2026-11-21");
+igual("qa carnes moneda bs", qaCarnes.moneda, "bs");
+igual("qa carnes #lineas", qaCarnes.lineas.length, 2);
+igual("qa carnes lomito desc", qaCarnes.lineas[0]?.descripcion, "LOMITO DE RES LIMPIO");
+igual("qa carnes lomito cant", qaCarnes.lineas[0]?.cantidad, 4.265);
+igual("qa carnes lomito no es contenido", qaCarnes.lineas[0]?.contenido, undefined);
+igual("qa carnes lomito unidad", qaCarnes.lineas[0]?.unidadLeida, "kg");
+igual("qa carnes lomito exento", qaCarnes.lineas[0]?.exento, true);
+igual("qa carnes lomito precio", qaCarnes.lineas[0]?.precioUnit, 3468.27);
+igual("qa carnes lomito total", qaCarnes.lineas[0]?.total, 14792.17);
+igual("qa carnes queso desc", qaCarnes.lineas[1]?.descripcion, "QUESO BLANCO DURO");
+igual("qa carnes queso cant", qaCarnes.lineas[1]?.cantidad, 1.437);
+igual("qa carnes queso no es contenido", qaCarnes.lineas[1]?.contenido, undefined);
+igual("qa carnes queso unidad", qaCarnes.lineas[1]?.unidadLeida, "kg");
+igual("qa carnes queso no exento", qaCarnes.lineas[1]?.exento, false);
+igual("qa carnes queso total", qaCarnes.lineas[1]?.total, 3155.72);
+igual(
+  "qa carnes lomito cuadra",
+  Math.abs(qaCarnes.lineas[0].cantidad * qaCarnes.lineas[0].precioUnit - qaCarnes.lineas[0].total) < 0.02,
+  true,
+);
+igual(
+  "qa carnes queso cuadra",
+  Math.abs(qaCarnes.lineas[1].cantidad * qaCarnes.lineas[1].precioUnit - qaCarnes.lineas[1].total) < 0.02,
+  true,
+);
+igual("qa carnes 1KG sigue siendo contenido", contenidoDe("HARINA PAN 1KG")?.valor, 1);
+igual("qa carnes total", qaCarnes.total, 18452.81);
+igual("qa carnes tasa", qaCarnes.tasa, 287.4613);
+
+// El N° de control en su propio renglón no se toma como N° de factura.
+igual(
+  "control en otra linea no es el numero",
+  parseFactura("FACTURA N° 00012345\nN° DE CONTROL: 00-0045678\nRIF J-40123456-7").numero,
+  "00012345",
+);
+igual(
+  "control en otra linea se lee",
+  parseFactura("FACTURA N° 00012345\nN° DE CONTROL: 00-0045678\nRIF J-40123456-7").numeroControl,
+  "00-0045678",
+);
+igual("mismo numero con ceros", mismoNumeroFactura("00012847", "12847"), true);
+igual("numeros distintos", mismoNumeroFactura("00012847", "00012848"), false);
+igual("numero vacio no coincide", mismoNumeroFactura("", "00012847"), false);
+
+// ── QA 23-nov: nota de entrega en USD (cantidad, unidad, descripción) ──
+const qaVerduras = parseFactura(`
+QA VERDURAS EL VALLE
+RIF: J-40987654-1
+Mercado de Coche, local 118
+NOTA DE ENTREGA N° 3391
+Fecha: 22/11/2026
+CANT      UND    DESCRIPCION            P.UNIT $    TOTAL $
+3,178     KG     CEBOLLA BLANCA           1,43       4,54
+2,846     KG     TOMATE PERITA            1,87       5,32
+4         UND    CILANTRO MANOJO          0,65       2,60
+TOTAL $ 12,46
+Pago: Divisa (efectivo)
+`);
+igual("qa verduras tipo", qaVerduras.tipo, "nota_entrega");
+igual("qa verduras numero", qaVerduras.numero, "3391");
+igual("qa verduras moneda", qaVerduras.moneda, "usd");
+igual("qa verduras fecha", qaVerduras.fecha, "2026-11-22");
+igual("qa verduras #lineas", qaVerduras.lineas.length, 3);
+igual("qa verduras cebolla cant", qaVerduras.lineas[0]?.cantidad, 3.178);
+igual("qa verduras cebolla desc", qaVerduras.lineas[0]?.descripcion, "CEBOLLA BLANCA");
+igual("qa verduras cebolla unidad", qaVerduras.lineas[0]?.unidadLeida, "kg");
+igual("qa verduras tomate cant", qaVerduras.lineas[1]?.cantidad, 2.846);
+igual("qa verduras tomate desc", qaVerduras.lineas[1]?.descripcion, "TOMATE PERITA");
+igual("qa verduras cilantro cant", qaVerduras.lineas[2]?.cantidad, 4);
+igual("qa verduras cilantro desc", qaVerduras.lineas[2]?.descripcion, "CILANTRO MANOJO");
+igual("qa verduras cilantro unidad", qaVerduras.lineas[2]?.unidadLeida, "unidad");
+igual("qa verduras total", qaVerduras.total, 12.46);
+
+// ── QA 23-nov: ticket de panadería ──
+const qaPan = parseFactura(`
+QA PANADERIA CHACAO
+RIF J-31122334-5
+FACTURA 000881
+FECHA 22-11-2026 HORA 07:42
+PAN SANDUCHE X12UND
+  3 x 4,37        (E)  13,11
+EXENTO               13,11
+TOTAL $             13,11
+DIVISA
+`);
+igual("qa pan numero", qaPan.numero, "000881");
+igual("qa pan fecha", qaPan.fecha, "2026-11-22");
+igual("qa pan moneda", qaPan.moneda, "usd");
+igual("qa pan #lineas", qaPan.lineas.length, 1);
+igual("qa pan desc", qaPan.lineas[0]?.descripcion, "PAN SANDUCHE X12UND");
+igual("qa pan cant", qaPan.lineas[0]?.cantidad, 3);
+igual("qa pan exento", qaPan.lineas[0]?.exento, true);
+igual("qa pan total linea", qaPan.lineas[0]?.total, 13.11);
+igual("qa pan empaque", qaPan.lineas[0]?.porEmpaque, 12);
+
+// Basura de OCR de una sola palabra ("cYanmaG") no es un producto.
+igual("basura cYanmaG no es producto", parseFactura("RIF J-1234567-8\ncYanmaG 12,50").lineas.length, 0);
+igual(
+  "basura cYanmaG no se queda en el nombre",
+  parseFactura("RIF J-1234567-8\nTOMATE PERITA cYanmaG 2 1,87 3,74").lineas[0]?.descripcion,
+  "TOMATE PERITA",
+);
+
+// Memoria: el nombre con la cantidad pegada ("4 265kg") es el mismo producto.
+const memoria = [
+  { descripcionNorm: "lomito de res limpio 4 265kg", insumoId: "lomito" },
+  { descripcionNorm: "queso blanco duro", insumoId: "queso" },
+];
+igual("memoria con cantidad pegada", buscarEquivalencia("LOMITO DE RES LIMPIO", memoria)?.insumoId, "lomito");
+igual("memoria exacta", buscarEquivalencia("QUESO BLANCO DURO", memoria)?.insumoId, "queso");
+igual("memoria no confunde", buscarEquivalencia("TOMATE PERITA", memoria), null);
+
+// Forma de pago: una factura en Bs no salta a USD efectivo si el proveedor
+// solo tiene esa forma marcada. Elegir el insumo tampoco la pisa.
+igual(
+  "bs no pasa a usd efectivo",
+  modalidadAlElegirProveedor("bcv_dolar", ["efectivo"], "bs"),
+  "bcv_dolar",
+);
+igual(
+  "bs se queda si el proveedor no marco formas",
+  modalidadAlElegirProveedor("bcv_dolar", [], "bs"),
+  "bcv_dolar",
+);
+igual(
+  "bs usa la forma en bs que el proveedor si acepta",
+  modalidadAlElegirProveedor("bcv_dolar", ["paralela", "efectivo"], "bs"),
+  "paralela",
+);
+igual(
+  "usd puede pasar a la otra forma en usd",
+  modalidadAlElegirProveedor("divisa", ["efectivo"], "usd"),
+  "efectivo",
+);
+igual(
+  "la forma ya elegida se respeta si el proveedor la acepta",
+  modalidadAlElegirProveedor("bcv_dolar", ["bcv_dolar", "efectivo"], null),
+  "bcv_dolar",
+);
 
 if (fallas > 0) {
   console.error(`\n${fallas} prueba(s) del lector de facturas fallaron.`);

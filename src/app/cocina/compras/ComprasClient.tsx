@@ -36,6 +36,8 @@ import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
+import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
+import { mismoNumeroFactura } from "@/lib/facturas/parser";
 import { EscanearFactura } from "./_EscanearFactura";
 
 type FormState = {
@@ -352,7 +354,7 @@ export function ComprasClient() {
       compras.find(
         (c) =>
           c.id !== editingId &&
-          (c.numeroFactura ?? "").trim().toLowerCase() === num &&
+          mismoNumeroFactura(c.numeroFactura, num) &&
           (!form.proveedorId || c.proveedorId === form.proveedorId),
       ) ?? null
     );
@@ -483,16 +485,27 @@ export function ComprasClient() {
     (p) => !proveedoresDelInsumo.some((x) => x.id === p.id),
   );
 
-  // Elige un proveedor y, si la forma de pago actual no es una que acepta,
-  // cambia a la primera que sí acepta.
-  function elegirProveedor(id: string) {
-    setForm((f) => ({ ...f, proveedorId: id }));
-    const p = proveedores.find((x) => x.id === id);
-    if (!p) return;
-    const acepta = modalidadesQueAcepta(p);
-    if (acepta.length > 0 && !acepta.includes(form.modalidadPago)) {
-      setModalidad(acepta[0]);
-    }
+  // Elige un proveedor. Si la persona lo eligió a mano y la forma de pago
+  // actual no es una que acepta, pasa a otra de la MISMA moneda. Elegir el
+  // insumo sugiere el proveedor solo: no toca la forma de pago (si no, una
+  // compra en Bs vuelve sola a "USD efectivo" cuando el proveedor no tiene
+  // formas en Bs marcadas).
+  function elegirProveedor(id: string, opts?: { desdeInsumo?: boolean }) {
+    setForm((f) => {
+      const p = proveedores.find((x) => x.id === id);
+      const acepta = p ? modalidadesQueAcepta(p) : [];
+      const modalidadPago = opts?.desdeInsumo
+        ? f.modalidadPago
+        : modalidadAlElegirProveedor(f.modalidadPago, acepta, null);
+      const next = { ...f, proveedorId: id, modalidadPago };
+      if (modalidadPago === f.modalidadPago || !tasa) return next;
+      let tasaDef = f.tasaBcvUsada;
+      if (modalidadPago === "bcv_dolar") tasaDef = String(tasa.usdBs);
+      else if (modalidadPago === "bcv_euro" && tasa.eurBs) tasaDef = String(tasa.eurBs);
+      else if (modalidadPago === "paralela" && tasa.paralelaBs) tasaDef = String(tasa.paralelaBs);
+      else if (modalidadPago === "efectivo" || modalidadPago === "divisa") tasaDef = String(tasa.usdBs);
+      return { ...recalcularConTasa(next, tasaDef), modalidadPago, proveedorId: id };
+    });
   }
 
   // ── Convertidor de montos (Bs ↔ $) ──────────────────────────────────────
@@ -736,6 +749,7 @@ export function ComprasClient() {
           onProveedorCreado={(p) =>
             setProveedores((prev) => [...prev, p].sort((a, b) => a.nombre.localeCompare(b.nombre)))
           }
+          onInsumoCreado={(i) => setInsumos((prev) => [...prev, i])}
           onGuardado={async (nuevas) => {
             setCompras((prev) => [...nuevas, ...prev]);
             setEscaneando(false);
@@ -805,7 +819,7 @@ export function ComprasClient() {
                   // aún no se eligió uno a mano.
                   const sugerido = proveedoresPorInsumo.get(nuevoId)?.[0]?.id;
                   if (sugerido && (!form.proveedorId || proveedorAuto)) {
-                    elegirProveedor(sugerido);
+                    elegirProveedor(sugerido, { desdeInsumo: true });
                     setProveedorAuto(true);
                   }
                 }}
