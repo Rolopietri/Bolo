@@ -318,11 +318,15 @@ export function ProduccionClient() {
 
   async function descartar() {
     const p = revisando;
+    // La bandeja junta la entrada y la salida en un renglón. Hay que marcar
+    // los dos: si solo se descarta el primero, el otro queda pendiente y al
+    // recargar aparece como "Esperando la entrada".
+    const ids = p ? [p.id, ...companeros.map((m) => m.id)] : [];
     limpiarRevision();
     if (!p) return;
     try {
-      await marcarPendiente(p.id, "descartado");
-      setAviso("Mensaje descartado.");
+      for (const id of ids) await marcarPendiente(id, "descartado");
+      setAviso(ids.length > 1 ? "Entrada y salida descartadas." : "Mensaje descartado.");
       setVersion((v) => v + 1);
     } catch (e) {
       setError(extractError(e, "No se pudo descartar el mensaje."));
