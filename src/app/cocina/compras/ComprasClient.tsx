@@ -38,6 +38,8 @@ import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
 import { mismoNumeroFactura } from "@/lib/facturas/parser";
+import { desgloseIva } from "@/lib/iva-compra";
+import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { EscanearFactura } from "./_EscanearFactura";
 
 type FormState = {
@@ -165,17 +167,21 @@ export function ComprasClient() {
   const [gruposAbiertos, setGruposAbiertos] = useState<Record<string, boolean>>(
     {},
   );
+  // Contribuyente ordinario: el IVA de la compra no entra en el costo.
+  // Hasta cargar la configuración se asume que sí (el valor por defecto).
+  const [recuperaIva, setRecuperaIva] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [c, ins, prov, t, links] = await Promise.all([
+        const [c, ins, prov, t, links, cfg] = await Promise.all([
           listCompras(),
           listInsumos(),
           listProveedores(),
           getTasaBcvActual(),
           listInsumoProveedores(),
+          getCocinaConfig(),
         ]);
         if (!cancelled) {
           setCompras(c);
@@ -183,6 +189,7 @@ export function ComprasClient() {
           setProveedores(prov);
           setTasa(t);
           setVinculos(links);
+          setRecuperaIva(cfg.recuperaIvaCompras);
         }
       } catch (e) {
         if (!cancelled)
@@ -378,21 +385,31 @@ export function ComprasClient() {
     return tasa.usdBs;
   }, [tasa, form.modalidadPago]);
 
-  // Factor de IVA: 1 si el monto ya lo incluye ("con"); 1 + tasa/100 si hay que
-  // sumárselo ("sin"). El total con IVA es lo que realmente se pagó y lo que
-  // alimenta el costo del insumo.
-  const factorIva =
-    form.ivaModo === "sin" ? 1 + (Number(form.ivaPorc) || 0) / 100 : 1;
+  // El monto escrito es la base ("sin") o ya trae el IVA ("con"). Siempre se
+  // separan base, IVA y exento. Lo pagado es la suma. El costo del insumo
+  // quita el IVA solo si el negocio lo recupera.
   const tasaNum = Number(form.tasaBcvUsada) || 0;
-  const bsBase = Number(form.precioTotalBs) || 0;
-  // Monto base en USD: si el usuario ancló en Bs, se deriva dividiendo por la
-  // tasa (a plena precisión); si ancló en $, es lo que escribió.
-  const usdBase =
+  const bsEscrito = Number(form.precioTotalBs) || 0;
+  const usdEscrito =
     form.montoAnchor === "bs" && tasaNum > 0
-      ? bsBase / tasaNum
+      ? bsEscrito / tasaNum
       : Number(form.precioTotalUsd) || 0;
-  const usdConIva = usdBase * factorIva;
-  const bsConIva = bsBase * factorIva;
+  const desglose = desgloseIva({
+    monto: usdEscrito,
+    ivaModo: form.ivaModo,
+    exento: false,
+    ivaPorc: Number(form.ivaPorc) || 0,
+    recuperaIva,
+  });
+  const desgloseBs = desgloseIva({
+    monto: form.montoAnchor === "bs" ? bsEscrito : tasaNum > 0 ? usdEscrito * tasaNum : 0,
+    ivaModo: form.ivaModo,
+    exento: false,
+    ivaPorc: Number(form.ivaPorc) || 0,
+    recuperaIva,
+  });
+  const usdConIva = desglose.pagado;
+  const bsConIva = desgloseBs.pagado;
 
   // Contenido del empaque del insumo elegido (unidades base por unidad de compra).
   const cantPorCompra = insumoSeleccionado?.cantidadPorCompra ?? 0;
@@ -418,7 +435,7 @@ export function ComprasClient() {
   // Precio por unidad base que dejaría esta compra, frente al actual. Si cambia
   // mucho suele ser un error de tipeo (ej. monto en el campo de Bs en vez de $).
   const precioNuevoBase =
-    cantidadEnBase > 0 && usdConIva > 0 ? usdConIva / cantidadEnBase : null;
+    cantidadEnBase > 0 && desglose.costo > 0 ? desglose.costo / cantidadEnBase : null;
   const precioActualBase = insumoSeleccionado?.precioBaseUsd ?? null;
   const cambioPrecio =
     precioNuevoBase !== null && precioActualBase && precioActualBase > 0
@@ -602,31 +619,13 @@ export function ComprasClient() {
     if (!form.insumoId || !form.fecha || !(cantidadEnCompra > 0)) return;
     setError(null);
 
-    // El costo canónico siempre se guarda en USD. Si el usuario ancló en Bs, se
-    // deriva dividiendo por la tasa (a plena precisión); si ancló en $, es lo
-    // que escribió. Si el monto venía "sin IVA", le sumamos el IVA al total real
-    // pagado (que es el que cuenta para el costo del insumo).
+    // precio_total es lo pagado (con IVA si corresponde). El costo del insumo
+    // lo fija la base al insertar, según si se recupera el IVA. Base, IVA y
+    // exento se guardan siempre, aparte.
     const t = Number(form.tasaBcvUsada) || 0;
-    const bsBaseVal = Number(form.precioTotalBs) || 0;
-    const usdBaseVal = Number(form.precioTotalUsd) || 0;
-
-    let precioUsd: number;
-    let precioBs: number | undefined;
-    let tasaUsada: number | undefined;
-
-    if (form.montoAnchor === "bs" && bsBaseVal > 0 && t > 0) {
-      precioBs = bsBaseVal * factorIva;
-      precioUsd = precioBs / t;
-      tasaUsada = t;
-    } else {
-      precioUsd = usdBaseVal * factorIva;
-      // Si además hay un equivalente en Bs y una tasa, lo guardamos como
-      // referencia (ej. pagaste en Bs una factura que venía en $).
-      if (bsBaseVal > 0 && t > 0) {
-        precioBs = bsBaseVal * factorIva;
-        tasaUsada = t;
-      }
-    }
+    const precioUsd = desglose.pagado;
+    const precioBs = desgloseBs.pagado > 0 ? desgloseBs.pagado : undefined;
+    const tasaUsada = t > 0 ? t : undefined;
 
     if (!(precioUsd > 0)) {
       setError("Ingresa el monto de la factura (en Bs o en $).");
@@ -641,11 +640,9 @@ export function ComprasClient() {
       }
     }
 
-    // Dejamos constancia en las notas de que el IVA se agregó (así el historial
-    // explica por qué el total no coincide con el monto base de la factura).
     const notaIva =
-      form.ivaModo === "sin"
-        ? `IVA ${Number(form.ivaPorc) || 0}% agregado`
+      desglose.iva > 0
+        ? `IVA ${Number(form.ivaPorc) || 0}% aparte${recuperaIva ? ", no entra en el costo" : ", entra en el costo"}`
         : null;
     const notasFinal = [form.notas.trim() || null, notaIva]
       .filter(Boolean)
@@ -659,6 +656,9 @@ export function ComprasClient() {
       cantidad: Math.round(cantidadEnCompra * 1e6) / 1e6,
       precioTotalUsd: precioUsd,
       precioTotalBs: precioBs,
+      baseUsd: desglose.base,
+      ivaUsd: desglose.iva,
+      exentoUsd: desglose.exento,
       tasaBcvUsada: tasaUsada,
       modalidadPago: form.modalidadPago,
       notas: notasFinal || undefined,
@@ -750,6 +750,7 @@ export function ComprasClient() {
             setProveedores((prev) => [...prev, p].sort((a, b) => a.nombre.localeCompare(b.nombre)))
           }
           onInsumoCreado={(i) => setInsumos((prev) => [...prev, i])}
+          recuperaIva={recuperaIva}
           onGuardado={async (nuevas) => {
             setCompras((prev) => [...nuevas, ...prev]);
             setEscaneando(false);
@@ -1043,8 +1044,10 @@ export function ComprasClient() {
             </div>
             <span className="text-xs text-cacao-mute block mt-1">
               {form.ivaModo === "con"
-                ? "El monto ya incluye el IVA — se guarda tal cual."
-                : "El sistema le suma el IVA al monto para calcular el costo real."}
+                ? "El monto ya incluye el IVA. Al guardar se separan la base y el IVA."
+                : recuperaIva
+                  ? "El monto es la base. El IVA se guarda aparte y no entra en el costo, porque lo recuperas."
+                  : "El monto es la base. El IVA se guarda aparte y sí entra en el costo, porque no lo recuperas."}
             </span>
           </div>
 
@@ -1122,7 +1125,7 @@ export function ComprasClient() {
             </label>
             {(usdConIva > 0 || bsConIva > 0) && (
               <div className="mt-3 rounded-lg bg-marfil-soft ring-1 ring-marfil px-3 py-2 text-sm">
-                <span className="text-cacao-mute">Total que se guarda: </span>
+                <span className="text-cacao-mute">Lo que se paga: </span>
                 <span className="text-cacao font-medium">
                   ${usdConIva.toFixed(2)}
                 </span>
@@ -1131,9 +1134,10 @@ export function ComprasClient() {
                     {" · "}Bs {bsConIva.toFixed(2)}
                   </span>
                 )}
-                {form.ivaModo === "sin" && (
-                  <span className="text-cacao-mute">
-                    {" · "}incluye IVA {Number(form.ivaPorc) || 0}%
+                {desglose.iva > 0 && (
+                  <span className="text-cacao-mute block">
+                    Base ${desglose.base.toFixed(2)} · IVA ${desglose.iva.toFixed(2)}
+                    {recuperaIva ? ". El costo del insumo queda sin ese IVA." : ". Ese IVA entra en el costo del insumo."}
                   </span>
                 )}
                 {insumoSeleccionado && precioNuevoBase !== null && (() => {

@@ -402,6 +402,10 @@ type CompraRow = {
   flete_usd: number | string | null;
   pagada: boolean | null;
   fecha_pago: string | null;
+  base_usd?: number | string | null;
+  iva_usd?: number | string | null;
+  exento_usd?: number | string | null;
+  costo_usd?: number | string | null;
 };
 
 function rowToCompra(r: CompraRow): Compra {
@@ -419,6 +423,10 @@ function rowToCompra(r: CompraRow): Compra {
     notas: r.notas ?? undefined,
     numeroFactura: r.numero_factura ?? undefined,
     fleteUsd: r.flete_usd === null ? undefined : Number(r.flete_usd),
+    baseUsd: r.base_usd == null ? undefined : Number(r.base_usd),
+    ivaUsd: r.iva_usd == null ? undefined : Number(r.iva_usd),
+    exentoUsd: r.exento_usd == null ? undefined : Number(r.exento_usd),
+    costoUsd: r.costo_usd == null ? undefined : Number(r.costo_usd),
     pagada: r.pagada ?? true,
     fechaPago: r.fecha_pago ?? undefined,
   };
@@ -518,6 +526,9 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
       notas: input.notas ?? null,
       numero_factura: input.numeroFactura?.trim() || null,
       flete_usd: input.fleteUsd ?? null,
+      base_usd: input.baseUsd ?? null,
+      iva_usd: input.ivaUsd ?? null,
+      exento_usd: input.exentoUsd ?? null,
       pagada: input.pagada ?? true,
       fecha_pago:
         input.pagada === false ? null : (input.fechaPago ?? input.fecha),
@@ -549,6 +560,9 @@ export async function createComprasLote(inputs: CompraInput[]): Promise<Compra[]
         notas: input.notas ?? null,
         numero_factura: input.numeroFactura?.trim() || null,
         flete_usd: input.fleteUsd ?? null,
+        base_usd: input.baseUsd ?? null,
+        iva_usd: input.ivaUsd ?? null,
+        exento_usd: input.exentoUsd ?? null,
         pagada: input.pagada ?? true,
         fecha_pago:
           input.pagada === false ? null : (input.fechaPago ?? input.fecha),

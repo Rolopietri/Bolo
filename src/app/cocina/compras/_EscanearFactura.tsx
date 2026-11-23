@@ -37,6 +37,7 @@ import {
   type UnidadLeida,
 } from "@/lib/facturas/parser";
 import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
+import { desgloseIva } from "@/lib/iva-compra";
 import { sugerirCategoria } from "@/lib/sugerir-categoria";
 import { SUELTO, armarPresentacion } from "@/lib/presentacion";
 import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto, type FilaLeida } from "@/lib/facturas/ocr";
@@ -362,6 +363,7 @@ export function EscanearFactura({
   compras,
   onProveedorCreado,
   onInsumoCreado,
+  recuperaIva,
   onGuardado,
   onCancelar,
   onManual,
@@ -371,6 +373,8 @@ export function EscanearFactura({
   compras: Compra[];
   onProveedorCreado: (p: Proveedor) => void;
   onInsumoCreado: (i: Insumo) => void;
+  /** El negocio recupera el IVA de las compras: el costo del insumo queda sin IVA. */
+  recuperaIva: boolean;
   onGuardado: (nuevas: Compra[]) => void | Promise<void>;
   onCancelar: () => void;
   /** Abre el formulario manual de siempre (contingencia). */
@@ -424,12 +428,13 @@ export function EscanearFactura({
     const compradosA = new Map<string, Set<string>>();
     const ultimo = new Map<string, { usd: number; fecha: string }>();
     for (const c of compras) {
-      if (!c.proveedorId || !(c.cantidad > 0) || !(c.precioTotalUsd > 0)) continue;
+      const montoCosto = c.costoUsd ?? c.precioTotalUsd;
+      if (!c.proveedorId || !(c.cantidad > 0) || !(montoCosto > 0)) continue;
       if (!compradosA.has(c.proveedorId)) compradosA.set(c.proveedorId, new Set());
       compradosA.get(c.proveedorId)!.add(c.insumoId);
       const k = `${c.proveedorId}|${c.insumoId}`;
       const previo = ultimo.get(k);
-      if (!previo || c.fecha > previo.fecha) ultimo.set(k, { usd: c.precioTotalUsd / c.cantidad, fecha: c.fecha });
+      if (!previo || c.fecha > previo.fecha) ultimo.set(k, { usd: montoCosto / c.cantidad, fecha: c.fecha });
     }
     return { compradosA, ultimo };
   }, [compras]);
@@ -834,16 +839,26 @@ export function EscanearFactura({
     return iva;
   }
 
-  /** Lo que realmente se pagó por un producto, con IVA si corresponde. */
-  function costo(p: Producto): { usd: number; bs?: number; enMoneda: number } {
+  /** Pagado (con IVA si corresponde) y costo del insumo (sin IVA si se recupera). */
+  function montos(p: Producto) {
     const m = Number(p.monto) || 0;
+    const porc = ivaDe(p) * 100;
     const enMoneda = cab.ivaModo === "sin" && !p.exento ? m * (1 + ivaDe(p)) : m;
-    if (cab.moneda === "bs") return { usd: tasaNum > 0 ? enMoneda / tasaNum : 0, bs: enMoneda, enMoneda };
-    return { usd: enMoneda, bs: tasaNum > 0 ? enMoneda * tasaNum : undefined, enMoneda };
+    const montoUsd = cab.moneda === "bs" ? (tasaNum > 0 ? m / tasaNum : 0) : m;
+    const d = desgloseIva({
+      monto: montoUsd,
+      ivaModo: cab.ivaModo,
+      exento: p.exento,
+      ivaPorc: porc,
+      recuperaIva,
+    });
+    const bs = cab.moneda === "bs" ? enMoneda : tasaNum > 0 ? d.pagado * tasaNum : undefined;
+    return { ...d, bs, enMoneda };
   }
 
-  const totalMoneda = productos.reduce((s, p) => s + costo(p).enMoneda, 0);
-  const totalUsd = productos.reduce((s, p) => s + costo(p).usd, 0);
+  const totalMoneda = productos.reduce((s, p) => s + montos(p).enMoneda, 0);
+  const totalUsd = productos.reduce((s, p) => s + montos(p).pagado, 0);
+  const totalCostoUsd = productos.reduce((s, p) => s + montos(p).costo, 0);
   const esperado = totalProductos(leido.resumen);
   const cuadraMontos =
     esperado === undefined ? null : Math.abs(totalMoneda - esperado) <= Math.max(0.05, esperado * 0.01);
@@ -861,7 +876,7 @@ export function EscanearFactura({
       const falta = otras.find((o) => igual(Number(o.monto) || 0));
       if (falta) return `Puede ser «${falta.descripcion}», que quedó aparte: agrégalo abajo.`;
     } else {
-      const sobra = productos.find((p) => igual(costo(p).enMoneda));
+      const sobra = productos.find((p) => igual(montos(p).enMoneda));
       if (sobra) return `Puede sobrar «${sobra.descripcion || insumoPorId.get(sobra.insumoId)?.nombre}».`;
     }
     for (const p of productos) {
@@ -896,7 +911,7 @@ export function EscanearFactura({
    *  monto corregido (el OCR confunde 8/6/3, 1/7, 5/6 y corre comas). */
   function precioInfo(p: Producto) {
     const ins = insumoPorId.get(p.insumoId);
-    const usd = costo(p).usd;
+    const usd = montos(p).costo;
     const { enBase, enCompra } = conversion(p, ins, usd);
     if (!ins || !(enBase > 0) || !(usd > 0)) return null;
     const nuevo = usd / enBase;
@@ -943,7 +958,7 @@ export function EscanearFactura({
       setError("La nota de entrega no trae precios: escribe el monto de cada producto.");
       return;
     }
-    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra > 0))) {
+    if (productos.some((p) => !(Number(p.monto) > 0) || !(conversion(p, insumoPorId.get(p.insumoId), montos(p).costo).enCompra > 0))) {
       setError("Cada producto necesita una cantidad y un monto mayores que cero.");
       return;
     }
@@ -981,19 +996,25 @@ export function EscanearFactura({
     setAvisos(null);
     setGuardando(true);
     try {
-      const notaIva = cab.ivaModo === "sin" ? `IVA ${Number(cab.ivaPorc) || 0}% agregado` : null;
+      const notaIva =
+        cab.ivaModo === "sin"
+          ? `IVA ${Number(cab.ivaPorc) || 0}% aparte${recuperaIva ? ", no entra en el costo" : ", entra en el costo"}`
+          : null;
       const notas = [cab.notas.trim() || null, "Factura escaneada", notaIva].filter(Boolean).join(" · ");
       const flete = Number(cab.fleteUsd) > 0 ? Number(cab.fleteUsd) : undefined;
       const inputs: CompraInput[] = productos.map((p, i) => {
-        const c = costo(p);
-        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId), c.usd);
+        const c = montos(p);
+        const { enCompra } = conversion(p, insumoPorId.get(p.insumoId), c.costo);
         return {
           insumoId: p.insumoId,
           proveedorId: cab.proveedorId || undefined,
           fecha: cab.fecha,
           cantidad: Math.round(enCompra * 1e6) / 1e6,
-          precioTotalUsd: c.usd,
+          precioTotalUsd: c.pagado,
           precioTotalBs: c.bs,
+          baseUsd: c.base,
+          ivaUsd: c.iva,
+          exentoUsd: c.exento,
           tasaBcvUsada: tasaNum > 0 ? tasaNum : undefined,
           modalidadPago: cab.modalidadPago,
           notas,
@@ -1010,7 +1031,7 @@ export function EscanearFactura({
           productos.map((p) => ({
             descripcion: p.descripcion,
             insumoId: p.insumoId,
-            factorCantidad: conversion(p, insumoPorId.get(p.insumoId), costo(p).usd).enCompra / (p.cantidadFactura || 1),
+            factorCantidad: conversion(p, insumoPorId.get(p.insumoId), montos(p).costo).enCompra / (p.cantidadFactura || 1),
           })),
           memoria,
         );
@@ -1320,8 +1341,10 @@ export function EscanearFactura({
             </div>
             <span className="text-xs text-cacao-mute block mt-1">
               {cab.ivaModo === "con"
-                ? "Los montos ya incluyen el IVA — se guardan tal cual."
-                : "El sistema le suma el IVA a cada monto (salvo los exentos) para calcular el costo real."}
+                ? "Los montos ya incluyen el IVA. Al guardar se separan la base y el IVA."
+                : recuperaIva
+                  ? "Los montos son la base. El IVA se guarda aparte y no entra en el costo, porque lo recuperas. Lo exento no lleva IVA."
+                  : "Los montos son la base. El IVA se guarda aparte y sí entra en el costo, porque no lo recuperas. Lo exento no lleva IVA."}
             </span>
           </div>
 
@@ -1393,7 +1416,7 @@ export function EscanearFactura({
             <ul className="mt-1 divide-y divide-marfil">
               {productos.map((p) => {
                 const ins = insumoPorId.get(p.insumoId);
-                const conv = conversion(p, ins, costo(p).usd);
+                const conv = conversion(p, ins, montos(p).costo);
                 const info = precioInfo(p);
                 const fila = p.descripcion ? filaDe(p.descripcion) : null;
                 return (
@@ -1539,7 +1562,7 @@ export function EscanearFactura({
                           <span className="mt-0.5 block text-right text-[11px] text-cacao-soft">
                             ={" "}
                             <b className="font-medium text-cacao">
-                              {cab.moneda === "bs" ? fmtMonto(costo(p).usd, "usd") : fmtMonto(costo(p).bs ?? 0, "bs")}
+                              {cab.moneda === "bs" ? fmtMonto(montos(p).pagado, "usd") : fmtMonto(montos(p).bs ?? 0, "bs")}
                             </b>
                             {cab.moneda !== monedaPago && (
                               <span className="ml-1 text-[10px] uppercase tracking-widest text-terracotta">· pago</span>
@@ -1662,7 +1685,7 @@ export function EscanearFactura({
 
           {productos.length > 0 && (
             <div className="rounded-lg bg-marfil-soft ring-1 ring-marfil px-3 py-2 text-sm">
-              <span className="text-cacao-mute">Total que se guarda</span>
+              <span className="text-cacao-mute">Lo que se paga</span>
               <div className="mt-1 grid grid-cols-2 gap-3">
                 {(["bs", "usd"] as const).map((m) => {
                   const valor = m === "usd" ? totalUsd : cab.moneda === "bs" ? totalMoneda : totalUsd * tasaNum;
@@ -1681,7 +1704,11 @@ export function EscanearFactura({
               </div>
               <span className="mt-1 block text-xs text-cacao-mute">
                 {tasaNum > 0 ? `A Bs ${tasaNum.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} por $ · ${origenTasa}` : "Falta la tasa del día"}
-                {cab.ivaModo === "sin" && ` · incluye IVA ${Number(cab.ivaPorc) || 0}%`}
+                {cab.ivaModo === "sin" && ` · el IVA va aparte`}
+              </span>
+              <span className="mt-1 block text-xs text-cacao">
+                Costo de los insumos: <b>{fmtMonto(totalCostoUsd, "usd")}</b>
+                {recuperaIva ? " (sin el IVA, porque lo recuperas)" : " (con el IVA, porque no lo recuperas)"}
               </span>
               <ResumenFactura
                 resumen={leido.resumen}

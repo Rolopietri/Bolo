@@ -479,6 +479,7 @@ function ConfigEditor({
   const [verde, setVerde] = useState(String(initial.margenVerdeMin));
   const [amarillo, setAmarillo] = useState(String(initial.margenAmarilloMin));
   const [iva, setIva] = useState(String(initial.ivaPorc));
+  const [recuperaIva, setRecuperaIva] = useState(initial.recuperaIvaCompras);
 
   // El semáforo pinta: margen ≥ verde → verde; ≥ amarillo → amarillo; resto → rojo.
   // Para que la franja amarilla sea alcanzable, verde tiene que ser ≥ amarillo.
@@ -570,6 +571,30 @@ function ConfigEditor({
           </span>
         </label>
       </div>
+      <div className="text-sm text-cacao">
+        ¿Recuperas el IVA de tus compras (contribuyente ordinario)?
+        <div className="mt-1 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setRecuperaIva(true)}
+            className={recuperaIva ? "rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium" : "rounded-lg ring-1 ring-marfil px-3 py-2 text-sm text-cacao"}
+          >
+            Sí
+          </button>
+          <button
+            type="button"
+            onClick={() => setRecuperaIva(false)}
+            className={!recuperaIva ? "rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium" : "rounded-lg ring-1 ring-marfil px-3 py-2 text-sm text-cacao"}
+          >
+            No
+          </button>
+        </div>
+        <span className="text-[10px] text-cacao-mute block mt-1">
+          {recuperaIva
+            ? "El costo de los insumos queda sin IVA. Las compras igual guardan la base, el IVA y lo exento."
+            : "El IVA de las compras entra en el costo del insumo. Las compras igual guardan la base, el IVA y lo exento."}
+        </span>
+      </div>
 
       <GastosOperativosCalculator
         onAplicar={(porc) => setGastos(porc.toFixed(1))}
@@ -586,6 +611,7 @@ function ConfigEditor({
               margenVerdeMin: Number(verde) || 0,
               margenAmarilloMin: Number(amarillo) || 0,
               ivaPorc: Number(iva) || 0,
+              recuperaIvaCompras: recuperaIva,
             })
           }
           className="rounded-lg bg-cacao text-white px-4 py-2 text-sm font-medium hover:bg-terracotta disabled:opacity-50"
