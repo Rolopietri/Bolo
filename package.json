@@ -11,6 +11,7 @@
     "test:pce": "node scripts/check-pce.mjs",
     "test:modulos": "node scripts/check-modulos.mjs",
     "test:facturas": "node --no-warnings scripts/check-facturas.mjs",
+    "test:iva": "node --no-warnings scripts/check-iva-compra.mjs",
     "test:reposicion": "node --no-warnings scripts/check-reposicion.mjs",
     "test:stock": "node --no-warnings scripts/check-stock-liviano.mjs",
     "test:plan": "node --no-warnings scripts/check-plan-demanda.mjs",

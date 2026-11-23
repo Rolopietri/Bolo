@@ -1,6 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { esColumnaAusente } from "@/lib/iva-compra";
 import type { CocinaConfig } from "@/lib/types";
 
 type Row = {
@@ -10,6 +11,7 @@ type Row = {
   margen_verde_min: number | string;
   margen_amarillo_min: number | string;
   iva_porc: number | string | null;
+  recupera_iva_compras?: boolean | null;
 };
 
 const DEFAULT_CONFIG: CocinaConfig = {
@@ -18,6 +20,7 @@ const DEFAULT_CONFIG: CocinaConfig = {
   margenVerdeMin: 70,
   margenAmarilloMin: 60,
   ivaPorc: 16,
+  recuperaIvaCompras: true,
 };
 
 function rowToConfig(r: Row): CocinaConfig {
@@ -28,6 +31,8 @@ function rowToConfig(r: Row): CocinaConfig {
     margenAmarilloMin: Number(r.margen_amarillo_min),
     // Si el SQL aún no agregó la columna, usamos el default 16 (Venezuela)
     ivaPorc: r.iva_porc === null || r.iva_porc === undefined ? 16 : Number(r.iva_porc),
+    // Sin la columna (SQL aún no corrido) se asume que sí recupera el IVA.
+    recuperaIvaCompras: r.recupera_iva_compras === false ? false : true,
   };
 }
 
@@ -60,12 +65,26 @@ export async function updateCocinaConfig(
   if (patch.margenAmarilloMin !== undefined)
     db.margen_amarillo_min = patch.margenAmarilloMin;
   if (patch.ivaPorc !== undefined) db.iva_porc = patch.ivaPorc;
+  if (patch.recuperaIvaCompras !== undefined) db.recupera_iva_compras = patch.recuperaIvaCompras;
   db.updated_at = new Date().toISOString();
-  const { data, error } = await sb
+  let { data, error } = await sb
     .from("cocina_config")
     .upsert(db, { onConflict: "id" })
     .select("*")
     .single();
+  // La columna del ajuste puede no existir todavía: se guardan los otros
+  // parámetros. Si lo único que se quería cambiar era ese sí/no, se avisa.
+  if (error && esColumnaAusente(error) && patch.recuperaIvaCompras !== undefined) {
+    const resto: Record<string, unknown> = { ...db };
+    delete resto.recupera_iva_compras;
+    const otros = Object.keys(resto).filter((k) => k !== "id" && k !== "updated_at");
+    if (otros.length === 0) {
+      throw new Error(
+        "Para guardar si recuperas el IVA, primero corre supabase/cocina-recupera-iva-compras.sql.",
+      );
+    }
+    ({ data, error } = await sb.from("cocina_config").upsert(resto, { onConflict: "id" }).select("*").single());
+  }
   if (error) throw error;
   return rowToConfig(data as Row);
 }

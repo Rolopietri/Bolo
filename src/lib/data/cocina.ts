@@ -3,6 +3,7 @@
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { hoyISO } from "@/lib/ui";
 import { normalizarNombreCatalogo } from "@/lib/text";
+import { esColumnaAusente, esFuncionAusente, filaCompra } from "@/lib/iva-compra";
 import type {
   Proveedor,
   Insumo,
@@ -402,6 +403,10 @@ type CompraRow = {
   flete_usd: number | string | null;
   pagada: boolean | null;
   fecha_pago: string | null;
+  base_usd?: number | string | null;
+  iva_usd?: number | string | null;
+  exento_usd?: number | string | null;
+  costo_usd?: number | string | null;
 };
 
 function rowToCompra(r: CompraRow): Compra {
@@ -419,6 +424,10 @@ function rowToCompra(r: CompraRow): Compra {
     notas: r.notas ?? undefined,
     numeroFactura: r.numero_factura ?? undefined,
     fleteUsd: r.flete_usd === null ? undefined : Number(r.flete_usd),
+    baseUsd: r.base_usd == null ? undefined : Number(r.base_usd),
+    ivaUsd: r.iva_usd == null ? undefined : Number(r.iva_usd),
+    exentoUsd: r.exento_usd == null ? undefined : Number(r.exento_usd),
+    costoUsd: r.costo_usd == null ? undefined : Number(r.costo_usd),
     pagada: r.pagada ?? true,
     fechaPago: r.fecha_pago ?? undefined,
   };
@@ -503,29 +512,8 @@ export async function listComprasPendientes(): Promise<Compra[]> {
 }
 
 export async function createCompra(input: CompraInput): Promise<Compra> {
-  const sb = createSupabaseBrowserClient();
-  const { data, error } = await sb
-    .from("compras")
-    .insert({
-      insumo_id: input.insumoId,
-      proveedor_id: input.proveedorId ?? null,
-      fecha: input.fecha,
-      cantidad: input.cantidad,
-      precio_total_usd: input.precioTotalUsd,
-      precio_total_bs: input.precioTotalBs ?? null,
-      tasa_bcv_usada: input.tasaBcvUsada ?? null,
-      modalidad_pago: input.modalidadPago ?? null,
-      notas: input.notas ?? null,
-      numero_factura: input.numeroFactura?.trim() || null,
-      flete_usd: input.fleteUsd ?? null,
-      pagada: input.pagada ?? true,
-      fecha_pago:
-        input.pagada === false ? null : (input.fechaPago ?? input.fecha),
-    })
-    .select("*")
-    .single();
-  if (error) throw error;
-  return rowToCompra(data as CompraRow);
+  const [creada] = await insertarCompras([input]);
+  return creada;
 }
 
 /** Registra TODAS las líneas de una factura en un solo insert: o entran todas o
@@ -533,46 +521,67 @@ export async function createCompra(input: CompraInput): Promise<Compra> {
  *  de stock y precio que una compra hecha a mano. */
 export async function createComprasLote(inputs: CompraInput[]): Promise<Compra[]> {
   if (inputs.length === 0) return [];
+  return insertarCompras(inputs);
+}
+
+/** Inserta una o varias compras. Si las columnas del desglose todavía no
+ *  existen, reintenta sin ellas: la compra entra igual (el costo queda en
+ *  precio_total_usd, como antes del ajuste de IVA). */
+async function insertarCompras(inputs: CompraInput[]): Promise<Compra[]> {
   const sb = createSupabaseBrowserClient();
-  const { data, error } = await sb
-    .from("compras")
-    .insert(
-      inputs.map((input) => ({
-        insumo_id: input.insumoId,
-        proveedor_id: input.proveedorId ?? null,
-        fecha: input.fecha,
-        cantidad: input.cantidad,
-        precio_total_usd: input.precioTotalUsd,
-        precio_total_bs: input.precioTotalBs ?? null,
-        tasa_bcv_usada: input.tasaBcvUsada ?? null,
-        modalidad_pago: input.modalidadPago ?? null,
-        notas: input.notas ?? null,
-        numero_factura: input.numeroFactura?.trim() || null,
-        flete_usd: input.fleteUsd ?? null,
-        pagada: input.pagada ?? true,
-        fecha_pago:
-          input.pagada === false ? null : (input.fechaPago ?? input.fecha),
-      })),
-    )
-    .select("*");
-  if (error) throw error;
-  return ((data ?? []) as CompraRow[]).map(rowToCompra);
+  const con = inputs.map((input) => filaCompra(input, true));
+  let res = await sb.from("compras").insert(con).select("*");
+  if (res.error && esColumnaAusente(res.error)) {
+    res = await sb.from("compras").insert(inputs.map((input) => filaCompra(input, false))).select("*");
+  }
+  if (res.error) throw res.error;
+  return ((res.data ?? []) as CompraRow[]).map(rowToCompra);
 }
 
 /**
- * Edita una compra. Se implementa como BORRAR + RECREAR para reutilizar los
- * triggers ya probados: al borrar, la base revierte el stock y deja el precio
- * de la compra más reciente que siga existiendo; al recrear con los datos
- * nuevos, los vuelve a aplicar. Así
- * corregir la cantidad o el precio ajusta el inventario por la diferencia sin
- * lógica nueva. Devuelve la compra recreada (nuevo id).
+ * Edita una compra. En la base, `reemplazar_compra` borra y vuelve a insertar
+ * en una sola transacción: si el insert falla, la compra original sigue.
+ * Sin esa función (SQL aún no corrido), se inserta primero y se borra después,
+ * y si el borrado falla se deshace el insert. Nunca se borra antes de saber
+ * que la nueva entró.
  */
 export async function updateCompra(
   id: string,
   input: CompraInput,
 ): Promise<Compra> {
-  await deleteCompra(id);
-  return createCompra(input);
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("reemplazar_compra", {
+    p_id: id,
+    p_insumo_id: input.insumoId,
+    p_proveedor_id: input.proveedorId ?? null,
+    p_fecha: input.fecha,
+    p_cantidad: input.cantidad,
+    p_precio_total_usd: input.precioTotalUsd,
+    p_precio_total_bs: input.precioTotalBs ?? null,
+    p_tasa_bcv_usada: input.tasaBcvUsada ?? null,
+    p_modalidad_pago: input.modalidadPago ?? null,
+    p_notas: input.notas ?? null,
+    p_numero_factura: input.numeroFactura ?? null,
+    p_flete_usd: input.fleteUsd ?? null,
+    p_pagada: input.pagada ?? true,
+    p_fecha_pago: input.pagada === false ? null : (input.fechaPago ?? input.fecha),
+    p_base_usd: input.baseUsd ?? null,
+    p_iva_usd: input.ivaUsd ?? null,
+    p_exento_usd: input.exentoUsd ?? null,
+    p_costo_usd: input.costoUsd ?? null,
+  });
+  if (!error && data) return rowToCompra(data as CompraRow);
+  if (error && (esFuncionAusente(error) || esColumnaAusente(error))) {
+    const nueva = await createCompra(input);
+    const borrado = await sb.from("compras").delete().eq("id", id);
+    if (borrado.error) {
+      await sb.from("compras").delete().eq("id", nueva.id);
+      throw borrado.error;
+    }
+    return nueva;
+  }
+  if (error) throw error;
+  throw new Error("No se pudo editar la compra");
 }
 
 /** Marca una compra como pagada / por pagar (no toca stock ni precio). Al pagar

@@ -550,6 +550,14 @@ export type Compra = {
   /** Flete / delivery que el proveedor cobra por traer los insumos. Suma al
    *  total de la factura, pero NO al precio unitario del insumo. */
   fleteUsd?: number;
+  /** Gravable sin IVA, en USD. Null en compras anteriores al desglose. */
+  baseUsd?: number;
+  /** IVA de la base, en USD. */
+  ivaUsd?: number;
+  /** Exento de IVA, en USD. */
+  exentoUsd?: number;
+  /** Costo que pasó al insumo (sin IVA si se recupera, con IVA si no). */
+  costoUsd?: number;
   /** Estado de pago al proveedor. true = ya pagada (default). false = cuenta por
    *  pagar (pago diferido). */
   pagada: boolean;
@@ -818,6 +826,9 @@ export type CocinaConfig = {
    *  por si cambia la regulación. Internamente el sistema siempre trabaja con
    *  precios sin IVA; el IVA se aplica solo para mostrar el "precio de carta". */
   ivaPorc: number;
+  /** Contribuyente ordinario: el IVA de las compras no entra en el costo del
+   *  insumo. Si es false, el IVA sí entra en el costo. */
+  recuperaIvaCompras: boolean;
 };
 
 /** Calcula el precio con IVA a partir del precio sin IVA. */

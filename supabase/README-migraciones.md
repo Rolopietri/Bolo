@@ -45,10 +45,22 @@ con `pg_get_functiondef`). Se consolidó así:
   (`se_procesa` → descuenta o repone `stock_procesado`). `bolo-08-…` tiene la
   misma lógica pero ordena antes; no dejes la Fase D solo ahí, porque `zzz` la
   pisaría. Un archivo `bolo-09b-*.sql` tampoco gana: la `b` va antes que la `c`.
-- `revertir_compra_de_insumo`: la que gana es
-  `cocina-compra-zzzz-revertir-precio-anterior.sql` (después de
-  `cocina-compra-snapshot-factor.sql`). Reconstruye ultima/penultima y el
-  precio desde las compras que quedan, no desde un caché de dos.
+- `apply_compra_to_insumo` y `revertir_compra_de_insumo`: la versión vigente
+  es **`cocina-recupera-iva-compras.sql`**. Ordena después de
+  `cocina-precio-frescura.sql` (el apply anterior) y de
+  `cocina-compra-zzzz-revertir-precio-anterior.sql` (el revertir anterior),
+  así que al reaplicar en orden alfabético es la que gana. El precio del
+  insumo sale de `costo_usd` si la compra lo trae; si no, de
+  `precio_total_usd`. Antes de correrlo en una base que ya tiene esas
+  funciones, compara con:
+
+  ```sql
+  select p.proname, pg_get_functiondef(p.oid)
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in ('apply_compra_to_insumo', 'revertir_compra_de_insumo');
+  ```
 - Las columnas (`alter table … add column`) de los archivos `cocina-pos-*` y
   `cocina-subrecetas.sql` **sí son necesarias** — solo se quitaron de ahí las
   funciones duplicadas viejas, no las columnas.

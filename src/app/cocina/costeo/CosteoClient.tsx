@@ -550,6 +550,7 @@ function ConfigEditor({
     String(initial.foodCostObjetivoPorc),
   );
   const [iva, setIva] = useState(String(initial.ivaPorc));
+  const [recuperaIva, setRecuperaIva] = useState(initial.recuperaIvaCompras);
 
   return (
     <div className="space-y-3">
@@ -585,6 +586,30 @@ function ConfigEditor({
           </span>
         </label>
       </div>
+      <div className="text-sm text-cacao">
+        ¿Recuperas el IVA de tus compras (contribuyente ordinario)?
+        <div className="mt-1 flex gap-2">
+          <button
+            type="button"
+            onClick={() => setRecuperaIva(true)}
+            className={recuperaIva ? "rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium" : "rounded-lg ring-1 ring-marfil px-3 py-2 text-sm text-cacao"}
+          >
+            Sí
+          </button>
+          <button
+            type="button"
+            onClick={() => setRecuperaIva(false)}
+            className={!recuperaIva ? "rounded-lg bg-cacao text-white px-3 py-2 text-sm font-medium" : "rounded-lg ring-1 ring-marfil px-3 py-2 text-sm text-cacao"}
+          >
+            No
+          </button>
+        </div>
+        <span className="text-[10px] text-cacao-mute block mt-1">
+          {recuperaIva
+            ? "El costo de los insumos queda sin IVA, desde la próxima compra. Las ya guardadas no cambian. La base, el IVA y lo exento se anotan igual."
+            : "El IVA entra en el costo del insumo, desde la próxima compra. Las ya guardadas no cambian. La base, el IVA y lo exento se anotan igual."}
+        </span>
+      </div>
       <div className="text-right">
         <button
           type="button"
@@ -593,6 +618,7 @@ function ConfigEditor({
             onSave({
               foodCostObjetivoPorc: Number(foodCost) || 0,
               ivaPorc: Number(iva) || 0,
+              recuperaIvaCompras: recuperaIva,
             })
           }
           className="rounded-lg bg-cacao text-white px-4 py-2 text-sm font-medium hover:bg-terracotta disabled:opacity-50"

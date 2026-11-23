@@ -86,6 +86,8 @@ export type FacturaLeida = {
   proveedorNombre?: string;
   rif?: string;
   numero?: string;
+  /** N° de control fiscal, cuando la factura lo trae (no es el N° de factura). */
+  numeroControl?: string;
   /** YYYY-MM-DD */
   fecha?: string;
   moneda?: "bs" | "usd";
@@ -208,6 +210,28 @@ function corregirPorAritmetica(cantidad: number, precio: number, total: number):
 /** true si la cantidad está escrita con decimales (es un peso). */
 function escritaConDecimales(raw: string): boolean {
   return /^\d+[.,\s]\d+$/.test(raw.trim());
+}
+
+/** Los números del final ya traen una cantidad que, por el precio, da el total.
+ *  En ese caso un "500 GR" que quedó en el nombre es el empaque, no la cantidad. */
+function finalesTienenCantidad(finales: number[]): boolean {
+  if (finales.length < 3) return false;
+  const total = finales[finales.length - 1];
+  if (!(total > 0)) return false;
+  const previos = finales.slice(0, -1);
+  const cerca = (a: number, b: number) => Math.abs(a - b) <= Math.max(0.02, b * 0.02);
+  for (let i = 0; i < previos.length; i++)
+    for (let j = 0; j < previos.length; j++)
+      if (i !== j && previos[i] > 0 && cerca(previos[i] * previos[j], total)) return true;
+  return false;
+}
+
+/** Palabra que el OCR inventa sobre un logo o un código de barras ("cYanmaG",
+ *  "cYam"). Una mayúscula metida entre minúsculas no aparece en un nombre de
+ *  producto. No marca "1KG" ni "LAT355x24U": ahí la minúscula no va pegada a
+ *  una mayúscula. No alcanza para corregir una palabra real mal leída. */
+function esBasuraOcr(token: string): boolean {
+  return /[a-z][A-Z]/.test(token) || /[A-Z][a-z]+[A-Z]/.test(token);
 }
 
 /** RIF canónico: letra + dígitos + dígito verificador, sin guiones (J123456789). */
@@ -444,6 +468,40 @@ export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
   // Unidad escrita suelta en el renglón ("CARNE DE RES KG", "1,250 KG POLLO",
   // "QUESO X KG"). La pegada a un número ("1KG") es la presentación: no cuenta.
   let unidadLeida: UnidadLeida | undefined;
+  // "LOMITO  4,265 KG  3.468,27  14.792,17": la unidad corta la lectura de los
+  // números finales y "4,265 KG" se queda en el nombre. contenidoDe() lo leería
+  // como el tamaño del paquete (igual que "1KG") y la pantalla multiplicaría
+  // cantidad × contenido (4,265²). Es la columna de cantidad: se saca del nombre
+  // solo si ese número, por el precio, da el total. Si no ("x 24 UNID", o
+  // "500 GR" junto a otra cantidad que ya cuadra), es el empaque y se deja.
+  if (cantInicial === null && !finalesTienenCantidad(finales)) {
+    const totalLinea = finales[finales.length - 1];
+    const esLaCantidad = (q: number) =>
+      finales.slice(0, -1).some((n) => {
+        if (!(n > 0) || !(totalLinea > 0)) return false;
+        if (Math.abs(q * n - totalLinea) <= Math.max(0.05, totalLinea * 0.02)) return true;
+        const aj = ajustarCantidad(q, n, totalLinea, true);
+        return (
+          Math.abs(aj.cantidad - q) / q < 0.001 &&
+          Math.abs(aj.cantidad * aj.precio - totalLinea) <= Math.max(0.05, totalLinea * 0.02)
+        );
+      });
+    for (let i = 0; i < tokens.length - 1; i++) {
+      const num = tokens[i];
+      const uniTok = tokens[i + 1];
+      if (!/^\d{1,4}([.,]\d{1,4})?$/.test(num)) continue;
+      // Una "G" o "L" suelta es ambigua (la G también marca el IVA general).
+      if (uniTok.replace(/[.:]/g, "").length <= 1) continue;
+      const u = unidadDeToken(uniTok);
+      const q = u ? parseCantidad(num) : null;
+      if (!u || !q || !(q > 0) || !esLaCantidad(q)) continue;
+      cantInicial = q;
+      pesable = pesable || escritaConDecimales(num);
+      unidadLeida = u;
+      tokens.splice(i, 2);
+      break;
+    }
+  }
   for (const t of tokens) {
     // Una "G" o "L" suelta es ambigua (la G es también la marca de IVA general).
     const u = t.replace(/[.:]/g, "").length > 1 ? unidadDeToken(t) : undefined;
@@ -452,6 +510,17 @@ export function parseLineaProducto(lineaOriginal: string): LineaLeida | null {
   // Ni empieza con ruido: letras o números sueltos antes de la primera palabra
   // ("ES 1 PEPSI…", "3 Pees LIGHT…").
   while (tokens.length > 1 && (tokens[0].length <= 2 || /^[\d.,]+$/.test(tokens[0]))) tokens.shift();
+  // Columna UND/KG delante del nombre ("UND CILANTRO MANOJO"), ya anotada.
+  if (
+    tokens.length > 1 &&
+    tokens[0].replace(/[.:]/g, "").length > 1 &&
+    unidadDeToken(tokens[0]) &&
+    !/\d/.test(tokens[0])
+  ) {
+    tokens.shift();
+  }
+  // Basura suelta del OCR ("cYanmaG") mezclada con un nombre real.
+  for (let i = tokens.length - 1; i >= 0; i--) if (esBasuraOcr(tokens[i])) tokens.splice(i, 1);
   // El empaque y el contenido se leen del nombre completo, antes de limpiarlo.
   const nombreCompleto = tokens.join(" ");
   // La descripción no termina en números sueltos, en ruido de una letra ni en
@@ -707,15 +776,27 @@ export function parseFactura(texto: string): FacturaLeida {
   // N° del documento (no el "N° de control"): factura, invoice, nota de
   // entrega, guía, boleta, recibo, ticket, folio, NCF (Rep. Dominicana),
   // serie-número (Perú: F001-00012345).
+  // En Venezuela es muy común que vayan en el mismo renglón:
+  // "N° de Factura: 00012847    N° de Control: 00-0045126".
+  // No se descarta el renglón entero por la palabra "control": se quita solo
+  // esa cláusula, se lee el N° de factura, y el de control aparte.
+  const RE_NUM_DOC =
+    /(?:factura|invoice|inv\.?|nota\s+de\s+(?:entrega|cr[eé]dito|d[eé]bito)|orden\s+de\s+entrega|gu[ií]a(?:\s+de\s+\w+)?|boleta|recibo|receipt|ticket|comprobante|folio|documento|ncf)\s*(?:electr[oó]nica\s*)?(?:de\s+venta\s*)?(?:n[°ºo.*]*|nro\.?|num\.?|no\.?|#|\S{1,2}(?=\s*:))?\s*:?\s*([A-Z]{0,4}\d{0,3}-?\d[\d-]{2,})/i;
+  // "N° de Control: 00-…" y también "CONTROL N° 00-…" (el número va después).
+  const RE_CONTROL_DOC =
+    /control\b[\s:.#°º*-]*(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?[\s:.#°º*-]*([A-Z]{0,4}\d[\d-]{2,})/i;
   for (const l of lineas) {
-    if (/control/i.test(l)) continue;
-    const m = l.match(
-      /(?:factura|invoice|inv\.?|nota\s+de\s+(?:entrega|cr[eé]dito|d[eé]bito)|orden\s+de\s+entrega|gu[ií]a(?:\s+de\s+\w+)?|boleta|recibo|receipt|ticket|comprobante|folio|documento|ncf)\s*(?:electr[oó]nica\s*)?(?:de\s+venta\s*)?(?:n[°ºo.*]*|nro\.?|num\.?|no\.?|#|\S{1,2}(?=\s*:))?\s*:?\s*([A-Z]{0,4}\d{0,3}-?\d[\d-]{2,})/i,
-    );
-    if (m) {
-      out.numero = m[1].replace(/^-/, "");
-      break;
+    if (!out.numeroControl) {
+      const c = l.match(RE_CONTROL_DOC);
+      if (c) out.numeroControl = c[1];
     }
+    if (out.numero) continue;
+    const sinControl = l.replace(
+      /control\b[\s:.#°º*-]*(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?[\s:.#°º*-]*[A-Z]{0,4}\d[\d-]{2,}/gi,
+      " ",
+    );
+    const m = sinControl.match(RE_NUM_DOC);
+    if (m) out.numero = m[1].replace(/^-/, "");
   }
 
   // Fecha: cada fecha se juzga por su etiqueta, no por la línea entera (en una
@@ -1123,6 +1204,19 @@ export function totalProductos(f: Pick<FacturaLeida, "total" | "igtf">): number 
   return f.total - (f.igtf ?? 0);
 }
 
+/** El mismo N° de factura, aunque uno traiga ceros de más ("00012847" y
+ *  "12847", "A-0012" y "A-12"). Vacío no coincide con nada. */
+export function mismoNumeroFactura(a: string | undefined | null, b: string | undefined | null): boolean {
+  const norm = (s: string) => {
+    const t = s.trim().toLowerCase().replace(/\s+/g, "");
+    if (!t) return "";
+    return t.replace(/0+(?=\d)/g, "");
+  };
+  const x = a ? norm(a) : "";
+  const y = b ? norm(b) : "";
+  return x.length > 0 && x === y;
+}
+
 /** Qué tan parecidas son dos descripciones (0 a 1), por palabras en común.
  *  Sirve para reconocer un producto aunque el OCR lo lea un poco distinto
  *  cada vez ("PEPSI LIGHT LATA 355X24 UND" ≈ "Pees LIGHT LATA 355X24 UND"). */
@@ -1134,6 +1228,87 @@ export function parecido(a: string, b: string): number {
   let comunes = 0;
   for (const p of pa) if (pb.has(p)) comunes++;
   return comunes / Math.max(pa.size, pb.size);
+}
+
+/** Palabras de una descripción ya normalizada, sin números sueltos (la
+ *  cantidad de la factura cambia de un escaneo a otro y no identifica al
+ *  producto). */
+function palabrasClave(s: string): string[] {
+  return normalizarDescripcion(s)
+    .split(" ")
+    .filter((w) => w.length >= 3 && !/^\d+$/.test(w));
+}
+
+/** "1kg", "5kg", "600ml": el tamaño pegado al nombre. Una sola, si hay. */
+function medidaDeNombre(palabras: string[]): string | undefined {
+  const ms = palabras.filter((w) => /^\d+(?:kg|g|gr|grs|ml|l|lt|lts|cc)$/.test(w));
+  return ms.length === 1 ? ms[0] : undefined;
+}
+
+/** Cantidad con la que se comprueba cantidad × precio = importe.
+ *  "AZUCAR 500 GR" × 2: el 500 g es el empaque, no la cantidad de la factura.
+ *  Comparar los kilos convertidos contra el precio del renglón da un falso
+ *  "no cuadra". Ahí se usa la cantidad de la factura (2). */
+export function cantidadParaCuadre(p: {
+  cantidadFactura: number;
+  contenido?: { valor: number; unidad: string };
+  unidadLeida?: string;
+  /** Cantidad ya pasada a la unidad que la factura escribió junto al número. */
+  cantidadConvertida: number | null;
+}): number | null {
+  if (
+    p.contenido &&
+    p.unidadLeida &&
+    Math.abs(p.contenido.valor - p.cantidadFactura) > Math.max(0.001, p.cantidadFactura * 0.02)
+  ) {
+    return p.cantidadFactura > 0 ? p.cantidadFactura : null;
+  }
+  if (p.cantidadConvertida != null && p.cantidadConvertida > 0) return p.cantidadConvertida;
+  return p.cantidadFactura > 0 ? p.cantidadFactura : null;
+}
+
+/** Equivalencia guardada que corresponde a esta descripción: la misma clave,
+ *  o la misma con tokens de más (la cantidad "4 265kg" pegada al nombre).
+ *  Si ninguna cubre al menos el 60 % de las palabras, null: ahí manda la
+ *  sugerencia por nombre, que sí hay que confirmar. */
+export function buscarEquivalencia<T extends { descripcionNorm: string }>(
+  descripcion: string,
+  eqs: Iterable<T>,
+): T | null {
+  const clave = normalizarDescripcion(descripcion);
+  if (!clave) return null;
+  let mejor: T | null = null;
+  let mejorP = 0;
+  for (const e of eqs) {
+    if (!e.descripcionNorm) continue;
+    if (e.descripcionNorm === clave) return e;
+    const a = palabrasClave(e.descripcionNorm);
+    const b = palabrasClave(descripcion);
+    if (a.length === 0 || b.length === 0) continue;
+    // "HARINA PAN 1KG" y "HARINA PAN 5KG" no son el mismo producto.
+    const medA = medidaDeNombre(a);
+    const medB = medidaDeNombre(b);
+    if (medA && medB && medA !== medB) continue;
+    const sa = new Set(a);
+    const sb = new Set(b);
+    let comunes = 0;
+    for (const p of sa) if (sb.has(p)) comunes++;
+    const corto = sa.size <= sb.size ? sa : sb;
+    const largo = sa.size <= sb.size ? b : a;
+    // El lado largo es el corto más la cantidad ("265kg", "4"): es el mismo
+    // producto. Una palabra nueva ("integral") no cuenta como cantidad.
+    const mismoConCantidad =
+      comunes === corto.size && largo.every((w) => corto.has(w) || /^\d/.test(w));
+    const p = Math.max(
+      parecido(e.descripcionNorm, descripcion),
+      mismoConCantidad ? 1 : comunes / Math.max(sa.size, sb.size),
+    );
+    if (p > mejorP) {
+      mejorP = p;
+      mejor = e;
+    }
+  }
+  return mejorP >= 0.6 ? mejor : null;
 }
 
 /** Palabras de solo letras (3 o más), sin los números pegados:
