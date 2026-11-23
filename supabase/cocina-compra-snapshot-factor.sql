@@ -60,6 +60,11 @@ update public.compras c
 -- 4) Revert: usar el snapshot congelado (fallback al factor vigente por si
 --    alguna fila no tuviera snapshot). Lo demás queda idéntico a la versión
 --    canónica de cocina-compra-revertir-al-borrar.sql.
+--
+--    El precio de esta versión solo recuerda dos compras (ultima/penultima).
+--    La que gana en orden alfabético, y la que hay que correr en producción,
+--    es cocina-compra-zzzz-revertir-precio-anterior.sql: reconstruye el precio
+--    con las compras que siguen en la tabla.
 create or replace function public.revertir_compra_de_insumo()
 returns trigger
 language plpgsql
