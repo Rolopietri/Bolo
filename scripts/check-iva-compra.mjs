@@ -8,10 +8,14 @@ import {
   fiscalAlGuardar,
   modoIvaDeCompra,
   modoIvaDeFactura,
+  notaIvaAutomatica,
+  notasConIva,
+  porcIvaDeCompra,
   filaCompra,
   esColumnaAusente,
 } from "../src/lib/iva-compra.ts";
 import { parseFactura } from "../src/lib/facturas/parser.ts";
+import { lineasPrecioInsumo } from "../src/lib/units.ts";
 
 let fallas = 0;
 function igual(nombre, real, esperado) {
@@ -124,8 +128,56 @@ const vieja = fiscalAlGuardar({
   intacto: true,
 });
 igual("compra vieja sigue en 10", vieja.costoUsd, 10);
-igual("compra vieja se anota como exento", vieja.exentoUsd, 10);
+igual("compra vieja no se marca exento", vieja.exentoUsd, null);
+igual("compra vieja no inventa base", vieja.baseUsd, null);
+igual("compra vieja no inventa IVA", vieja.ivaUsd, null);
 igual("modo de una compra vieja", modoIvaDeCompra({}), "exento");
+igual("nota IVA agregado abre en con", modoIvaDeCompra({ notas: "IVA 16% agregado" }), "con");
+igual("porcentaje sale de la nota", porcIvaDeCompra({ notas: "IVA 16% agregado" }), "16");
+igual(
+  "exento inventado con nota de IVA no se conserva",
+  fiscalAlGuardar({
+    recalculado: lomitoMal,
+    original: { exentoUsd: 12.73, precioTotalUsd: 12.73, costoUsd: 12.73 },
+    intacto: true,
+    notas: "IVA 16% agregado",
+  }).exentoUsd,
+  null,
+);
+igual(
+  "con IVA se etiqueta incluido",
+  notaIvaAutomatica("con", 16, true, true),
+  "IVA 16% incluido, no entra en el costo",
+);
+igual(
+  "iva aparte se etiqueta aparte",
+  notaIvaAutomatica("sin", 16, false, true),
+  "IVA 16% aparte, entra en el costo",
+);
+igual("sin IVA no agrega etiqueta", notaIvaAutomatica("exento", 16, true, false), null);
+igual(
+  "editar sin cambios no reescribe la nota",
+  notasConIva("IVA 16% agregado", "IVA 16% incluido, no entra en el costo", true),
+  "IVA 16% agregado",
+);
+const quesoPrecio = lineasPrecioInsumo({
+  precioBaseUsd: 0.007804,
+  precioCompraUsd: 7.81,
+  unidadBase: "g",
+  unidadCompra: "kg",
+  cantidadPorCompra: 1000,
+});
+igual("queso muestra un solo precio", quesoPrecio.length, 1);
+igual("queso redondea desde el precio base", quesoPrecio[0], "$7.80 / kg");
+const saco = lineasPrecioInsumo({
+  precioBaseUsd: 0.001,
+  precioCompraUsd: 25,
+  unidadBase: "g",
+  unidadCompra: "saco",
+  cantidadPorCompra: 25000,
+});
+igual("saco dice el precio de compra", saco[0], "Último precio: $25.00 / saco");
+igual("saco dice el equivalente por kg", saco[1], "Equivale a $1.00 / kg");
 const cambiada = fiscalAlGuardar({
   recalculado: lomito,
   original: { baseUsd: 0, ivaUsd: 0, exentoUsd: 10, costoUsd: 10, precioTotalUsd: 10 },

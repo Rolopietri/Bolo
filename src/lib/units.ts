@@ -191,6 +191,43 @@ export function precioLegible(
   return { precio: precioPorBase, unidad: unidadBase ?? "" };
 }
 
+function fmtPrecioUnit(n: number): string {
+  return n < 0.01 ? n.toFixed(5) : n.toFixed(2);
+}
+
+/** Líneas de precio de un insumo. Si la compra y la unidad base se leen en la
+ *  misma unidad (el queso: $/kg y otra vez $/kg), va una sola cifra, redondeada
+ *  desde el precio base. Si no (un saco y el equivalente por kg), las dos, con
+ *  cuál es el precio de compra y cuál el equivalente. */
+export function lineasPrecioInsumo(insumo: {
+  precioBaseUsd: number | null;
+  precioCompraUsd: number | null;
+  unidadBase?: string | null;
+  unidadCompra?: string | null;
+  cantidadPorCompra?: number | null;
+}): string[] {
+  const base = insumo.precioBaseUsd;
+  const compra = insumo.precioCompraUsd;
+  if (base == null && compra == null) return [];
+  if (base == null) {
+    return [`$${fmtPrecioUnit(compra as number)} / ${insumo.unidadCompra || ""}`.trim()];
+  }
+  const leg = precioLegible(base, insumo.unidadBase);
+  const unidadCompra = insumo.unidadCompra || leg.unidad;
+  const misma =
+    canonica(unidadCompra) === canonica(leg.unidad) || unidadCompra === leg.unidad;
+  if (misma) return [`$${fmtPrecioUnit(leg.precio)} / ${leg.unidad}`];
+  const cpc = insumo.cantidadPorCompra ?? 0;
+  const porCompra = cpc > 0 ? base * cpc : compra;
+  const lineas = [
+    porCompra != null
+      ? `Último precio: $${fmtPrecioUnit(porCompra)} / ${unidadCompra}`
+      : `$${fmtPrecioUnit(leg.precio)} / ${leg.unidad}`,
+  ];
+  if (porCompra != null) lineas.push(`Equivale a $${fmtPrecioUnit(leg.precio)} / ${leg.unidad}`);
+  return lineas;
+}
+
 /** Unidades estándar con las que se puede expresar una cantidad guardada en
  *  `unidadBase` (ej. g → kg y g). Si la unidad no es convertible, solo ella. */
 export function unidadesCompatibles(unidadBase: string | undefined | null): string[] {

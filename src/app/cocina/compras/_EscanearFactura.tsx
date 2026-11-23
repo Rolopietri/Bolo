@@ -28,7 +28,7 @@ import {
 import {
   buscarEquivalencia,
   cantidadParaCuadre,
-  mismoNumeroFactura,
+  compraConMismaFactura,
   normalizarDescripcion,
   parseFactura,
   sugerirInsumo,
@@ -38,7 +38,7 @@ import {
   type UnidadLeida,
 } from "@/lib/facturas/parser";
 import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
-import { desgloseIva, modoIvaDeFactura } from "@/lib/iva-compra";
+import { desgloseIva, modoIvaDeFactura, notaIvaAutomatica } from "@/lib/iva-compra";
 import { sugerirCategoria } from "@/lib/sugerir-categoria";
 import { SUELTO, armarPresentacion } from "@/lib/presentacion";
 import { FotoIlegible, fotoDerecha, leerFactura, prepararFoto, type FilaLeida } from "@/lib/facturas/ocr";
@@ -898,18 +898,13 @@ export function EscanearFactura({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cuadra, esperado, totalMoneda, otras, productos, cab]);
 
-  // Una factura se paga completa: si ya existe, los productos heredan su estado.
-  const facturaLock = useMemo(() => {
-    const num = cab.numeroFactura.trim().toLowerCase();
-    if (!num) return null;
-    return (
-      compras.find(
-        (c) =>
-          mismoNumeroFactura(c.numeroFactura, num) &&
-          (!cab.proveedorId || c.proveedorId === cab.proveedorId),
-      ) ?? null
-    );
-  }, [compras, cab.numeroFactura, cab.proveedorId]);
+  // Una factura se paga completa: si ya existe (mismo número en el negocio),
+  // se avisa en el formulario. El estado de pago se hereda si es el mismo proveedor.
+  const duplicada = useMemo(
+    () => compraConMismaFactura(compras, cab.numeroFactura, cab.proveedorId || null),
+    [compras, cab.numeroFactura, cab.proveedorId],
+  );
+  const facturaLock = duplicada?.mismoProveedor ? duplicada.compra : null;
   const pagarDespuesEfectivo = facturaLock ? !facturaLock.pagada : cab.pagarDespues;
 
   /** Precio por unidad que deja el producto, frente al de la última compra a
@@ -977,7 +972,12 @@ export function EscanearFactura({
       const a: string[] = [];
       if (leido.tipo === "nota_credito")
         a.push("Este documento es una NOTA DE CRÉDITO (una devolución o un descuento del proveedor), no una compra: si lo registras, sumará stock.");
-      if (facturaLock) a.push(`La factura ${cab.numeroFactura} de este proveedor ya tiene compras registradas (${fmtFecha(facturaLock.fecha)}).`);
+      if (duplicada)
+        a.push(
+          duplicada.mismoProveedor
+            ? `La factura ${cab.numeroFactura} de este proveedor ya tiene compras registradas (${fmtFecha(duplicada.compra.fecha)}).`
+            : `La factura ${cab.numeroFactura} ya está registrada (${fmtFecha(duplicada.compra.fecha)}).`,
+        );
       if (cuadraMontos === false && esperado !== undefined)
         a.push(
           `La suma (${fmtMonto(totalMoneda, cab.moneda)}) no coincide con la factura (${fmtMonto(esperado, cab.moneda)}). Puede faltar un producto o haber un monto mal leído.`,
@@ -1003,10 +1003,12 @@ export function EscanearFactura({
     setAvisos(null);
     setGuardando(true);
     try {
-      const notaIva =
-        cab.ivaModo === "sin"
-          ? `IVA ${Number(cab.ivaPorc) || 0}% aparte${recuperaIva ? ", no entra en el costo" : ", entra en el costo"}`
-          : null;
+      const notaIva = notaIvaAutomatica(
+        cab.ivaModo,
+        Number(cab.ivaPorc) || 0,
+        recuperaIva,
+        cab.ivaModo !== "exento" && productos.some((p) => montos(p).iva > 0.0001),
+      );
       const notas = [cab.notas.trim() || null, "Factura escaneada", notaIva].filter(Boolean).join(" · ");
       const flete = Number(cab.fleteUsd) > 0 ? Number(cab.fleteUsd) : undefined;
       const inputs: CompraInput[] = productos.map((p, i) => {
@@ -1410,6 +1412,17 @@ export function EscanearFactura({
               {leido.numeroControl && (
                 <span className="text-[11px] text-cacao-mute block mt-1">N° de control: {leido.numeroControl}</span>
               )}
+              {duplicada && (
+                <span className="text-[12px] text-cacao-soft block mt-1">
+                  La factura{" "}
+                  <span className="font-medium text-cacao">{duplicada.compra.numeroFactura}</span>{" "}
+                  {duplicada.mismoProveedor ? "ya existe y está " : "ya está registrada (con otro proveedor) y está "}
+                  <span className={`font-medium ${duplicada.compra.pagada ? "text-oliva" : "text-terracotta"}`}>
+                    {duplicada.compra.pagada ? "pagada" : "por pagar"}
+                  </span>
+                  {duplicada.mismoProveedor ? ". Los productos heredan ese estado." : "."}
+                </span>
+              )}
             </label>
             <label className="text-sm text-cacao block">
               Flete / delivery ($) <span className="text-cacao-soft font-normal">(opcional)</span>
@@ -1625,6 +1638,16 @@ export function EscanearFactura({
                       <p className="text-[11px] text-terracotta font-medium">
                         <WarningIcon className="inline size-3.5 align-[-0.15em] mr-1" />
                         La cantidad por el precio no da {fmtMonto(Number(p.monto) || 0, cab.moneda)}. Revisa la cantidad.
+                      </p>
+                    )}
+                    {info && !info.fuerte && (
+                      <p className="text-[11px] text-cacao-soft">
+                        Queda a {fmtPrecio(info.ahora.precio)} / {info.ahora.unidad}
+                        {info.antes && (
+                          <>
+                            {" "}(antes {fmtPrecio(info.antes.precio)} / {info.antes.unidad})
+                          </>
+                        )}
                       </p>
                     )}
                     {info?.fuerte && (

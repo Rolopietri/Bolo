@@ -539,8 +539,8 @@ async function insertarCompras(inputs: CompraInput[]): Promise<Compra[]> {
 }
 
 /**
- * Edita una compra. En la base, `reemplazar_compra` borra y vuelve a insertar
- * en una sola transacción: si el insert falla, la compra original sigue.
+ * Edita una compra. En la base, `reemplazar_compra` actualiza el mismo renglón
+ * y mueve el stock por la diferencia (no borra para volver a insertar).
  * Sin esa función (SQL aún no corrido), se inserta primero y se borra después,
  * y si el borrado falla se deshace el insert. Nunca se borra antes de saber
  * que la nueva entró.
