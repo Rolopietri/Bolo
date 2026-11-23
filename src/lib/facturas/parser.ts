@@ -1235,7 +1235,9 @@ export function mismoNumeroFactura(a: string | undefined | null, b: string | und
     if (!t) return "";
     t = t.replace(/^(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)/, "");
     if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
-    return t.replace(/0+(?=\d)/g, "");
+    // Solo los ceros del inicio de cada bloque ("00012847" → "12847",
+    // "A-0012" → "A-12"). Un cero del medio se queda: "1002" no es "12".
+    return t.replace(/(^|\D)0+(?=\d)/g, "$1");
   };
   const x = a ? norm(a) : "";
   const y = b ? norm(b) : "";
@@ -1283,6 +1285,27 @@ export function parecido(a: string, b: string): number {
   let comunes = 0;
   for (const p of pa) if (pb.has(p)) comunes++;
   return comunes / Math.max(pa.size, pb.size);
+}
+
+/** Cambios para pasar de una palabra a la otra (inserciones, borrados y
+ *  sustituciones). "pepsi" y "pees" quedan en 2; "amarillo" y "blanco", más lejos. */
+function distanciaEdicion(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const fila = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) fila[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let previo = fila[0];
+    fila[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const guardado = fila[j];
+      const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+      fila[j] = Math.min(fila[j] + 1, fila[j - 1] + 1, previo + costo);
+      previo = guardado;
+    }
+  }
+  return fila[b.length];
 }
 
 /** Palabras de una descripción ya normalizada, sin números sueltos (la
@@ -1345,14 +1368,17 @@ export function buscarEquivalencia<T extends { descripcionNorm: string }>(
     const medB = medidaDeNombre(b);
     if (medA && medB && medA !== medB) continue;
     // "QUESO AMARILLO" y "QUESO BLANCO DURO" comparten una palabra, pero cada
-    // uno tiene otra que el otro no tiene. No es el mismo producto: la memoria
-    // no los junta. Una palabra de más que solo está en el lado largo
-    // ("queso blanco" dentro de "queso blanco duro") sí puede ser el mismo.
+    // uno tiene otra que el otro no tiene. No es el mismo producto.
+    // Un error de OCR de una o dos letras sí es la misma palabra
+    // ("PEPSI" / "Pees"). Una palabra de más solo en el lado largo
+    // ("queso blanco" dentro de "queso blanco duro") no alcanza para separarlos.
     const distintiva = (w: string) => w.length >= 4 && !/^\d/.test(w);
     const da = a.filter(distintiva);
     const db = b.filter(distintiva);
-    const soloA = da.filter((w) => !db.includes(w));
-    const soloB = db.filter((w) => !da.includes(w));
+    const cerca = (palabra: string, otras: string[]) =>
+      otras.some((o) => distanciaEdicion(palabra, o) <= 2);
+    const soloA = da.filter((w) => !cerca(w, db));
+    const soloB = db.filter((w) => !cerca(w, da));
     if (soloA.length > 0 && soloB.length > 0) continue;
     const sa = new Set(a);
     const sb = new Set(b);

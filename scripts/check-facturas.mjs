@@ -731,6 +731,9 @@ igual("numero vacio no coincide", mismoNumeroFactura("", "00012847"), false);
 igual("A-0012 es A-12", mismoNumeroFactura("A-0012", "A-12"), true);
 igual("N° 3391 es 3391", mismoNumeroFactura("N° 3391", "3391"), true);
 igual("3.391 es 3391", mismoNumeroFactura("3.391", "3391"), true);
+igual("1002 no es 12", mismoNumeroFactura("1002", "12"), false);
+igual("1002 es 1002", mismoNumeroFactura("1002", "01002"), true);
+igual("ceros iniciales de cada bloque", mismoNumeroFactura("A-0012", "A-12"), true);
 igual(
   "nota partida en dos renglones",
   parseFactura("QA VERDURAS\nRIF J-40987654-1\nNOTA DE ENTREGA\nN° 3391\nTOTAL $ 12,46").numero,
@@ -865,6 +868,13 @@ igual(
   "queso amarillo no es queso blanco duro",
   buscarEquivalencia("QUESO AMARILLO", [{ descripcionNorm: "queso blanco duro", insumoId: "blanco" }]),
   null,
+);
+igual(
+  "ocr pepsi y pees es el mismo producto",
+  buscarEquivalencia("PEPSI LIGHT LATA 355X24 UND", [
+    { descripcionNorm: normalizarDescripcion("Pees LIGHT LATA 355X24 UND"), insumoId: "pepsi" },
+  ])?.insumoId,
+  "pepsi",
 );
 igual(
   "queso blanco si cabe en queso blanco duro",
