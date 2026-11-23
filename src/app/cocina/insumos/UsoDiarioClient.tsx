@@ -8,7 +8,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { TIPOS_PERDIDA, type Insumo, type Receta } from "@/lib/types";
+import { stockFisicoTotal, TIPOS_PERDIDA, type Insumo, type Receta } from "@/lib/types";
 import { listInsumos, listComprasRango } from "@/lib/data/cocina";
 import { listRecetas } from "@/lib/data/recetas";
 import { calcularConsumoReceta } from "@/lib/data/ventas";
@@ -415,7 +415,13 @@ function VistaInsumo({
             v: usoTotalDia(pico) > 0 ? fmtCant(usoTotalDia(pico), u) : "—",
             s: usoTotalDia(pico) > 0 ? fDia(pico.fecha, hoy) : null,
           },
-          { t: "Stock hoy", v: fmtCant(insumo.stockTotal, u), s: null },
+          insumo.seProcesa
+            ? {
+                t: "Stock hoy",
+                v: fmtCant(stockFisicoTotal(insumo), u),
+                s: `crudo ${fmtCant(insumo.stockTotal, u)} · procesado ${fmtCant(insumo.stockProcesado ?? 0, u)}`,
+              }
+            : { t: "Stock hoy", v: fmtCant(insumo.stockTotal, u), s: null },
         ].map((x) => (
           <div key={x.t} className="py-3">
             <div className="text-[10px] uppercase tracking-widest text-cacao-mute">{x.t}</div>

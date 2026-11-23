@@ -5,9 +5,12 @@
 // libre es total − reservado y nunca baja de 0; libre en 0 es agotado;
 // libre mayor que 0 y menor que el mínimo es bajo.
 //
-// Los días no se inventan. Salen del consumo ya registrado (ventas, mermas
-// de producción y pérdidas) en una ventana fija. Hacen falta salidas en al
+// Los días no se inventan. Salen del consumo ya registrado (ventas y mermas
+// reales, no el paso de crudo a procesado) dentro de la ventana. El ritmo es
+// el mismo que "Promedio por día" de la ficha: lo usado ÷ los días en que sí
+// hubo uso, no repartido entre los días quietos. Hacen falta salidas en al
 // menos dos días distintos. Si no, queda "Sin datos de consumo".
+// El número de días se redondea al entero más cercano, igual para todos.
 //
 // Módulo puro, sin base ni navegador, para probarlo con Node.
 
@@ -33,6 +36,10 @@ export type InsumoStock = {
   categoria: string;
   unidadBase: string;
   stockTotal: number;
+  /** Procesado listo. En un insumo que se procesa, "Queda" es crudo + esto. */
+  stockProcesado?: number;
+  /** true = la venta descuenta el procesado (Fase D) y "Queda" suma los dos. */
+  seProcesa?: boolean;
   stockComprometido: number;
   stockMinimo: number | null;
   precioBaseUsd: number | null;
@@ -146,6 +153,23 @@ const EPS = 1e-9;
 /** Igual que `stockLibre` en types.ts: total − reservado, nunca negativo. */
 function stockLibreDe(i: { stockTotal: number; stockComprometido: number }): number {
   return Math.max(0, i.stockTotal - i.stockComprometido);
+}
+
+/**
+ * Stock que divide "Alcanza para". Es el mismo número que "Queda":
+ * crudo + procesado si el insumo se procesa (la venta sale del procesado
+ * y el crudo sigue hasta que se procesa); si no, el libre.
+ */
+export function stockParaAlcanzar(i: {
+  stockTotal: number;
+  stockComprometido: number;
+  stockProcesado?: number | null;
+  seProcesa?: boolean;
+}): number {
+  if (i.seProcesa) {
+    return Math.max(0, i.stockTotal) + Math.max(0, i.stockProcesado ?? 0);
+  }
+  return stockLibreDe(i);
 }
 
 /** Igual que `normalizarBusqueda` en text.ts, para que "azucar" encuentre "Azúcar". */
@@ -535,17 +559,21 @@ export function resumirConsumo(
 }
 
 export function estimarDiasAgotar(input: {
+  /** Lo que queda, en la misma unidad que `consumido`. */
   stockLibre: number;
   consumido: number;
   diasConConsumo: number;
+  /**
+   * No se usa para el ritmo. La ventana ya está aplicada en `consumido`
+   * (solo entran esos días). El promedio es por día con uso.
+   */
   ventanaDias?: number;
 }): EstimacionDias {
   if (!(input.stockLibre > 0)) return { estado: "agotado" };
-  const ventana = input.ventanaDias ?? VENTANA_CONSUMO_DIAS;
-  if (!(input.consumido > EPS) || input.diasConConsumo < MIN_DIAS_CON_CONSUMO || !(ventana > 0)) {
+  if (!(input.consumido > EPS) || input.diasConConsumo < MIN_DIAS_CON_CONSUMO) {
     return { estado: "sin_datos" };
   }
-  const promedio = input.consumido / ventana;
+  const promedio = input.consumido / input.diasConConsumo;
   if (!(promedio > EPS)) return { estado: "sin_datos" };
   return {
     estado: "estimado",
@@ -562,6 +590,7 @@ export function seAgotaPronto(
   return est.estado === "estimado" && est.dias <= umbral;
 }
 
+/** Entero más cercano. No hay un recorte hacia abajo: 47,6 días se lee 48. */
 export function textoDias(est: EstimacionDias): string {
   if (est.estado === "agotado") return "Agotado";
   if (est.estado === "sin_datos") return "Sin datos de consumo";
@@ -576,7 +605,7 @@ export function lineaStock(i: InsumoStock, consumo?: ConsumoInsumo): LineaStock 
   const costo = costoPorUnidadBase(i);
   const fisico = i.stockTotal > 0 ? i.stockTotal : 0;
   const dias = estimarDiasAgotar({
-    stockLibre: libre,
+    stockLibre: stockParaAlcanzar(i),
     consumido: consumo?.total ?? 0,
     diasConConsumo: consumo?.diasConConsumo ?? 0,
   });

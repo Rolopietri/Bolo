@@ -6,7 +6,7 @@
 // el movimiento del insumo, no su costo.
 
 import { useEffect } from "react";
-import type { Insumo } from "@/lib/types";
+import { stockFisicoTotal, type Insumo } from "@/lib/types";
 import { displayCantidad } from "@/lib/units";
 import { UsoDiarioClient } from "./UsoDiarioClient";
 import { ProcesamientosClient } from "./ProcesamientosClient";
@@ -50,7 +50,19 @@ export function DetalleInsumo({
             <div className="min-w-0">
               <h2 className="font-cinzel text-xl text-cacao truncate">{insumo.nombre}</h2>
               <p className="text-xs text-cacao-soft">
-                {insumo.unidadCompra} · stock {displayCantidad(insumo.stockTotal, insumo.unidadBase)}
+                {insumo.seProcesa ? (
+                  <>
+                    Crudo {displayCantidad(insumo.stockTotal, insumo.unidadBase)}
+                    {" · "}
+                    procesado {displayCantidad(insumo.stockProcesado ?? 0, insumo.unidadBase)}
+                    {" · "}
+                    total {displayCantidad(stockFisicoTotal(insumo), insumo.unidadBase)}
+                  </>
+                ) : (
+                  <>
+                    {insumo.unidadCompra} · stock {displayCantidad(insumo.stockTotal, insumo.unidadBase)}
+                  </>
+                )}
               </p>
             </div>
             <button
