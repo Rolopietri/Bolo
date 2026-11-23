@@ -54,9 +54,13 @@ con `pg_get_functiondef`). Se consolidó así:
   `precio_total_usd`.
 - `reemplazar_compra`: la versión vigente es **`cocina-recupera-iva-editar.sql`**.
   Ordena después de `cocina-recupera-iva-compras.sql` (ahí la función todavía
-  borra y vuelve a insertar). La nueva actualiza el mismo renglón y mueve el
-  stock por la diferencia, sin `greatest(0, …)`. No borra datos. Antes de
-  correr cualquiera de los dos en una base que ya tiene esas funciones, compara:
+  borra y vuelve a insertar). La nueva actualiza el mismo renglón, bloquea la
+  compra y el insumo (`for update`) antes de la diferencia, y mueve el stock
+  por esa diferencia. No usa `greatest(0, …)` en la edición y no borra datos.
+  El execute queda solo para `authenticated` (se revoca de `public` y `anon`).
+  El mismo archivo vuelve a crear `compra_vincula_proveedor` para que también
+  corra al cambiar el proveedor. Antes de correrlo en una base que ya tiene
+  esas funciones, compara:
 
   ```sql
   select p.proname, pg_get_functiondef(p.oid)
@@ -66,8 +70,18 @@ con `pg_get_functiondef`). Se consolidó así:
     and p.proname in (
       'apply_compra_to_insumo',
       'revertir_compra_de_insumo',
-      'reemplazar_compra'
+      'reemplazar_compra',
+      'vincular_proveedor_insumo'
     );
+
+  select tgname, pg_get_triggerdef(t.oid)
+  from pg_trigger t
+  join pg_class c on c.oid = t.tgrelid
+  join pg_namespace n on n.oid = c.relnamespace
+  where n.nspname = 'public'
+    and c.relname = 'compras'
+    and tgname = 'compra_vincula_proveedor'
+    and not t.tgisinternal;
   ```
 - Las columnas (`alter table … add column`) de los archivos `cocina-pos-*` y
   `cocina-subrecetas.sql` **sí son necesarias** — solo se quitaron de ahí las

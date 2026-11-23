@@ -1,12 +1,16 @@
 -- Editar una compra mueve el stock por la DIFERENCIA.
 -- Corre DESPUÉS de cocina-recupera-iva-compras.sql (ordena después en
--- alfabético: "editar" va luego de "compras"). Solo reemplaza
--- reemplazar_compra. No borra filas ni datos.
+-- alfabético: "editar" va luego de "compras"). Reemplaza reemplazar_compra
+-- y el trigger que vincula el proveedor. No borra filas ni datos.
 --
 -- Antes: la función borraba la compra y la volvía a insertar. El trigger de
 -- borrado hace greatest(0, stock − cantidad entera). Si ya se había consumido
 -- parte (stock 2, compra de 5), eso deja el stock en 0 y el insert suma 6:
 -- queda 6. Tiene que quedar 3 (2 + (6 − 5)).
+--
+-- También: el execute queda solo en authenticated, y compra_vincula_proveedor
+-- corre al insertar y al cambiar el proveedor. No toca greatest(0, …) del
+-- borrado: si el stock puede quedar negativo lo decide el negocio.
 --
 -- Antes de pegarlo en una base que ya tiene la función, compara:
 --
@@ -17,8 +21,18 @@
 --     and p.proname in (
 --       'apply_compra_to_insumo',
 --       'revertir_compra_de_insumo',
---       'reemplazar_compra'
+--       'reemplazar_compra',
+--       'vincular_proveedor_insumo'
 --     );
+--
+--   select tgname, pg_get_triggerdef(t.oid)
+--   from pg_trigger t
+--   join pg_class c on c.oid = t.tgrelid
+--   join pg_namespace n on n.oid = c.relnamespace
+--   where n.nspname = 'public'
+--     and c.relname = 'compras'
+--     and tgname = 'compra_vincula_proveedor'
+--     and not t.tgisinternal;
 
 create or replace function public.reemplazar_compra(
   p_id uuid,
@@ -60,15 +74,27 @@ declare
   v_unit numeric;
   v_factor numeric;
 begin
-  select * into v_old from public.compras where id = p_id;
+  -- Se bloquean la compra y el insumo antes de leer cantidades: dos ediciones
+  -- a la vez no calculan la diferencia sobre un stock que ya cambió.
+  select * into v_old from public.compras where id = p_id for update;
   if not found then
     raise exception 'No está la compra a editar';
   end if;
 
+  if v_old.insumo_id is distinct from p_insumo_id
+     and v_old.insumo_id < p_insumo_id then
+    perform 1 from public.insumos where id = v_old.insumo_id for update;
+  end if;
+
   select coalesce(cantidad_por_compra, 1) into v_factor_nuevo
-    from public.insumos where id = p_insumo_id;
+    from public.insumos where id = p_insumo_id for update;
   if v_factor_nuevo is null then
     v_factor_nuevo := 1;
+  end if;
+
+  if v_old.insumo_id is distinct from p_insumo_id
+     and v_old.insumo_id > p_insumo_id then
+    perform 1 from public.insumos where id = v_old.insumo_id for update;
   end if;
 
   v_factor_viejo := coalesce(v_old.cantidad_por_compra_snap, 1);
@@ -189,8 +215,22 @@ begin
 end;
 $$;
 
+revoke execute on function public.reemplazar_compra(
+  uuid, uuid, uuid, date, numeric, numeric, numeric, numeric, text, text, text, numeric, boolean, date, numeric, numeric, numeric, numeric
+) from public, anon;
+
 grant execute on function public.reemplazar_compra(
   uuid, uuid, uuid, date, numeric, numeric, numeric, numeric, text, text, text, numeric, boolean, date, numeric, numeric, numeric, numeric
 ) to authenticated;
+
+-- Al insertar, la compra vincula el proveedor con el insumo. Editar ya no
+-- borra e inserta, así que un cambio de proveedor no disparaba ese vínculo.
+-- El mismo trigger corre también al actualizar el proveedor (o el insumo, o
+-- la fecha, que es la que guarda ultima_compra).
+drop trigger if exists compra_vincula_proveedor on public.compras;
+create trigger compra_vincula_proveedor
+  after insert or update of proveedor_id, insumo_id, fecha
+  on public.compras
+  for each row execute function public.vincular_proveedor_insumo();
 
 notify pgrst, 'reload schema';
