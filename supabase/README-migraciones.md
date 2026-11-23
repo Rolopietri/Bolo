@@ -51,15 +51,23 @@ con `pg_get_functiondef`). Se consolidó así:
   `cocina-compra-zzzz-revertir-precio-anterior.sql` (el revertir anterior),
   así que al reaplicar en orden alfabético es la que gana. El precio del
   insumo sale de `costo_usd` si la compra lo trae; si no, de
-  `precio_total_usd`. Antes de correrlo en una base que ya tiene esas
-  funciones, compara con:
+  `precio_total_usd`.
+- `reemplazar_compra`: la versión vigente es **`cocina-recupera-iva-editar.sql`**.
+  Ordena después de `cocina-recupera-iva-compras.sql` (ahí la función todavía
+  borra y vuelve a insertar). La nueva actualiza el mismo renglón y mueve el
+  stock por la diferencia, sin `greatest(0, …)`. No borra datos. Antes de
+  correr cualquiera de los dos en una base que ya tiene esas funciones, compara:
 
   ```sql
   select p.proname, pg_get_functiondef(p.oid)
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public'
-    and p.proname in ('apply_compra_to_insumo', 'revertir_compra_de_insumo');
+    and p.proname in (
+      'apply_compra_to_insumo',
+      'revertir_compra_de_insumo',
+      'reemplazar_compra'
+    );
   ```
 - Las columnas (`alter table … add column`) de los archivos `cocina-pos-*` y
   `cocina-subrecetas.sql` **sí son necesarias** — solo se quitaron de ahí las
