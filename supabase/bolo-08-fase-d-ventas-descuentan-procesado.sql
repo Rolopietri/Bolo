@@ -9,6 +9,10 @@
 -- venta. El resto (recetas, swaps "sin X" / cambios, extras, motivo del libro)
 -- queda idéntico. Los triggers no se tocan: se re-crean las funciones.
 --
+-- Este archivo ordena ANTES de cocina-zzz-motor-canonico.sql. La copia que
+-- gana al reaplicar en orden alfabético es la de ese archivo (mismas dos
+-- funciones, con se_procesa). Si se cambia la Fase D, hay que cambiarla ahí.
+--
 -- Nota de diseño: al procesado se le aplica greatest(0, …) igual que al crudo;
 -- si vendes más de lo que procesaste, el procesado queda en 0 (no toca el crudo:
 -- el crudo hay que procesarlo antes de poder venderlo).
