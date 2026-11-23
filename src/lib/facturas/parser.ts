@@ -785,18 +785,40 @@ export function parseFactura(texto: string): FacturaLeida {
   // "N° de Control: 00-…" y también "CONTROL N° 00-…" (el número va después).
   const RE_CONTROL_DOC =
     /control\b[\s:.#°º*-]*(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?[\s:.#°º*-]*([A-Z]{0,4}\d[\d-]{2,})/i;
-  for (const l of lineas) {
+  // "3.391": el OCR a veces parte 3391 con un punto de miles. No es un decimal
+  // (esos llevan 1 o 2 cifras) ni una fecha.
+  const RE_NUM_MILES =
+    /(?:factura|invoice|inv\.?|nota\s+de\s+(?:entrega|cr[eé]dito|d[eé]bito)|orden\s+de\s+entrega|boleta|recibo|receipt|ticket|comprobante)\s*(?:electr[oó]nica\s*)?(?:de\s+venta\s*)?(?:n[°ºo.*\s]*|nro\.?|num\.?|no\.?|#)?\s*:?\s*(\d{1,3}(?:\.\d{3})+)(?!\d)/i;
+  const esNumeroSuelto = (s: string) =>
+    /^(?:n[°ºo.*\s]*|nro\.?|num(?:ero)?\.?|no\.?|#)?\s*:?\s*(?:\d{1,3}(?:[.\s]\d{3})+|\d{3,})\s*$/i.test(s);
+  const lineasNum = lineas.slice();
+  for (let i = 0; i < lineasNum.length - 1; i++) {
+    const l = lineasNum[i];
+    const sig = lineasNum[i + 1];
+    // El OCR parte "NOTA DE ENTREGA" y "N° 3391" en dos renglones. Antes se
+    // leían juntos; si el número queda en la línea de abajo, el campo salía vacío.
+    if (
+      /(?:nota\s+de\s+entrega|factura|invoice|boleta|recibo|ticket|comprobante)/i.test(l) &&
+      !/\d[\d-]{2,}/.test(l) &&
+      esNumeroSuelto(sig)
+    ) {
+      lineasNum[i] = `${l} ${sig}`;
+    }
+  }
+  for (const l of lineasNum) {
     if (!out.numeroControl) {
       const c = l.match(RE_CONTROL_DOC);
       if (c) out.numeroControl = c[1];
     }
     if (out.numero) continue;
+    // Se quita solo la cláusula de control, para no perder el N° de factura
+    // cuando comparten renglón. El número de la nota queda en lo que sobre.
     const sinControl = l.replace(
       /control\b[\s:.#°º*-]*(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)?[\s:.#°º*-]*[A-Z]{0,4}\d[\d-]{2,}/gi,
       " ",
     );
-    const m = sinControl.match(RE_NUM_DOC);
-    if (m) out.numero = m[1].replace(/^-/, "");
+    const m = sinControl.match(RE_NUM_DOC) ?? sinControl.match(RE_NUM_MILES);
+    if (m) out.numero = m[1].replace(/\./g, "").replace(/^-/, "");
   }
 
   // Fecha: cada fecha se juzga por su etiqueta, no por la línea entera (en una
@@ -1205,16 +1227,51 @@ export function totalProductos(f: Pick<FacturaLeida, "total" | "igtf">): number 
 }
 
 /** El mismo N° de factura, aunque uno traiga ceros de más ("00012847" y
- *  "12847", "A-0012" y "A-12"). Vacío no coincide con nada. */
+ *  "12847", "A-0012" y "A-12"), el prefijo "N°" o un punto de miles que el
+ *  OCR metió ("3.391" y "3391"). Vacío no coincide con nada. */
 export function mismoNumeroFactura(a: string | undefined | null, b: string | undefined | null): boolean {
   const norm = (s: string) => {
-    const t = s.trim().toLowerCase().replace(/\s+/g, "");
+    let t = s.trim().toLowerCase().replace(/\s+/g, "");
     if (!t) return "";
-    return t.replace(/0+(?=\d)/g, "");
+    t = t.replace(/^(?:n[°ºo.*]*|nro\.?|num(?:ero)?\.?|no\.?|#)/, "");
+    if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, "");
+    // Solo los ceros del inicio de cada bloque ("00012847" → "12847",
+    // "A-0012" → "A-12"). Un cero del medio se queda: "1002" no es "12".
+    return t.replace(/(^|\D)0+(?=\d)/g, "$1");
   };
   const x = a ? norm(a) : "";
   const y = b ? norm(b) : "";
   return x.length > 0 && x === y;
+}
+
+/** Compra ya registrada con este N° dentro del negocio.
+ *  El proveedor afina la búsqueda, pero no la esconde: si el número coincide
+ *  y es largo (4 cifras o más), el aviso sale aunque el proveedor no sea el
+ *  mismo. Un número corto ("12") solo avisa si el proveedor coincide, porque
+ *  esos se repiten entre proveedores. */
+export function compraConMismaFactura<T extends {
+  id?: string;
+  numeroFactura?: string | null;
+  proveedorId?: string | null;
+}>(
+  compras: readonly T[],
+  numero: string | null | undefined,
+  proveedorId: string | null | undefined,
+  exceptoId?: string | null,
+): { compra: T; mismoProveedor: boolean } | null {
+  const num = (numero ?? "").trim();
+  if (!num) return null;
+  const mismas = compras.filter(
+    (c) => c.id !== exceptoId && mismoNumeroFactura(c.numeroFactura, num),
+  );
+  if (mismas.length === 0) return null;
+  const delMismo = mismas.find(
+    (c) => !proveedorId || !c.proveedorId || c.proveedorId === proveedorId,
+  );
+  if (delMismo) return { compra: delMismo, mismoProveedor: true };
+  const digitos = num.replace(/\D/g, "").replace(/^0+/, "");
+  if (digitos.length < 4) return null;
+  return { compra: mismas[0], mismoProveedor: false };
 }
 
 /** Qué tan parecidas son dos descripciones (0 a 1), por palabras en común.
@@ -1228,6 +1285,27 @@ export function parecido(a: string, b: string): number {
   let comunes = 0;
   for (const p of pa) if (pb.has(p)) comunes++;
   return comunes / Math.max(pa.size, pb.size);
+}
+
+/** Cambios para pasar de una palabra a la otra (inserciones, borrados y
+ *  sustituciones). "pepsi" y "pees" quedan en 2; "amarillo" y "blanco", más lejos. */
+function distanciaEdicion(a: string, b: string): number {
+  if (a === b) return 0;
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const fila = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) fila[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    let previo = fila[0];
+    fila[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const guardado = fila[j];
+      const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+      fila[j] = Math.min(fila[j] + 1, fila[j - 1] + 1, previo + costo);
+      previo = guardado;
+    }
+  }
+  return fila[b.length];
 }
 
 /** Palabras de una descripción ya normalizada, sin números sueltos (la
@@ -1289,6 +1367,19 @@ export function buscarEquivalencia<T extends { descripcionNorm: string }>(
     const medA = medidaDeNombre(a);
     const medB = medidaDeNombre(b);
     if (medA && medB && medA !== medB) continue;
+    // "QUESO AMARILLO" y "QUESO BLANCO DURO" comparten una palabra, pero cada
+    // uno tiene otra que el otro no tiene. No es el mismo producto.
+    // Un error de OCR de una o dos letras sí es la misma palabra
+    // ("PEPSI" / "Pees"). Una palabra de más solo en el lado largo
+    // ("queso blanco" dentro de "queso blanco duro") no alcanza para separarlos.
+    const distintiva = (w: string) => w.length >= 4 && !/^\d/.test(w);
+    const da = a.filter(distintiva);
+    const db = b.filter(distintiva);
+    const cerca = (palabra: string, otras: string[]) =>
+      otras.some((o) => distanciaEdicion(palabra, o) <= 2);
+    const soloA = da.filter((w) => !cerca(w, db));
+    const soloB = db.filter((w) => !cerca(w, da));
+    if (soloA.length > 0 && soloB.length > 0) continue;
     const sa = new Set(a);
     const sb = new Set(b);
     let comunes = 0;

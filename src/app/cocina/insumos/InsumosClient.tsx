@@ -32,6 +32,7 @@ import {
   canonica,
   displayCantidad,
   getUnit,
+  lineasPrecioInsumo,
   opcionesCantidad,
   precioLegible,
 } from "@/lib/units";
@@ -2089,19 +2090,16 @@ function PrecioCelda({
 
   return (
     <>
-      <div className="text-sm text-cacao">
-        {insumo.precioCompraUsd !== null
-          ? `$${insumo.precioCompraUsd.toFixed(2)} / ${insumo.unidadCompra}`
-          : "—"}
-      </div>
-      {insumo.precioBaseUsd !== null && (
-        <div className="text-xs text-cacao-soft">
-          {(() => {
-            const p = precioLegible(insumo.precioBaseUsd, insumo.unidadBase);
-            return `$${p.precio < 0.01 ? p.precio.toFixed(5) : p.precio.toFixed(2)} / ${p.unidad}`;
-          })()}
-        </div>
-      )}
+      {(() => {
+        const lineas = lineasPrecioInsumo(insumo);
+        if (lineas.length === 0) return <div className="text-sm text-cacao">—</div>;
+        return (
+          <>
+            <div className="text-sm text-cacao">{lineas[0]}</div>
+            {lineas[1] && <div className="text-xs text-cacao-soft">{lineas[1]}</div>}
+          </>
+        );
+      })()}
       {insumo.precioCompraUsd !== null &&
         (nivel === "revisar" || nivel === "viejo") && (
         <div className="mt-1">

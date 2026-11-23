@@ -1,7 +1,7 @@
 "use client";
 
 import { limpiarDecimal } from "@/lib/decimal";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   MODALIDADES_PAGO,
@@ -37,8 +37,16 @@ import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
-import { mismoNumeroFactura } from "@/lib/facturas/parser";
-import { desgloseIva, fiscalAlGuardar, modoIvaDeCompra, porcIvaDeCompra, type FiscalGuardado } from "@/lib/iva-compra";
+import { compraConMismaFactura } from "@/lib/facturas/parser";
+import {
+  desgloseIva,
+  fiscalAlGuardar,
+  modoIvaDeCompra,
+  notaIvaAutomatica,
+  notasConIva,
+  porcIvaDeCompra,
+  type FiscalGuardado,
+} from "@/lib/iva-compra";
 import { getCocinaConfig } from "@/lib/data/cocinaConfig";
 import { EscanearFactura } from "./_EscanearFactura";
 
@@ -148,6 +156,9 @@ export function ComprasClient() {
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
   // Edición de una compra existente (null = alta nueva).
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Se marca en el mismo instante de abrir la edición, antes de que vuelva
+  // la tasa del día: si no, ese pedido pisa la tasa y los Bs guardados.
+  const editandoRef = useRef<string | null>(null);
   // Alta de proveedor en línea desde el desplegable.
   const [creandoProveedor, setCreandoProveedor] = useState(false);
   const [nuevoProveedor, setNuevoProveedor] = useState("");
@@ -225,15 +236,18 @@ export function ComprasClient() {
   // La tasa BCV sugerida sigue la FECHA de la compra, no la de hoy: al cambiar la
   // fecha se carga la tasa vigente de ese día. Al AGREGAR (no editar) re-aplica esa
   // tasa a la modalidad actual, para que el convertidor use la tasa correcta del día.
+  // En edición no se tocan la tasa ni los Bs: son los de esa compra.
   useEffect(() => {
     if (!form.fecha) return;
     let cancel = false;
+    const fechaPedida = form.fecha;
     (async () => {
-      const t = await getTasaBcvPorFecha(form.fecha).catch(() => null);
+      const t = await getTasaBcvPorFecha(fechaPedida).catch(() => null);
       if (cancel || !t) return;
       setTasa(t);
-      if (editingId) return; // en edición se respeta la tasa guardada de la compra
       setForm((f) => {
+        if (editandoRef.current) return f;
+        if (f.fecha !== fechaPedida) return f;
         const sug = f.modalidadPago === "bcv_euro" ? t.eurBs : f.modalidadPago === "paralela" ? t.paralelaBs : t.usdBs;
         if (!(Number(sug) > 0)) return f;
         const ts = Number(sug);
@@ -249,9 +263,10 @@ export function ComprasClient() {
       });
     })();
     return () => { cancel = true; };
-  }, [form.fecha, editingId]);
+  }, [form.fecha]);
 
   function resetForm() {
+    editandoRef.current = null;
     setForm({ ...emptyForm, fecha: todayISO() });
     setAdding(false);
     setEditingId(null);
@@ -292,11 +307,12 @@ export function ComprasClient() {
     }
   }
 
-  // Abre el formulario para editar. El modo de IVA se deduce del desglose
-  // guardado. Si la compra es vieja y no lo tiene, se abre como "sin IVA" para
-  // no partirle el monto entre 1,16. Mientras no se toque el monto, al guardar
-  // se escriben otra vez la misma base, el mismo IVA y el mismo exento.
+  // Abre el formulario con el modo de IVA, la tasa y los Bs de esa compra.
+  // El modo sale del desglose; si la compra es vieja y no lo tiene, de la nota
+  // ("IVA 16% agregado" abre en Con IVA). Si no hay nada, en Sin IVA, para no
+  // partir el monto. Mientras no se toque el monto, no se le inventa un exento.
   function startEdit(c: Compra) {
+    editandoRef.current = c.id;
     setEscaneando(false);
     setEditingId(c.id);
     setAdding(true);
@@ -387,18 +403,12 @@ export function ComprasClient() {
   // existe (mismo número + proveedor), la nueva línea HEREDA su estado de pago.
   // No tiene sentido que unas líneas de la misma factura estén pagadas y otras
   // por pagar. `facturaLock` = la compra existente que fija ese estado (o null).
-  const facturaLock = useMemo(() => {
-    const num = form.numeroFactura.trim().toLowerCase();
-    if (!num) return null;
-    return (
-      compras.find(
-        (c) =>
-          c.id !== editingId &&
-          mismoNumeroFactura(c.numeroFactura, num) &&
-          (!form.proveedorId || c.proveedorId === form.proveedorId),
-      ) ?? null
-    );
-  }, [compras, editingId, form.numeroFactura, form.proveedorId]);
+  const duplicada = useMemo(
+    () => compraConMismaFactura(compras, form.numeroFactura, form.proveedorId || null, editingId),
+    [compras, editingId, form.numeroFactura, form.proveedorId],
+  );
+  // El estado de pago se hereda solo si es la misma factura del mismo proveedor.
+  const facturaLock = duplicada?.mismoProveedor ? duplicada.compra : null;
 
   // Estado de "pagar después" efectivo: si la factura ya existe, manda su estado.
   const pagarDespuesEfectivo = facturaLock ? !facturaLock.pagada : form.pagarDespues;
@@ -454,8 +464,14 @@ export function ComprasClient() {
     recalculado: desglose,
     original: fiscalCarga ?? undefined,
     intacto: fiscalIntacto,
+    notas: form.notas,
   });
   const costoLinea = fiscalIntacto && fiscal.costoUsd != null ? fiscal.costoUsd : desglose.costo;
+  // Al editar sin tocar el monto, el recuadro muestra los Bs guardados
+  // (3660,64) y no el producto de dólares × tasa (3659,38).
+  const usdPagado = fiscalIntacto && fiscalCarga ? fiscalCarga.precioTotalUsd : usdConIva;
+  const bsPagado =
+    fiscalIntacto && fiscalCarga?.precioTotalBs != null ? fiscalCarga.precioTotalBs : bsConIva;
 
   // Contenido del empaque del insumo elegido (unidades base por unidad de compra).
   const cantPorCompra = insumoSeleccionado?.cantidadPorCompra ?? 0;
@@ -548,11 +564,9 @@ export function ComprasClient() {
     (p) => !proveedoresDelInsumo.some((x) => x.id === p.id),
   );
 
-  // Elige un proveedor. Si la persona lo eligió a mano y la forma de pago
-  // actual no es una que acepta, pasa a otra de la MISMA moneda. Elegir el
-  // insumo sugiere el proveedor solo: no toca la forma de pago (si no, una
-  // compra en Bs vuelve sola a "USD efectivo" cuando el proveedor no tiene
-  // formas en Bs marcadas).
+  // Elige un proveedor. La forma de pago no cambia: "USD divisa" se queda en
+  // divisa aunque el proveedor solo tenga marcado "USD efectivo". Elegir el
+  // insumo tampoco la toca.
   function elegirProveedor(id: string, opts?: { desdeInsumo?: boolean }) {
     setForm((f) => {
       const p = proveedores.find((x) => x.id === id);
@@ -691,13 +705,13 @@ export function ComprasClient() {
       }
     }
 
-    const notaIva =
-      desglose.iva > 0
-        ? `IVA ${Number(form.ivaPorc) || 0}% aparte${recuperaIva ? ", no entra en el costo" : ", entra en el costo"}`
-        : null;
-    const notasFinal = [form.notas.trim() || null, notaIva]
-      .filter(Boolean)
-      .join(" · ");
+    const notaIva = notaIvaAutomatica(
+      form.ivaModo,
+      Number(form.ivaPorc) || 0,
+      recuperaIva,
+      desglose.iva > 0,
+    );
+    const notasFinal = notasConIva(form.notas, notaIva, fiscalIntacto);
 
     const input = {
       insumoId: form.insumoId,
@@ -707,9 +721,9 @@ export function ComprasClient() {
       cantidad: Math.round(cantidadEnCompra * 1e6) / 1e6,
       precioTotalUsd: precioUsd,
       precioTotalBs: precioBs,
-      baseUsd: fiscal.baseUsd,
-      ivaUsd: fiscal.ivaUsd,
-      exentoUsd: fiscal.exentoUsd,
+      baseUsd: fiscal.baseUsd ?? undefined,
+      ivaUsd: fiscal.ivaUsd ?? undefined,
+      exentoUsd: fiscal.exentoUsd ?? undefined,
       costoUsd: fiscal.costoUsd ?? undefined,
       tasaBcvUsada: tasaUsada,
       modalidadPago: form.modalidadPago,
@@ -721,13 +735,10 @@ export function ComprasClient() {
     };
     try {
       if (editingId) {
-        // Editar = borrar + recrear: el trigger revierte el stock/precio de la
-        // vieja y aplica los de la nueva (ajuste por la diferencia). Cambia el id.
+        // La base mueve el stock por la diferencia y deja el mismo id. En la
+        // lista se reemplaza en el mismo lugar: las compras del día no se reordenan.
         const upd = await updateCompra(editingId, input);
-        setCompras((prev) => [
-          upd,
-          ...prev.filter((c) => c.id !== editingId),
-        ]);
+        setCompras((prev) => prev.map((c) => (c.id === editingId ? upd : c)));
       } else {
         const nueva = await createCompra(input);
         setCompras((prev) => [nueva, ...prev]);
@@ -763,7 +774,14 @@ export function ComprasClient() {
 
   // Abre el formulario manual. Prefijamos la tasa BCV $ del día (modalidad
   // default: USD divisa) para que el convertidor Bs↔$ funcione desde el inicio.
+  // Si veníamos de una edición, se suelta: si no, guardar pisaría esa compra.
   function abrirManual() {
+    editandoRef.current = null;
+    setEditingId(null);
+    setFiscalCarga(null);
+    setCreandoProveedor(false);
+    setNuevoProveedor("");
+    setProveedorAuto(false);
     setForm({
       ...emptyForm,
       fecha: todayISO(),
@@ -772,12 +790,13 @@ export function ComprasClient() {
     setAdding(true);
   }
 
-  // Auto-rellenar la tasa del día cuando cambia la modalidad. Todas las
-  // modalidades reciben una tasa sugerida (las de USD usan la BCV $) para que el
-  // convertidor Bs↔$ funcione siempre. Recalcula el monto derivado con la tasa
-  // nueva para que los dos campos queden consistentes.
+  // Auto-rellenar la tasa del día cuando cambia la modalidad, solo en una
+  // compra nueva. Al editar, la tasa guardada se queda: cambiar "USD divisa"
+  // por otra forma no la sustituye por la de hoy. El usuario la cambia en el
+  // campo de la tasa, o con "usar la del día".
   function setModalidad(m: ModalidadPago) {
     setForm((prev) => {
+      if (editandoRef.current) return { ...prev, modalidadPago: m };
       let tasaDef = prev.tasaBcvUsada;
       if (m === "bcv_dolar" && tasa) tasaDef = String(tasa.usdBs);
       else if (m === "bcv_euro" && tasa?.eurBs) tasaDef = String(tasa.eurBs);
@@ -1190,15 +1209,15 @@ export function ComprasClient() {
                 </span>
               )}
             </label>
-            {(usdConIva > 0 || bsConIva > 0) && (
+            {(usdPagado > 0 || bsPagado > 0) && (
               <div className="mt-3 rounded-lg bg-marfil-soft ring-1 ring-marfil px-3 py-2 text-sm">
                 <span className="text-cacao-mute">Lo que se paga: </span>
                 <span className="text-cacao font-medium">
-                  ${usdConIva.toFixed(2)}
+                  ${usdPagado.toFixed(2)}
                 </span>
-                {bsConIva > 0 && tasaNum > 0 && (
+                {bsPagado > 0 && (
                   <span className="text-cacao-soft">
-                    {" · "}Bs {bsConIva.toFixed(2)}
+                    {" · "}Bs {bsPagado.toFixed(2)}
                   </span>
                 )}
                 {desglose.iva > 0 && (
@@ -1298,21 +1317,25 @@ export function ComprasClient() {
               </span>
             </span>
           </label>
-          {facturaLock && (
+          {duplicada && (
             <p className="-mt-1 text-[12px] text-cacao-soft">
               La factura{" "}
               <span className="font-medium text-cacao">
-                {facturaLock.numeroFactura}
+                {duplicada.compra.numeroFactura}
               </span>{" "}
-              ya existe y está{" "}
+              {duplicada.mismoProveedor
+                ? "ya existe y está "
+                : "ya está registrada (con otro proveedor) y está "}
               <span
                 className={`font-medium ${
-                  facturaLock.pagada ? "text-oliva" : "text-terracotta"
+                  duplicada.compra.pagada ? "text-oliva" : "text-terracotta"
                 }`}
               >
-                {facturaLock.pagada ? "pagada" : "por pagar"}
+                {duplicada.compra.pagada ? "pagada" : "por pagar"}
               </span>
-              . Esta línea hereda ese estado (una factura se paga completa).
+              {duplicada.mismoProveedor
+                ? ". Esta línea hereda ese estado (una factura se paga completa)."
+                : "."}
             </p>
           )}
 

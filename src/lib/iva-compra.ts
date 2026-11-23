@@ -62,28 +62,85 @@ export function desgloseIva(input: {
   return { base, iva, exento, pagado, costo };
 }
 
-/** Cómo mostrar una compra ya guardada en el formulario.
- *  Sin desglose (compra vieja) o sin IVA: "exento", para no dividir el monto.
- *  Con base e IVA: "con", porque el campo muestra lo pagado (base + IVA). */
-export function modoIvaDeCompra(c: {
-  baseUsd?: number;
-  ivaUsd?: number;
-  exentoUsd?: number;
-}): "con" | "sin" | "exento" {
-  const tiene = c.baseUsd != null || c.ivaUsd != null || c.exentoUsd != null;
-  if (!tiene) return "exento";
-  const base = c.baseUsd ?? 0;
-  const iva = c.ivaUsd ?? 0;
-  if (iva > 0.0001 && base > 0) return "con";
-  return "exento";
+const RE_NOTA_IVA = /IVA\s+(\d+(?:[.,]\d+)?)\s*%\s*(agregado|incluido|aparte)?/i;
+
+/** Lo que dice la nota automática ("IVA 16% agregado", "incluido", "aparte").
+ *  Las compras viejas no tienen base/IVA/exento: la nota es el único rastro. */
+function modoDeNota(notas?: string | null): ModoIva | null {
+  const m = notas?.match(RE_NOTA_IVA);
+  if (!m) return null;
+  if (!m[2] || /agregado|incluido/i.test(m[2])) return "con";
+  return "sin";
 }
 
-/** Porcentaje que sale de la base y el IVA guardados, o 16 si no hay. */
-export function porcIvaDeCompra(c: { baseUsd?: number; ivaUsd?: number }): string {
+function porcDeNota(notas?: string | null): string | null {
+  const m = notas?.match(RE_NOTA_IVA);
+  return m ? m[1].replace(",", ".") : null;
+}
+
+/** Cómo mostrar una compra ya guardada en el formulario.
+ *  Con base e IVA: "con", porque el campo muestra lo pagado (base + IVA).
+ *  Sin esas columnas, se lee la nota ("IVA 16% agregado" abre en Con IVA).
+ *  Si no hay nada de eso: "exento", para no dividir el monto. */
+export function modoIvaDeCompra(c: {
+  baseUsd?: number | null;
+  ivaUsd?: number | null;
+  exentoUsd?: number | null;
+  notas?: string | null;
+}): ModoIva {
+  const tiene = c.baseUsd != null || c.ivaUsd != null || c.exentoUsd != null;
+  const deNota = modoDeNota(c.notas);
+  if (tiene) {
+    const base = c.baseUsd ?? 0;
+    const iva = c.ivaUsd ?? 0;
+    if (iva > 0.0001 && base > 0) return "con";
+    // Un guardado anterior dejó exento = total en una compra que la nota
+    // describe como con IVA. El formulario abre como dice la nota.
+    if (iva <= 0.0001 && base <= 0.0001 && deNota) return deNota;
+    return "exento";
+  }
+  return deNota ?? "exento";
+}
+
+/** Porcentaje que sale de la base y el IVA guardados, de la nota, o 16. */
+export function porcIvaDeCompra(c: {
+  baseUsd?: number | null;
+  ivaUsd?: number | null;
+  notas?: string | null;
+}): string {
   const base = c.baseUsd ?? 0;
   const iva = c.ivaUsd ?? 0;
   if (base > 0 && iva > 0) return String(Math.round((iva / base) * 10000) / 100);
-  return "16";
+  return porcDeNota(c.notas) ?? "16";
+}
+
+/** Frase que se agrega a las notas, según el modo elegido.
+ *  "Con IVA" dice incluido; "IVA aparte" dice aparte. Sin IVA, nada. */
+export function notaIvaAutomatica(
+  modo: ModoIva,
+  porc: number,
+  recupera: boolean,
+  hayIva: boolean,
+): string | null {
+  if (modo === "exento" || !hayIva) return null;
+  const como = modo === "con" ? "incluido" : "aparte";
+  const costo = recupera ? "no entra en el costo" : "entra en el costo";
+  const n = Number.isFinite(porc) ? porc : 0;
+  return `IVA ${n}% ${como}, ${costo}`;
+}
+
+/** Notas al guardar. Si no se tocó el monto, se dejan como estaban.
+ *  Si se tocó, la frase automática se reescribe para que diga el modo. */
+export function notasConIva(notas: string, notaIva: string | null, intacto: boolean): string | undefined {
+  const texto = notas.trim();
+  if (intacto) return texto || undefined;
+  const sinAuto = texto
+    .split(" · ")
+    .map((p) => p.trim())
+    .filter((p) => p && !/^IVA\s+\d+(?:[.,]\d+)?\s*%\s+(aparte|incluido|agregado)\b/i.test(p))
+    .join(" · ");
+  if (!notaIva) return sinAuto || undefined;
+  return [sinAuto || null, notaIva].filter(Boolean).join(" · ") || undefined;
 }
 
 /** Precio por kilo a partir del costo de la línea y los kilos comprados. */
@@ -102,29 +159,39 @@ export type FiscalGuardado = {
 };
 
 /** Qué base, IVA, exento y costo se escriben al guardar.
- *  Si la persona no cambió el monto, se conservan los de la compra (editar no
- *  le inventa un IVA). Si los cambió, se recalcula y el costo lo fija la base. */
+ *  Si la persona no cambió el monto, se conservan los de la compra. Una compra
+ *  vieja (sin desglose) no se anota como exento = total: esas columnas siguen
+ *  vacías y el precio sigue saliendo de lo pagado. Si los cambió, se recalcula
+ *  y el costo lo fija la base. */
 export function fiscalAlGuardar(opts: {
   recalculado: DesgloseIva;
   original?: FiscalGuardado;
   intacto: boolean;
-}): { baseUsd: number; ivaUsd: number; exentoUsd: number; costoUsd: number | null } {
+  notas?: string | null;
+}): { baseUsd: number | null; ivaUsd: number | null; exentoUsd: number | null; costoUsd: number | null } {
   if (opts.intacto && opts.original) {
     const o = opts.original;
     const tiene = o.baseUsd != null || o.ivaUsd != null || o.exentoUsd != null;
-    if (tiene) {
+    const notaDiceIva = modoDeNota(opts.notas) === "con";
+    const exentoEsElTotal =
+      (o.ivaUsd ?? 0) <= 0.0001 &&
+      (o.baseUsd ?? 0) <= 0.0001 &&
+      o.exentoUsd != null &&
+      Math.abs(o.exentoUsd - o.precioTotalUsd) < 0.02;
+    // Sin columnas, o un exento inventado sobre una nota que dice "IVA agregado".
+    if (!tiene || (exentoEsElTotal && notaDiceIva)) {
       return {
-        baseUsd: o.baseUsd ?? 0,
-        ivaUsd: o.ivaUsd ?? 0,
-        exentoUsd: o.exentoUsd ?? 0,
+        baseUsd: null,
+        ivaUsd: null,
+        exentoUsd: null,
         costoUsd: o.costoUsd ?? o.precioTotalUsd,
       };
     }
     return {
-      baseUsd: 0,
-      ivaUsd: 0,
-      exentoUsd: o.precioTotalUsd,
-      costoUsd: o.precioTotalUsd,
+      baseUsd: o.baseUsd ?? 0,
+      ivaUsd: o.ivaUsd ?? 0,
+      exentoUsd: o.exentoUsd ?? 0,
+      costoUsd: o.costoUsd ?? o.precioTotalUsd,
     };
   }
   return {
