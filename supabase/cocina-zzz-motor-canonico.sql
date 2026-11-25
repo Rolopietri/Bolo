@@ -13,8 +13,9 @@
 -- otros de cocina, así estas definiciones ganan al reaplicar el repo en orden
 -- alfabético.
 --
--- Fase D (bolo-08): descontar_stock_por_venta y revertir_stock_por_venta
--- mueven stock_procesado (no el crudo) cuando el insumo tiene se_procesa.
+-- Fase D (bolo-08) y BOLO-10: descontar_stock_por_venta y revertir_stock_por_venta
+-- mueven stock_procesado (EN USO) cuando el insumo se procesa o se usa por
+-- lotes; si EN USO no alcanza, el resto sale del almacén con un aviso.
 -- bolo-08-fase-d-ventas-descuentan-procesado.sql ordena ANTES (la b va antes
 -- que la c). Si la Fase D viviera solo ahí, reaplicar los SQL en orden
 -- alfabético la pisaría con la versión de este archivo sin se_procesa.
@@ -36,7 +37,69 @@
 --
 -- Idempotente (CREATE OR REPLACE). Ver README-migraciones.md.
 
--- ─── descontar_stock_por_venta (Fase D: procesado si se_procesa) ────────
+-- ─── Bolsillo de cada insumo en una venta (BOLO-10) ─────────────────────
+-- Un insumo que se procesa (se_procesa) o que se saca por lotes
+-- (se_usa_por_lotes) se vende desde lo que está EN USO (stock_procesado).
+-- Si EN USO no alcanza, el resto sale del almacén (stock_actual) y queda un
+-- aviso en avisos_inventario para confirmar que eso pasó en la cocina y no
+-- fue un error de la venta. Los demás insumos salen del almacén como siempre.
+create or replace function public._venta_descontar_insumo(p_insumo uuid, p_qty numeric, p_venta uuid)
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_lotes boolean; v_uso numeric; v_de_uso numeric; v_resto numeric;
+begin
+  if p_insumo is null or p_qty is null or p_qty <= 0 then return; end if;
+  select coalesce(se_procesa, false) or coalesce(se_usa_por_lotes, false), coalesce(stock_procesado, 0)
+    into v_lotes, v_uso from public.insumos where id = p_insumo for update;
+  if not found then return; end if;
+  if not v_lotes then
+    update public.insumos set stock_actual = greatest(0, coalesce(stock_actual, 0) - p_qty) where id = p_insumo;
+    return;
+  end if;
+  v_de_uso := least(v_uso, p_qty);
+  v_resto := p_qty - v_de_uso;
+  update public.insumos
+     set stock_procesado = v_uso - v_de_uso,
+         stock_actual = case when v_resto > 0 then greatest(0, coalesce(stock_actual, 0) - v_resto) else stock_actual end
+   where id = p_insumo;
+  if v_resto > 0.00005 and p_venta is not null then
+    insert into public.avisos_inventario (insumo_id, venta_id, tipo, cantidad)
+    values (p_insumo, p_venta, 'venta_sin_uso', v_resto);
+  end if;
+end $$;
+
+-- Lo inverso al borrar una venta: lo que salió del almacén (según su aviso)
+-- vuelve al almacén; el resto vuelve a EN USO. El aviso se borra.
+create or replace function public._venta_reponer_insumo(p_insumo uuid, p_qty numeric, p_venta uuid)
+returns void language plpgsql security definer set search_path = public, pg_temp as $$
+declare v_lotes boolean; v_alm numeric := 0;
+begin
+  if p_insumo is null or p_qty is null or p_qty <= 0 then return; end if;
+  select coalesce(se_procesa, false) or coalesce(se_usa_por_lotes, false)
+    into v_lotes from public.insumos where id = p_insumo for update;
+  if not found then return; end if;
+  if not v_lotes then
+    update public.insumos set stock_actual = coalesce(stock_actual, 0) + p_qty where id = p_insumo;
+    return;
+  end if;
+  if p_venta is not null then
+    select coalesce(sum(cantidad), 0) into v_alm
+      from public.avisos_inventario where venta_id = p_venta and insumo_id = p_insumo;
+    delete from public.avisos_inventario where venta_id = p_venta and insumo_id = p_insumo;
+  end if;
+  v_alm := least(v_alm, p_qty);
+  update public.insumos
+     set stock_actual = coalesce(stock_actual, 0) + v_alm,
+         stock_procesado = coalesce(stock_procesado, 0) + (p_qty - v_alm)
+   where id = p_insumo;
+end $$;
+
+-- Las llaman los triggers de ventas con el permiso de quien registra la venta.
+revoke execute on function public._venta_descontar_insumo(uuid, numeric, uuid) from public, anon;
+revoke execute on function public._venta_reponer_insumo(uuid, numeric, uuid) from public, anon;
+grant execute on function public._venta_descontar_insumo(uuid, numeric, uuid) to authenticated, service_role;
+grant execute on function public._venta_reponer_insumo(uuid, numeric, uuid) to authenticated, service_role;
+
+-- ─── descontar_stock_por_venta (Fase D + BOLO-10: en uso, si no almacén) ─
 CREATE OR REPLACE FUNCTION public.descontar_stock_por_venta()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -50,15 +113,9 @@ begin
   perform set_config('bolo.motivo', case when coalesce(new.es_merma, false) then 'merma_receta' else 'venta' end, true);
   if new.insumo_id is not null then
     v_qty := coalesce(new.insumo_cantidad, 1) * new.cantidad;
-    update public.insumos
-       set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - v_qty) end,
-           stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - v_qty) else stock_procesado end
-     where id = new.insumo_id;
+    perform public._venta_descontar_insumo(new.insumo_id, v_qty, new.id);
     if new.swap_from_insumo_id is not null then
-      update public.insumos
-         set stock_actual    = case when se_procesa then stock_actual else stock_actual + v_qty end,
-             stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + v_qty else stock_procesado end
-       where id = new.swap_from_insumo_id;
+      perform public._venta_reponer_insumo(new.swap_from_insumo_id, v_qty, null);
     end if;
     return new;
   end if;
@@ -80,10 +137,7 @@ begin
          and r.insumo_id = new.swap_from_insumo_id
          and new.swap_to_insumo_id is not null
         then new.swap_to_insumo_id else r.insumo_id end;
-      update public.insumos
-      set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - r.total) end,
-          stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - r.total) else stock_procesado end
-      where id = v_target;
+      perform public._venta_descontar_insumo(v_target, r.total, new.id);
     end loop;
   end if;
 
@@ -105,10 +159,7 @@ begin
          and r.insumo_id = new.swap_from_insumo_id
          and new.swap_to_insumo_id is not null
         then new.swap_to_insumo_id else r.insumo_id end;
-      update public.insumos
-      set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - r.total) end,
-          stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - r.total) else stock_procesado end
-      where id = v_target;
+      perform public._venta_descontar_insumo(v_target, r.total, new.id);
     end loop;
   end if;
 
@@ -116,7 +167,7 @@ begin
 end;
 $function$;
 
--- ─── revertir_stock_por_venta (Fase D: repone el mismo bolsillo) ────────
+-- ─── revertir_stock_por_venta (repone el mismo bolsillo) ────────────────
 CREATE OR REPLACE FUNCTION public.revertir_stock_por_venta()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -130,15 +181,9 @@ begin
   perform set_config('bolo.motivo', 'venta_revertida', true);
   if old.insumo_id is not null then
     v_qty := coalesce(old.insumo_cantidad, 1) * old.cantidad;
-    update public.insumos
-       set stock_actual    = case when se_procesa then stock_actual else stock_actual + v_qty end,
-           stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + v_qty else stock_procesado end
-     where id = old.insumo_id;
+    perform public._venta_reponer_insumo(old.insumo_id, v_qty, old.id);
     if old.swap_from_insumo_id is not null then
-      update public.insumos
-         set stock_actual    = case when se_procesa then stock_actual else greatest(0, stock_actual - v_qty) end,
-             stock_procesado = case when se_procesa then greatest(0, coalesce(stock_procesado, 0) - v_qty) else stock_procesado end
-       where id = old.swap_from_insumo_id;
+      perform public._venta_descontar_insumo(old.swap_from_insumo_id, v_qty, null);
     end if;
     return old;
   end if;
@@ -161,10 +206,7 @@ begin
          and r.insumo_id = old.swap_from_insumo_id
          and old.swap_to_insumo_id is not null
         then old.swap_to_insumo_id else r.insumo_id end;
-      update public.insumos
-      set stock_actual    = case when se_procesa then stock_actual else stock_actual + r.total end,
-          stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + r.total else stock_procesado end
-      where id = v_target;
+      perform public._venta_reponer_insumo(v_target, r.total, old.id);
     end loop;
   end if;
 
@@ -187,10 +229,7 @@ begin
          and r.insumo_id = old.swap_from_insumo_id
          and old.swap_to_insumo_id is not null
         then old.swap_to_insumo_id else r.insumo_id end;
-      update public.insumos
-      set stock_actual    = case when se_procesa then stock_actual else stock_actual + r.total end,
-          stock_procesado = case when se_procesa then coalesce(stock_procesado, 0) + r.total else stock_procesado end
-      where id = v_target;
+      perform public._venta_reponer_insumo(v_target, r.total, old.id);
     end loop;
   end if;
 

@@ -29,7 +29,8 @@ import {
 import { fechaISOEnCaracas, restarDiasISO, salidasDeVenta } from "@/lib/stock-liviano";
 import { displayCantidad, opcionesCantidad } from "@/lib/units";
 import { extractError } from "@/lib/data/error";
-import { listPendientes, marcarPendiente, urlFotoPendiente, type Pendiente } from "@/lib/data/telegram";
+import { aplicarPendiente, listPendientes, marcarPendiente, urlFotoPendiente, type Pendiente } from "@/lib/data/telegram";
+import { accionesDeMensaje, respuestaBot, type ResultadoBot } from "@/lib/telegram-acciones";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { CameraIcon, ChatIcon, ChevronIcon, DocIcon, ImageIcon, PlusIcon, TrashIcon } from "@/components/icons";
@@ -184,8 +185,48 @@ export function ProduccionClient() {
   // La bandeja agrupa la entrada y la salida del mismo insumo en un solo
   // renglón (se revisan y aprueban juntas); lo que no tiene pareja muestra qué
   // le falta.
+  // Desde BOLO-10 los mensajes de texto se registran solos al llegar; en la
+  // bandeja quedan las fotos (se leen aquí, en el navegador) y los textos que
+  // llegaron antes del cambio, que se aplican de una vez.
+  const pendientesTexto = useMemo(() => pendientes.filter((p) => !p.tieneFoto), [pendientes]);
+  const pendientesFoto = useMemo(() => pendientes.filter((p) => p.tieneFoto), [pendientes]);
+  const [aplicando, setAplicando] = useState(false);
+  const [resumenAplicado, setResumenAplicado] = useState<string | null>(null);
+  async function aplicarAnteriores() {
+    setAplicando(true);
+    setError(null);
+    const lineas: string[] = [];
+    try {
+      const orden = [...pendientesTexto].sort((a, b) => a.enviadoAt.localeCompare(b.enviadoAt));
+      // Copia local: una entrada marca el insumo como "se procesa", y la salida
+      // que viene después en la misma tanda tiene que verlo así.
+      const locales = insumos.map((i) => ({ ...i }));
+      for (const p of orden) {
+        const { acciones, noReconocidos } = accionesDeMensaje(p.texto ?? "", locales);
+        for (const a of acciones) {
+          if (a.tipo === "entrada" || a.tipo === "completo") {
+            const l = locales.find((x) => x.id === a.insumo_id);
+            if (l) l.seProcesa = true;
+          }
+        }
+        if (acciones.length === 0) {
+          await marcarPendiente(p.id, "descartado");
+          if (noReconocidos.length) lineas.push(respuestaBot([], noReconocidos));
+          continue;
+        }
+        const res: ResultadoBot[] = await aplicarPendiente(p.id, acciones, p.remitente);
+        lineas.push(respuestaBot(res, noReconocidos));
+      }
+      setResumenAplicado(lineas.filter(Boolean).join("\n") || "No había movimientos que registrar.");
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setError(extractError(e, "No se pudieron aplicar los mensajes."));
+    } finally {
+      setAplicando(false);
+    }
+  }
   const grupos = useMemo(() => {
-    const leidos = pendientes.map((p) => ({ p, rs: leerMensaje(p.texto ?? "", insumos) }));
+    const leidos = pendientesFoto.map((p) => ({ p, rs: leerMensaje(p.texto ?? "", insumos) }));
     const soloEntrada = (rs: RenglonLeido[]) => rs.length > 0 && rs.every((r) => r.insumoId && r.tomada != null && r.util == null);
     const soloSalida = (rs: RenglonLeido[]) => rs.length > 0 && rs.every((r) => r.insumoId && r.util != null && r.tomada == null);
     const usados = new Set<string>();
@@ -222,7 +263,7 @@ export function ProduccionClient() {
       }
     }
     return out;
-  }, [pendientes, insumos]);
+  }, [pendientesFoto, insumos]);
   const usoVentas = usoCalculado && usoCalculado.desde === desde ? usoCalculado.mapa : null;
 
   function cambiarRenglon(key: number, cambio: Partial<Renglon>) {
@@ -470,8 +511,32 @@ export function ProduccionClient() {
         </p>
       )}
 
-      {/* ── Mensajes del grupo de Telegram por revisar ─────────── */}
-      {pendientes.length > 0 && (
+      {/* ── Mensajes de texto de antes del cambio a registro directo ── */}
+      {pendientesTexto.length > 0 && (
+        <section aria-label="Mensajes anteriores" className="space-y-2 border-y border-marfil py-3">
+          <p className="text-sm text-cacao">
+            {pendientesTexto.length === 1 ? "Queda 1 mensaje" : `Quedan ${pendientesTexto.length} mensajes`} del grupo de
+            antes del cambio. Ahora el grupo se registra solo, sin aprobación.
+          </p>
+          <button
+            type="button"
+            onClick={() => void aplicarAnteriores()}
+            disabled={aplicando || insumos.length === 0}
+            className="min-h-10 rounded-lg bg-terracotta px-4 text-sm font-semibold text-white hover:bg-terracotta-deep disabled:opacity-60"
+          >
+            {aplicando ? "Aplicando…" : "Aplicarlos ahora"}
+          </button>
+        </section>
+      )}
+      {resumenAplicado && (
+        <section aria-label="Resultado" className="space-y-1 border-y border-marfil py-3">
+          <p className="text-[11px] uppercase tracking-widest text-cacao-soft">Mensajes aplicados</p>
+          <p className="whitespace-pre-line text-sm text-cacao">{resumenAplicado}</p>
+        </section>
+      )}
+
+      {/* ── Fotos del grupo de Telegram por revisar ─────────── */}
+      {pendientesFoto.length > 0 && (
         <section aria-label="Mensajes por revisar" className="space-y-2">
           <h2 className="text-[11px] uppercase tracking-widest text-cacao-soft">
             Del grupo de Telegram · {grupos.length} por revisar

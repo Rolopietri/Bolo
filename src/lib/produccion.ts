@@ -89,6 +89,10 @@ export type RenglonLeido = {
   /** En la unidad de la plantilla (ver unidadPlantilla). */
   tomada: number | null;
   util: number | null;
+  /** Mensajes de chat: el nombre tal como se escribió (para avisar si no se reconoce). */
+  leido?: string;
+  /** Mensajes de chat: la entrada vino con palabra clave ("Entrando", "Sin procesar"). */
+  entradaExplicita?: boolean;
 };
 
 /** Un trozo de texto leído de la foto y su posición (ver leerTrozos en el OCR). */
@@ -309,12 +313,19 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
     /[a-záéíóúñ]{3,}/i.test(nombre) ? (sugerirInsumo(nombre, insumos) ?? porPalabraPrincipal(nombre, insumos)) : null;
   const insumoDe = (id: string) => insumos.find((i) => i.id === id);
   /** Agrega o completa el renglón de un insumo. */
-  const anotar = (insumoId: string, tomada: number | null, util: number | null) => {
+  const anotar = (
+    insumoId: string,
+    tomada: number | null,
+    util: number | null,
+    leido?: string,
+    entradaExplicita = false,
+  ) => {
     const r = insumoId ? out.find((x) => x.insumoId === insumoId) : undefined;
     if (r) {
       if (r.tomada == null) r.tomada = tomada;
       if (r.util == null) r.util = util;
-    } else out.push({ insumoId, tomada, util });
+      r.entradaExplicita = r.entradaExplicita || entradaExplicita;
+    } else out.push({ insumoId, tomada, util, leido, entradaExplicita });
   };
 
   for (const linea of texto.split(/\n|;/)) {
@@ -334,7 +345,7 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
       }
       // Sin insumo reconocido, un número suelto suele ser conversación ("somos 5").
       if (!ins && cantidades.length < 2) continue;
-      anotar(ins?.id ?? "", enPlantilla(cantidades[0], ins), enPlantilla(cantidades[1], ins));
+      anotar(ins?.id ?? "", enPlantilla(cantidades[0], ins), enPlantilla(cantidades[1], ins), nombre);
       continue;
     }
 
@@ -346,6 +357,7 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
     const destino = ins ?? (previo?.insumoId ? insumoDe(previo.insumoId) ?? null : null);
     let tomada: number | null = null;
     let util: number | null = null;
+    let entradaPorClave = false;
     const sinClave: Cantidad[] = [];
     for (const frase of linea.split(new RegExp(`(?<!\\d),|,(?!\\d)|(?<![${LETRA}])(?:y|e)(?![${LETRA}])`, "i"))) {
       const ks = [...frase.matchAll(RE_CLAVE)].map((m) => ({ i: m.index!, fin: m.index! + m[1].length, salida: RE_SALIDA.test(m[1]) }));
@@ -364,7 +376,10 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
         if (!n) return;
         n.usado = true;
         if (k.salida) util ??= enPlantilla(n.c, destino);
-        else tomada ??= enPlantilla(n.c, destino);
+        else if (tomada == null) {
+          tomada = enPlantilla(n.c, destino);
+          entradaPorClave = true;
+        }
       });
       for (const n of ns) if (!n.usado) sinClave.push(n.c);
     }
@@ -374,7 +389,7 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
       else if (util == null) util = enPlantilla(c, destino);
     }
     if (tomada == null && util == null) continue;
-    anotar(destino?.id ?? "", tomada, util);
+    anotar(destino?.id ?? "", tomada, util, nombreDe(linea), entradaPorClave);
   }
   return out;
 }

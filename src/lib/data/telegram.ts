@@ -111,3 +111,20 @@ export async function marcarPendiente(id: string, estado: "aprobado" | "descarta
 }
 
 export const urlFotoPendiente = (id: string) => `/api/telegram/foto?id=${encodeURIComponent(id)}`;
+
+/** Registra al instante un mensaje que quedó pendiente de antes del registro
+ *  directo (BOLO-10). Devuelve lo que hizo cada acción. */
+export async function aplicarPendiente(
+  id: string,
+  acciones: unknown[],
+  responsable: string | null,
+): Promise<import("@/lib/telegram-acciones").ResultadoBot[]> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("produccion_aplicar", {
+    p_pendiente: id,
+    p_acciones: acciones,
+    p_responsable: responsable,
+  });
+  if (error) throw error;
+  return (data ?? []) as import("@/lib/telegram-acciones").ResultadoBot[];
+}

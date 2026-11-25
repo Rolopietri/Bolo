@@ -151,19 +151,23 @@ export function TelegramClient() {
               </Paso>
               <Paso n={2}>
                 <p>
-                  <b>Al terminar de procesarlo</b>, escribe <b>Saliendo</b> con lo que quedó listo.
+                  <b>Al terminar de procesarlo</b>, escribe <b>Saliendo</b> con lo que quedó listo. La diferencia
+                  queda como merma.
                 </p>
                 <code className="text-xs text-cacao-soft">Saliendo 6 kg lomito</code>
               </Paso>
               <Paso n={3}>
                 <p>
-                  <b>Listo.</b> Bolo junta la entrada y la salida, y el lote espera tu aprobación en Producción.
+                  <b>Productos por unidad</b>: solo la salida, cuando se sacan del almacén.
                 </p>
+                <code className="text-xs text-cacao-soft">Saliendo 12 plátanos</code>
               </Paso>
             </ol>
             <div className="space-y-1.5">
               <p className="text-xs uppercase tracking-widest text-cacao-soft">Ten en cuenta</p>
               <ul className="space-y-1 text-cacao-soft">
+                <li>· Bolo lo registra al instante y el bot confirma en el grupo lo que anotó.</li>
+                <li>· Una salida sin su entrada se rechaza: el bot pide primero cuánto entró.</li>
                 <li>· Un insumo por mensaje o por línea.</li>
                 <li>
                   · También vale <b className="text-cacao">Sin procesar</b> y <b className="text-cacao">Procesado</b>.

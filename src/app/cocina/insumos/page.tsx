@@ -3,6 +3,7 @@ import Link from "next/link";
 import { InsumosTabs, type Vista } from "./InsumosTabs";
 import { PasoSiguiente } from "../_PasoSiguiente";
 import { PasosCocina } from "../_PasosCocina";
+import { AvisosInventario } from "./AvisosInventario";
 
 const VISTAS: Vista[] = ["catalogo", "uso", "alertas", "mermas", "auditoria"];
 
@@ -42,6 +43,7 @@ export default async function InsumosPage({
           </Link>
         </section>
         <PasosCocina actual={2} className="mb-8" />
+        <AvisosInventario />
         <InsumosTabs vistaInicial={vistaInicial} insumoInicial={insumoInicial} />
         <PasoSiguiente
           paso={2}
