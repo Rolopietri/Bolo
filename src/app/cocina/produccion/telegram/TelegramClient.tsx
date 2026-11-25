@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  quitarGerente,
   activarTelegram,
   conectarTelegram,
   diagnosticoTelegram,
@@ -166,7 +167,7 @@ export function TelegramClient() {
             <div className="space-y-1.5">
               <p className="text-xs uppercase tracking-widest text-cacao-soft">Ten en cuenta</p>
               <ul className="space-y-1 text-cacao-soft">
-                <li>· Bolo lo registra al instante y el bot confirma en el grupo lo que anotó.</li>
+                <li>· Bolo lo registra al instante. El bot solo responde si algo no se pudo registrar.</li>
                 <li>· Una salida sin su entrada se rechaza: el bot pide primero cuánto entró.</li>
                 <li>· Un insumo por mensaje o por línea.</li>
                 <li>
@@ -176,6 +177,36 @@ export function TelegramClient() {
                 <li>· Los mensajes sin números se ignoran: el grupo se puede usar para conversar.</li>
               </ul>
             </div>
+          </section>
+          <section aria-label="Resumen diario" className="space-y-2 border-t border-marfil pt-4 text-sm text-cacao">
+            <p className="font-medium">Resumen diario al gerente</p>
+            {estado.resumen_activo ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-cacao-soft">
+                  Cada noche, cerca de las 11 p. m., el bot le envía en privado a{" "}
+                  <b className="text-cacao">{estado.resumen_nombre ?? "el gerente"}</b> lo procesado, lo que salió a uso, lo
+                  que sigue en la mesa y lo que no se registró. Con /resumen lo pide en cualquier momento.
+                </p>
+                <button
+                  type="button"
+                  disabled={ocupado}
+                  onClick={() => void hacer(quitarGerente)}
+                  className="text-sm text-cacao-soft hover:text-terracotta-deep"
+                >
+                  Dejar de enviar
+                </button>
+              </div>
+            ) : (
+              <>
+                <p className="text-cacao-soft">
+                  El grupo solo recibe los avisos de lo que no se pudo registrar. Lo registrado llega como un resumen
+                  diario en privado. Para recibirlo, abre el chat con{" "}
+                  <b className="text-cacao">@{estado.bot_usuario ?? "el bot"}</b>, pulsa <b className="text-cacao">Iniciar</b>{" "}
+                  y escribe:
+                </p>
+                {estado.codigo && <code className="inline-block rounded-lg bg-marfil-soft px-3 py-2 text-sm ring-1 ring-marfil">/gerente {estado.codigo}</code>}
+              </>
+            )}
           </section>
           {comando && (
             <div className="space-y-2 border-t border-marfil pt-4 text-sm text-cacao">

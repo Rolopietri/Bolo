@@ -74,15 +74,21 @@ export function accionesDeMensaje(
 const pct = (n: number) => `${Math.round(n)} %`;
 
 /** Cantidad en unidad base → texto legible ("8 kg", "0,4 kg", "12 unid"). */
-function legible(n: number | undefined, unidadBase: string): string {
+export function legible(n: number | undefined, unidadBase: string): string {
   const { unidad, factor } = unidadPlantilla(unidadBase);
   return `${(Math.round(((n ?? 0) / factor) * 100) / 100).toLocaleString("es-VE")} ${unidad}`;
 }
 
-/** Texto que el bot responde en el grupo. */
-export function respuestaBot(resultados: ResultadoBot[], noReconocidos: string[]): string {
+/** Texto que el bot responde. Con `soloErrores` (el grupo, desde BOLO-11)
+ *  solo dice lo que no se pudo registrar; lo registrado va al resumen diario. */
+export function respuestaBot(
+  resultados: ResultadoBot[],
+  noReconocidos: string[],
+  opciones: { soloErrores?: boolean } = {},
+): string {
   const lineas: string[] = [];
   for (const r of resultados) {
+    if (r.ok && opciones.soloErrores) continue;
     const u = r.unidad_base ?? "";
     const q = (n: number | undefined) => legible(n, u);
     const nombre = r.nombre ?? "El insumo";

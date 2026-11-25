@@ -19,6 +19,9 @@ export type EstadoTelegram = {
   ultimo_aviso_chat?: string | null;
   ultimo_aviso_tipo?: string | null;
   ultima_accion?: string | null;
+  /** Gerente que recibe el resumen diario en privado (BOLO-11). */
+  resumen_nombre?: string | null;
+  resumen_activo?: boolean;
 };
 
 export type DiagnosticoTelegram = {
@@ -127,4 +130,12 @@ export async function aplicarPendiente(
   });
   if (error) throw error;
   return (data ?? []) as import("@/lib/telegram-acciones").ResultadoBot[];
+}
+
+/** Deja de enviar el resumen diario al gerente. */
+export async function quitarGerente(): Promise<EstadoTelegram> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("telegram_quitar_gerente");
+  if (error) throw error;
+  return data as EstadoTelegram;
 }

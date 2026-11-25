@@ -4,8 +4,9 @@
  * cabecera.
  *
  * Telegram directo (BOLO-10): el mensaje se registra al instante —entrada a la
- * mesa, salida a en uso con su merma, o uso por unidad— y el bot responde en el
- * grupo con lo que hizo o con lo que falta. Las fotos quedan en Producción para
+ * mesa, salida a en uso con su merma, o uso por unidad—. En el grupo el bot solo
+ * responde lo que NO se pudo registrar (BOLO-11); lo registrado va al resumen
+ * diario que recibe el gerente en privado ("/gerente CODIGO", "/resumen"). Las fotos quedan en Producción para
  * revisarlas (la lectura de la foto corre en el navegador).
  * Siempre responde 200 para que Telegram no reintente sin fin.
  */
@@ -13,6 +14,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { telegram } from "@/lib/telegram";
 import { accionesDeMensaje, respuestaBot, type InsumoBot, type ResultadoBot } from "@/lib/telegram-acciones";
+import { textoResumen, type DatosResumen } from "@/lib/telegram-resumen";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,8 +56,23 @@ export async function POST(req: NextRequest) {
 
   if (r.accion === "vinculado") {
     await responder(
-      "Listo: este grupo quedó conectado a Bolo. Escriban «Entrando 8 kg lomito» al sacar algo para procesar, «Saliendo 6 kg lomito» al terminar, y «Saliendo 12 plátanos» para los productos por unidad. Bolo lo registra al instante.",
+      "Listo: este grupo quedó conectado a Bolo. Escriban «Entrando 8 kg lomito» al sacar algo para procesar, «Saliendo 6 kg lomito» al terminar, y «Saliendo 12 plátanos» para los productos por unidad. Bolo lo registra al instante; solo responderé si algo no se pudo registrar.",
     );
+  } else if (r.accion === "gerente_vinculado") {
+    await responder("Listo: cada noche te enviaré aquí el resumen de producción del día. Escribe /resumen para verlo en cualquier momento.");
+  } else if (r.accion === "gerente_codigo_invalido") {
+    await responder("Ese código no coincide. Revísalo en Bolo › Producción › Grupo de Telegram.");
+  } else if (r.accion === "start") {
+    await responder(
+      (r as { es_gerente?: boolean }).es_gerente
+        ? "Hola. Escribe /resumen para ver la producción de hoy."
+        : "Hola. Soy el bot de producción de Bolo. Si eres el gerente, escribe /gerente seguido del código que aparece en Bolo › Producción › Grupo de Telegram para recibir el resumen diario.",
+    );
+  } else if (r.accion === "resumen_pedido") {
+    const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
+    const { data: rs, error: e } = await sb.rpc("telegram_resumen_secreto", { p_secreto: secreto, p_fecha: hoy });
+    if (e) console.error("telegram_resumen_secreto", e.message);
+    else await responder(textoResumen((rs as { datos: DatosResumen }).datos));
   } else if (r.accion === "codigo_invalido") {
     await responder("Ese código no coincide. Revísalo en Bolo › Producción › Grupo de Telegram.");
   } else if (r.accion === "guardado" && r.id) {
@@ -70,10 +87,7 @@ async function aplicarMensaje(
   r: Recibido,
   responder: (t: string) => Promise<unknown>,
 ) {
-  if (r.foto) {
-    await responder("Recibí la foto. Revísala en Bolo › Producción para registrarla.");
-    return;
-  }
+  if (r.foto) return; // las fotos se revisan en Producción; quedan en el resumen como pendientes
   const { data: ctx, error: e1 } = await sb.rpc("telegram_contexto", { p_secreto: secreto });
   if (e1) {
     console.error("telegram_contexto", e1.message);
@@ -110,6 +124,7 @@ async function aplicarMensaje(
       p_resultado: { no_reconocidos: noReconocidos },
     });
   }
-  const texto = respuestaBot(resultados, noReconocidos);
+  // En el grupo solo lo que no se pudo registrar.
+  const texto = respuestaBot(resultados, noReconocidos, { soloErrores: true });
   if (texto) await responder(texto);
 }
