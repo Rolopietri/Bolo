@@ -94,10 +94,10 @@ async function aplicarMensaje(
     return;
   }
   const insumos = ((ctx as { insumos?: InsumoBot[] } | null)?.insumos ?? []) as InsumoBot[];
-  const { acciones, noReconocidos } = accionesDeMensaje(r.texto ?? "", insumos);
+  const { acciones, noReconocidos, sinPresentacion } = accionesDeMensaje(r.texto ?? "", insumos);
 
   // Números sueltos sin nada reconocible ("somos 5"): se ignora en silencio.
-  if (acciones.length === 0 && noReconocidos.length === 0) {
+  if (acciones.length === 0 && noReconocidos.length === 0 && sinPresentacion.length === 0) {
     await sb.rpc("telegram_marcar", { p_secreto: secreto, p_pendiente: r.id, p_estado: "descartado", p_resultado: null });
     return;
   }
@@ -121,10 +121,10 @@ async function aplicarMensaje(
       p_secreto: secreto,
       p_pendiente: r.id,
       p_estado: "rechazado",
-      p_resultado: { no_reconocidos: noReconocidos },
+      p_resultado: { no_reconocidos: noReconocidos, sin_presentacion: sinPresentacion },
     });
   }
   // En el grupo solo lo que no se pudo registrar.
-  const texto = respuestaBot(resultados, noReconocidos, { soloErrores: true });
+  const texto = respuestaBot(resultados, noReconocidos, { soloErrores: true }, sinPresentacion);
   if (texto) await responder(texto);
 }

@@ -8,7 +8,11 @@
 -- en "No se registró" del resumen. Lo mismo si la salida era mayor que lo que
 -- había entrado y la nueva entrada la cubre.
 --
--- Requiere BOLO-10. Idempotente.
+-- También: el bot conoce la presentación de compra de cada insumo ("1 caja"
+-- de Pepsi = lo que trae la caja) y acepta mensajes sin cifras cuando traen
+-- una palabra clave ("Saliendo una caja de Pepsi").
+--
+-- Requiere BOLO-10 y BOLO-11. Idempotente.
 
 create or replace function public._prod_corregir_salidas(p_insumo uuid, p_actual uuid, p_responsable text)
 returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
@@ -106,5 +110,38 @@ begin
 end $$;
 
 revoke execute on function public._prod_aplicar(uuid, jsonb, text, text) from public, anon, authenticated;
+
+-- ─── Contexto del bot: con la presentación de compra ───────────────────
+create or replace function public.telegram_contexto(p_secreto text)
+returns jsonb language plpgsql stable security definer set search_path = public, pg_temp as $$
+declare c public.produccion_telegram;
+begin
+  select * into c from public.produccion_telegram where id = 1;
+  if c.id is null or c.secreto is null or p_secreto is distinct from c.secreto then
+    raise exception 'no autorizado';
+  end if;
+  return jsonb_build_object('insumos', coalesce((
+    select jsonb_agg(jsonb_build_object('id', id, 'nombre', nombre, 'unidadBase', unidad_base,
+                                        'seProcesa', coalesce(se_procesa, false),
+                                        'unidadCompra', unidad_compra, 'cantidadPorCompra', cantidad_por_compra))
+      from public.insumos where activo), '[]'::jsonb));
+end $$;
+grant execute on function public.telegram_contexto(text) to anon, authenticated;
+
+-- ─── Mensajes sin cifras pero con palabra clave ────────────────────────
+-- Igual que en BOLO-11; solo cambia el filtro de qué mensajes del grupo se
+-- guardan: con foto, con alguna cifra, o con una palabra clave.
+do $$
+declare def text;
+begin
+  def := pg_get_functiondef('public.telegram_recibir_interno(text,jsonb)'::regprocedure);
+  if position('entrand|saliend' in def) = 0 then
+    def := replace(def,
+      $a$if foto is null and (txt is null or txt !~ '\d') then$a$,
+      $b$if foto is null and (txt is null or (txt !~ '\d' and txt !~* '(entrand|saliend|sin procesar|procesad|entr[oó]|sali[oó])')) then$b$);
+    execute def;
+  end if;
+end $$;
+revoke execute on function public.telegram_recibir_interno(text, jsonb) from public, anon, authenticated;
 
 notify pgrst, 'reload schema';

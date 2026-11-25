@@ -12,7 +12,15 @@
 
 import { leerMensaje, unidadPlantilla } from "@/lib/produccion";
 
-export type InsumoBot = { id: string; nombre: string; unidadBase: string; seProcesa: boolean };
+export type InsumoBot = {
+  id: string;
+  nombre: string;
+  unidadBase: string;
+  seProcesa: boolean;
+  /** Presentación de compra ("Caja") y cuánto trae en unidad base (24). */
+  unidadCompra?: string | null;
+  cantidadPorCompra?: number | null;
+};
 
 export type AccionBot =
   | { tipo: "entrada"; insumo_id: string; crudo: number }
@@ -46,9 +54,10 @@ export type ResultadoBot = {
 export function accionesDeMensaje(
   texto: string,
   insumos: InsumoBot[],
-): { acciones: AccionBot[]; noReconocidos: string[] } {
+): { acciones: AccionBot[]; noReconocidos: string[]; sinPresentacion: string[] } {
   const acciones: AccionBot[] = [];
   const noReconocidos: string[] = [];
+  const sinPresentacion: string[] = [];
   const porId = new Map(insumos.map((i) => [i.id, i] as const));
   for (const r of leerMensaje(texto, insumos)) {
     const ins = r.insumoId ? porId.get(r.insumoId) : undefined;
@@ -59,6 +68,11 @@ export function accionesDeMensaje(
     // leerMensaje da las cantidades en la unidad de la plantilla (kg, L, unid).
     const f = unidadPlantilla(ins.unidadBase).factor;
     const base = (v: number) => Math.round(v * f * 10000) / 10000;
+    // "1 caja" de un insumo sin presentación cargada: no se adivina.
+    if (Number.isNaN(r.tomada) || Number.isNaN(r.util)) {
+      sinPresentacion.push(ins.nombre);
+      continue;
+    }
     const tomada = r.tomada != null ? base(r.tomada) : null;
     const util = r.util != null ? base(r.util) : null;
     const procesa = ins.seProcesa || r.entradaExplicita;
@@ -71,7 +85,7 @@ export function accionesDeMensaje(
       if (cantidad != null) acciones.push({ tipo: "uso", insumo_id: ins.id, cantidad });
     }
   }
-  return { acciones, noReconocidos };
+  return { acciones, noReconocidos, sinPresentacion };
 }
 
 const pct = (n: number) => `${Math.round(n)} %`;
@@ -88,6 +102,7 @@ export function respuestaBot(
   resultados: ResultadoBot[],
   noReconocidos: string[],
   opciones: { soloErrores?: boolean } = {},
+  sinPresentacion: string[] = [],
 ): string {
   const lineas: string[] = [];
   for (const r of resultados) {
@@ -133,6 +148,11 @@ export function respuestaBot(
   }
   for (const n of noReconocidos) {
     lineas.push(`✕ No encontré «${n}» en Bolo. Escríbelo como aparece en el inventario.`);
+  }
+  for (const n of sinPresentacion) {
+    lineas.push(
+      `✕ ${n}: no sé cuánto trae esa presentación. Escribe la cantidad en unidades (o kg) o carga la presentación del insumo en Bolo.`,
+    );
   }
   return lineas.join("\n");
 }

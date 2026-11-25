@@ -207,17 +207,48 @@ export function leerPlantilla<T extends { id: string; nombre: string }>(
 
 // Número con unidad opcional, tal como se escribe en un chat: "10 kg", "6,2",
 // "800gr", "3 lts", "12 und".
-const RE_CANTIDAD =
-  /(\d+(?:[.,]\d+)?)\s*(kilogramos?|kilos?|kgs?|k|gramos?|grs?|g|litros?|lts?|l|ml|unidades|unid|und|uds?|u)?(?![a-záéíóúñ])/gi;
+// Presentaciones de compra ("1 caja", "2 paquetes"): su tamaño sale de la
+// presentación de cada insumo (unidad_compra + cantidad_por_compra).
+const PRESENTACIONES =
+  "cajas?|paquetes?|bultos?|sacos?|bolsas?|botellas?|garrafas?|latas?|frascos?|potes?|bandejas?|cart[oó]n(?:es)?|docenas?|rollos?|piezas?|cestas?|gal[oó]n(?:es)?|bid[oó]n(?:es)?|tarros?|pacas?|fardos?";
+const RE_PRESENTACION = new RegExp(`^(${PRESENTACIONES})$`, "i");
+const RE_CANTIDAD = new RegExp(
+  `(\\d+(?:[.,]\\d+)?)\\s*(?:de\\s+)?(${PRESENTACIONES}|kilogramos?|kilos?|kgs?|k|gramos?|grs?|g|litros?|lts?|l|ml|unidades|unid|und|uds?|u)?(?![a-záéíóúñ])`,
+  "gi",
+);
 
-/** Pasa una cantidad del chat ("800 gr") a la unidad de la plantilla (0,8 kg). */
+// "una caja", "dos paquetes", "media caja", "tres kilos" → número.
+const NUMEROS: Record<string, string> = {
+  un: "1", una: "1", uno: "1", dos: "2", tres: "3", cuatro: "4", cinco: "5", seis: "6",
+  siete: "7", ocho: "8", nueve: "9", diez: "10", media: "0.5", medio: "0.5",
+};
+const RE_NUMERO_PALABRA = new RegExp(
+  `(?<![a-záéíóúñ])(${Object.keys(NUMEROS).join("|")})(?=\\s+(?:${PRESENTACIONES}|kilos?|kg|litros?|unidades|gramos?))`,
+  "gi",
+);
+const numerosEnCifras = (t: string) => t.replace(RE_NUMERO_PALABRA, (m) => NUMEROS[m.toLowerCase()] ?? m);
+
+type InsumoConPresentacion = { unidadBase: string; unidadCompra?: string | null; cantidadPorCompra?: number | null };
+
+/** Pasa una cantidad del chat ("800 gr", "2 cajas") a la unidad de la
+ *  plantilla (0,8 kg; 48 unid). Si es una presentación y el insumo no tiene
+ *  la suya cargada, devuelve NaN: no se adivina cuánto trae. */
 function enPlantilla(
   c: { n: number; u: string | null } | undefined,
-  ins: { unidadBase: string } | null | undefined,
+  ins: InsumoConPresentacion | null | undefined,
 ): number | null {
   if (!c || !Number.isFinite(c.n)) return null;
   if (!ins || !c.u) return c.n;
   const p = unidadPlantilla(ins.unidadBase);
+  if (RE_PRESENTACION.test(c.u)) {
+    let base: number | null = null;
+    if (/^docenas?$/i.test(c.u)) base = c.n * 12 * (getUnit(ins.unidadBase)?.canonica === "unidad" ? 1 : NaN);
+    else if ((ins.cantidadPorCompra ?? 0) > 0 && ins.unidadCompra && !getUnit(ins.unidadCompra)) {
+      base = c.n * Number(ins.cantidadPorCompra);
+    }
+    if (base == null || !Number.isFinite(base)) return NaN;
+    return Math.round((base / p.factor) * 1000) / 1000;
+  }
   const v = convert(c.n, c.u, p.unidad === "unid" ? "unidad" : p.unidad);
   return v == null ? c.n : Math.round(v * 1000) / 1000;
 }
@@ -304,7 +335,7 @@ function nombreDe(texto: string): string {
  * Las líneas con números pero sin insumo reconocible quedan con el insumo en
  * blanco para elegirlo al revisar.
  */
-export function leerMensaje<T extends { id: string; nombre: string; unidadBase: string }>(
+export function leerMensaje<T extends { id: string; nombre: string } & InsumoConPresentacion>(
   texto: string,
   insumos: T[],
 ): RenglonLeido[] {
@@ -328,7 +359,8 @@ export function leerMensaje<T extends { id: string; nombre: string; unidadBase: 
     } else out.push({ insumoId, tomada, util, leido, entradaExplicita });
   };
 
-  for (const linea of texto.split(/\n|;/)) {
+  for (const lineaOriginal of texto.split(/\n|;/)) {
+    const linea = numerosEnCifras(lineaOriginal);
     const claves = [...linea.matchAll(RE_CLAVE)];
     const previo = out[out.length - 1];
 

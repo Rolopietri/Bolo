@@ -202,7 +202,7 @@ export function ProduccionClient() {
       // que viene después en la misma tanda tiene que verlo así.
       const locales = insumos.map((i) => ({ ...i }));
       for (const p of orden) {
-        const { acciones, noReconocidos } = accionesDeMensaje(p.texto ?? "", locales);
+        const { acciones, noReconocidos, sinPresentacion } = accionesDeMensaje(p.texto ?? "", locales);
         for (const a of acciones) {
           if (a.tipo === "entrada" || a.tipo === "completo") {
             const l = locales.find((x) => x.id === a.insumo_id);
@@ -211,11 +211,11 @@ export function ProduccionClient() {
         }
         if (acciones.length === 0) {
           await marcarPendiente(p.id, "descartado");
-          if (noReconocidos.length) lineas.push(respuestaBot([], noReconocidos));
+          if (noReconocidos.length || sinPresentacion.length) lineas.push(respuestaBot([], noReconocidos, {}, sinPresentacion));
           continue;
         }
         const res: ResultadoBot[] = await aplicarPendiente(p.id, acciones, p.remitente);
-        lineas.push(respuestaBot(res, noReconocidos));
+        lineas.push(respuestaBot(res, noReconocidos, {}, sinPresentacion));
       }
       setResumenAplicado(lineas.filter(Boolean).join("\n") || "No había movimientos que registrar.");
       setVersion((v) => v + 1);
