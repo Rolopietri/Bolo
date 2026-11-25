@@ -79,14 +79,20 @@ export async function POST(req: NextRequest) {
   }
 
   const r = (data ?? {}) as Recibido;
-  const responder = (text: string) =>
-    r.token && r.chat_id
-      ? telegram(r.token, "sendMessage", {
-          chat_id: r.chat_id,
-          text,
-          ...(r.message_id ? { reply_parameters: { message_id: r.message_id, allow_sending_without_reply: true } } : {}),
-        }).catch(() => {})
-      : Promise.resolve();
+  /** Responde en el chat (como respuesta al mensaje) y devuelve el id del aviso. */
+  const responder = async (text: string): Promise<number | undefined> => {
+    if (!r.token || !r.chat_id) return undefined;
+    try {
+      const m = await telegram<{ message_id?: number }>(r.token, "sendMessage", {
+        chat_id: r.chat_id,
+        text,
+        ...(r.message_id ? { reply_parameters: { message_id: r.message_id, allow_sending_without_reply: true } } : {}),
+      });
+      return m.message_id;
+    } catch {
+      return undefined;
+    }
+  };
   if (r.token) await asegurarEdiciones(r.token, secreto, req);
 
   switch (r.accion) {
@@ -142,7 +148,9 @@ const QUE: Record<string, string> = {
   devolucion: "la devolución",
 };
 
-async function deshacer(sb: SupabaseClient, secreto: string, r: Recibido, responder: (t: string) => Promise<unknown>) {
+type Responder = (t: string) => Promise<number | undefined>;
+
+async function deshacer(sb: SupabaseClient, secreto: string, r: Recibido, responder: Responder) {
   const { data, error } = await sb.rpc("telegram_deshacer", {
     p_secreto: secreto,
     p_chat: r.chat_id,
@@ -158,21 +166,18 @@ async function deshacer(sb: SupabaseClient, secreto: string, r: Recibido, respon
     await responder(`✕ No pude deshacer: ${d.motivo ?? "error de Bolo"}`);
     return;
   }
+  const describir = (x: ResultadoBot, prefijo = "") => {
+    const n = x.tipo === "salida" || x.tipo === "completo" ? x.procesado : x.tipo === "entrada" ? x.crudo : x.cantidad;
+    return `${prefijo}${QUE[x.tipo] ?? "el registro"} de ${x.nombre ?? "el insumo"} (${legible(n, x.unidad_base ?? "")})`;
+  };
   const hechos = (d.resultado ?? [])
     .filter((x) => x.ok)
-    .map((x) => {
-      const n = x.tipo === "salida" || x.tipo === "completo" ? x.procesado : x.tipo === "entrada" ? x.crudo : x.cantidad;
-      return `${QUE[x.tipo] ?? "el registro"} de ${x.nombre ?? "el insumo"} (${legible(n, x.unidad_base ?? "")})`;
-    });
+    .flatMap((x) => [describir(x), ...(x.corregidos ?? []).map((c) => describir(c, "y "))])
+    .map((t) => t.replace(/^y la salida/, "y la salida corregida"));
   await responder(`↺ Deshecho: ${hechos.join(", ") || "el registro"}. Si hace falta, escribe el mensaje correcto.`);
 }
 
-async function aplicarMensaje(
-  sb: SupabaseClient,
-  secreto: string,
-  r: Recibido,
-  responder: (t: string) => Promise<unknown>,
-) {
+async function aplicarMensaje(sb: SupabaseClient, secreto: string, r: Recibido, responder: Responder) {
   if (r.foto) return; // las fotos se revisan en Producción; quedan en el resumen como pendientes
   const { data: ctx, error: e1 } = await sb.rpc("telegram_contexto", { p_secreto: secreto });
   if (e1) {
@@ -210,5 +215,16 @@ async function aplicarMensaje(
   if (r.accion === "editado" && acciones.length > 0 && resultados.every((x) => x.ok) && !hayProblemas(problemas)) {
     texto = ["✓ Apliqué la edición del mensaje.", texto].filter(Boolean).join("\n");
   }
-  if (texto) await responder(texto);
+  if (texto) {
+    // Si después le responden "deshacer" a este aviso, se deshace el mensaje original.
+    const idAviso = await responder(texto);
+    if (idAviso && r.chat_id) {
+      await sb.rpc("telegram_guardar_respuesta", {
+        p_secreto: secreto,
+        p_chat: r.chat_id,
+        p_bot_message_id: idAviso,
+        p_pendiente: r.id,
+      });
+    }
+  }
 }
