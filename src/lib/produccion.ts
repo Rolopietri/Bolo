@@ -93,6 +93,13 @@ export type RenglonLeido = {
   leido?: string;
   /** Mensajes de chat: la entrada vino con palabra clave ("Entrando", "Sin procesar"). */
   entradaExplicita?: boolean;
+  /** Mensajes de chat: pérdida ("se dañaron") o devolución al almacén; la cantidad va en `util`. */
+  especial?: "perdida" | "devolucion";
+  motivo?: "perdida" | "mal_estado" | "vencimiento";
+  /** Mensajes de chat: el nombre coincide con varios insumos (no se elige uno). */
+  ambiguos?: string[];
+  /** Mensajes de chat: unidad que no se puede convertir ("2 tazas"). */
+  unidadRara?: string;
 };
 
 /** Un trozo de texto leído de la foto y su posición (ver leerTrozos en el OCR). */
@@ -213,7 +220,7 @@ const PRESENTACIONES =
   "cajas?|paquetes?|bultos?|sacos?|bolsas?|botellas?|garrafas?|latas?|frascos?|potes?|bandejas?|cart[oó]n(?:es)?|docenas?|rollos?|piezas?|cestas?|gal[oó]n(?:es)?|bid[oó]n(?:es)?|tarros?|pacas?|fardos?";
 const RE_PRESENTACION = new RegExp(`^(${PRESENTACIONES})$`, "i");
 const RE_CANTIDAD = new RegExp(
-  `(\\d+(?:[.,]\\d+)?)\\s*(?:de\\s+)?(${PRESENTACIONES}|kilogramos?|kilos?|kgs?|k|gramos?|grs?|g|litros?|lts?|l|ml|unidades|unid|und|uds?|u)?(?![a-záéíóúñ])`,
+  `(\\d+(?:[.,]\\d+)?)\\s*(?:de\\s+)?(${PRESENTACIONES}|libras?|lbs?|onzas?|oz|kilogramos?|kilos?|kgs?|k|gramos?|grs?|g|litros?|lts?|l|ml|unidades|unid|und|uds?|u)?(?![a-záéíóúñ])`,
   "gi",
 );
 
@@ -236,8 +243,47 @@ const RE_FRACCION_PALABRA = new RegExp(
 );
 const RE_FRACCION_CIFRAS = new RegExp(`(?<![\\d/])(\\d+)\\s*/\\s*(\\d+)${UNIDAD_SIGUE}`, "gi");
 const redondeo = (n: number) => String(Math.round(n * 10000) / 10000);
+// Números en palabras de dos a cien ("quince panes", "treinta y cinco"). Se
+// convierten solo en líneas de movimiento (con palabra clave), para no tocar
+// la conversación.
+const UNIDADES_N: Record<string, number> = {
+  uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9,
+};
+const SUELTOS_N: Record<string, number> = {
+  dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12,
+  trece: 13, catorce: 14, quince: 15, dieciseis: 16, dieciséis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19,
+  veinte: 20, veintiuno: 21, veintiuna: 21, veintidos: 22, veintidós: 22, veintitres: 23, veintitrés: 23,
+  veinticuatro: 24, veinticinco: 25, veintiseis: 26, veintiséis: 26, veintisiete: 27, veintiocho: 28,
+  veintinueve: 29, cien: 100, ciento: 100,
+};
+const DECENAS_N: Record<string, number> = {
+  treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70, ochenta: 80, noventa: 90,
+};
+const RE_DECENA = new RegExp(
+  `(?<![a-záéíóúñ])(${Object.keys(DECENAS_N).join("|")})(?:\\s+y\\s+(${Object.keys(UNIDADES_N).join("|")}))?(?![a-záéíóúñ])`,
+  "gi",
+);
+const RE_SUELTO = new RegExp(`(?<![a-záéíóúñ])(${Object.keys(SUELTOS_N).join("|")})(?![a-záéíóúñ])`, "gi");
+// "un/una" justo después de la palabra clave: "Saliendo un pan".
+const RE_UN_TRAS_CLAVE = /((?:entrando|saliendo|entra|sale|entr[oó]|sali[oó]|devolviendo|devuelvo)\s+)(un|una)(?![a-záéíóúñ])/gi;
+// "1 kilo y medio", "kilo y medio", "un paquete y cuarto".
+const UNIDAD_Y = `${PRESENTACIONES}|kilos?|kgs?|litros?|libras?`;
+const RE_Y_FRACCION_CON_N = new RegExp(
+  `(\\d+(?:[.,]\\d+)?)\\s*(?:de\\s+)?(${UNIDAD_Y})\\s+y\\s+(medio|media|cuarto)(?![a-záéíóúñ])`,
+  "gi",
+);
+const RE_Y_FRACCION_SOLA = new RegExp(`(?<![\\d.,]\\s{0,3})(?<![a-záéíóúñ])(${UNIDAD_Y})\\s+y\\s+(medio|media|cuarto)(?![a-záéíóúñ])`, "gi");
+const fraccionY = (f: string) => (/^cuarto$/i.test(f) ? 0.25 : 0.5);
+// Abreviaturas al inicio de la línea: "ent 8 kg lomito", "sal 6 kg lomito".
+// ("sal" solo si le sigue un número, para no confundirla con el insumo sal.)
+const abreviaturas = (t: string) =>
+  t.replace(/^(\s*)entr?\.?(?=\s)/i, "$1entrando").replace(/^(\s*)sal\.?(?=\s+\d)/i, "$1saliendo");
+
+const RE_MOVIMIENTO_PALABRAS =
+  /(entrand|saliend|entr[oó]|sali[oó]|entra|sale|procesad|sin procesar|devolv|devuel|regres|dañ|bot[oóa]|perd|vencid|podrid)/i;
+
 const numerosEnCifras = (t: string) =>
-  t
+  abreviaturas(t)
     .replace(RE_FRACCION_CIFRAS, (m, a: string, b: string) => (Number(b) > 0 ? redondeo(Number(a) / Number(b)) : m))
     // Fechas y horas escritas en el mensaje no son cantidades: "25/11", "9:30".
     .replace(/(?<![\d.,])\d{1,2}\s*\/\s*\d{1,2}(?:\s*\/\s*\d{2,4})?(?![\d.,])/g, " ")
@@ -246,7 +292,16 @@ const numerosEnCifras = (t: string) =>
       const veces = n ? Number(NUMEROS[n.toLowerCase()] ?? n) : 1;
       return redondeo(veces * (FRACCIONES[f.toLowerCase()] ?? 0));
     })
-    .replace(RE_NUMERO_PALABRA, (m) => NUMEROS[m.toLowerCase()] ?? m);
+    .replace(RE_NUMERO_PALABRA, (m) => NUMEROS[m.toLowerCase()] ?? m)
+    .replace(new RegExp(`^.*$`, "s"), (linea) => {
+      if (!RE_MOVIMIENTO_PALABRAS.test(linea)) return linea;
+      return linea
+        .replace(RE_UN_TRAS_CLAVE, (_m, pre: string) => `${pre}1`)
+        .replace(RE_DECENA, (_m, d: string, u?: string) => String(DECENAS_N[d.toLowerCase()] + (u ? UNIDADES_N[u.toLowerCase()] : 0)))
+        .replace(RE_SUELTO, (m) => String(SUELTOS_N[m.toLowerCase()] ?? m));
+    })
+    .replace(RE_Y_FRACCION_CON_N, (_m, n: string, u: string, f: string) => `${redondeo(Number(n.replace(",", ".")) + fraccionY(f))} ${u}`)
+    .replace(RE_Y_FRACCION_SOLA, (_m, u: string, f: string) => `${redondeo(1 + fraccionY(f))} ${u}`);
 
 type InsumoConPresentacion = { unidadBase: string; unidadCompra?: string | null; cantidadPorCompra?: number | null };
 
@@ -260,6 +315,11 @@ function enPlantilla(
   if (!c || !Number.isFinite(c.n)) return null;
   if (!ins || !c.u) return c.n;
   const p = unidadPlantilla(ins.unidadBase);
+  const gramos = /^(libras?|lbs?)$/i.test(c.u) ? 453.592 : /^(onzas?|oz)$/i.test(c.u) ? 28.3495 : 0;
+  if (gramos) {
+    const v = convert(c.n * gramos, "g", p.unidad === "unid" ? "unidad" : p.unidad);
+    return v == null ? NaN : Math.round(v * 1000) / 1000;
+  }
   if (RE_PRESENTACION.test(c.u)) {
     let base: number | null = null;
     if (/^docenas?$/i.test(c.u)) base = c.n * 12 * (getUnit(ins.unidadBase)?.canonica === "unidad" ? 1 : NaN);
@@ -304,6 +364,25 @@ function porPalabraPrincipal<T extends { id: string; nombre: string }>(linea: st
   return empate ? null : mejor;
 }
 
+/** Insumos que empatan con el nombre escrito ("queso" → queso blanco y queso
+ *  amarillo). Si hay más de uno, no se elige ninguno. */
+function empatados<T extends { id: string; nombre: string }>(texto: string, insumos: T[]): T[] {
+  const palabras = sinTildes(texto)
+    .split(/[^a-zñ]+/)
+    .filter((w) => w.length >= 3 && !RELLENO.has(w));
+  if (palabras.length === 0) return [];
+  const coincide = (w: string, n: string) => w === n || w === `${n}s` || w === `${n}es` || n === `${w}s`;
+  let mejor = 0;
+  const puntos = insumos.map((ins) => {
+    const delInsumo = sinTildes(ins.nombre).split(/[^a-zñ]+/).filter((w) => w.length >= 3 && !RELLENO.has(w));
+    const p = palabras.filter((w) => delInsumo.some((n) => coincide(w, n))).length;
+    if (p > mejor) mejor = p;
+    return { ins, p };
+  });
+  if (mejor === 0) return [];
+  return puntos.filter((x) => x.p === mejor).map((x) => x.ins);
+}
+
 const LETRA = "a-záéíóúñü";
 // Palabras que dicen si el número es lo que entra (sin procesar) o lo que sale
 // (procesado). Se pueden mezclar: "Entrando 8 kg lomito, procesado 6 kg".
@@ -312,6 +391,32 @@ const RE_CLAVE = new RegExp(
   "gi",
 );
 const RE_SALIDA = /^(sal|proces|qued|limpi|neto)/i;
+
+// Pérdidas ("se dañaron 2 kg de tomate") y devoluciones al almacén.
+const RE_PERDIDA = new RegExp(
+  `(?<![${LETRA}])(se\\s+dañ\\w*|dañ\\w*|da[ñn]ad[oa]s?|se\\s+bot\\w*|bot(?:é|ó|aron|amos|ad[oa]s?)|se\\s+perdi\\w*|perd(?:í|i)(?:ó|eron|mos)?|perdid[oa]s?|vencid[oa]s?|se\\s+venci\\w*|venci(?:ó|eron)|podrid[oa]s?|se\\s+pudri\\w*|se\\s+cay\\w*|p[ée]rdida)(?![${LETRA}])`,
+  "i",
+);
+const RE_DEVOLUCION = new RegExp(
+  `(?<![${LETRA}])(devolv\\w*|devuel\\w*|regres\\w*|vuelve\\s+al\\s+almac\\w*|vuelven\\s+al\\s+almac\\w*|de\\s+vuelta)(?![${LETRA}])`,
+  "i",
+);
+function motivoPerdida(t: string): "perdida" | "mal_estado" | "vencimiento" {
+  if (/vencid|venci/i.test(t)) return "vencimiento";
+  if (/dañ|da[ñn]ad|podrid|pudri|cay/i.test(t)) return "mal_estado";
+  return "perdida";
+}
+// Medidas de cocina que no se pueden pasar a kg o unidades sin adivinar.
+const RE_UNIDAD_RARA = new RegExp(
+  `\\d+(?:[.,]\\d+)?\\s*(tazas?|cucharadas?|cucharaditas?|porciones?|raciones?|rebanadas?|lonjas?|rodajas?|tajadas?|pu[ñn]ados?|pizcas?|vasos?|platos?|tiras?)(?![${LETRA}])`,
+  "i",
+);
+// Palabras que no ayudan a reconocer el insumo.
+const RELLENO = new Set([
+  "de", "del", "la", "el", "los", "las", "para", "al", "en", "con", "por", "hoy", "mañana", "manana",
+  "almacen", "almacén", "barra", "cocina", "kilo", "kilos", "unid", "unidades", "que", "una", "uno",
+  "se", "sin", "procesar", "todo", "toda", "otro", "otra", "mas", "más",
+]);
 
 type Cantidad = { n: number; u: string | null };
 
@@ -335,6 +440,8 @@ function nombreDe(texto: string): string {
   return texto
     .replace(RE_CANTIDAD, " ")
     .replace(RE_CLAVE, " ")
+    .replace(new RegExp(RE_PERDIDA.source, "gi"), " ")
+    .replace(new RegExp(RE_DEVOLUCION.source, "gi"), " ")
     .replace(new RegExp(`[^${LETRA}\\s]`, "gi"), " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -360,8 +467,40 @@ export function leerMensaje<T extends { id: string; nombre: string } & InsumoCon
   insumos: T[],
 ): RenglonLeido[] {
   const out: RenglonLeido[] = [];
-  const buscar = (nombre: string): T | null =>
-    /[a-záéíóúñ]{3,}/i.test(nombre) ? (sugerirInsumo(nombre, insumos) ?? porPalabraPrincipal(nombre, insumos)) : null;
+  /** Insumo del nombre escrito; si varios empatan, ninguno (y la lista). */
+  const resolver = (nombre: string): { ins: T | null; ambiguos: string[] } => {
+    if (!/[a-záéíóúñ]{3,}/i.test(nombre)) return { ins: null, ambiguos: [] };
+    const emp = empatados(nombre, insumos);
+    if (emp.length > 1) return { ins: null, ambiguos: emp.map((i) => i.nombre) };
+    return {
+      ins: sugerirInsumo(nombre, insumos) ?? porPalabraPrincipal(nombre, insumos) ?? emp[0] ?? null,
+      ambiguos: [],
+    };
+  };
+  const RE_CUALQUIER_CLAVE = new RegExp(`${RE_CLAVE.source}|${RE_PERDIDA.source}|${RE_DEVOLUCION.source}`, "i");
+  const SEPARADOR = new RegExp(`(?<!\\d),|,(?!\\d)|(?<![${LETRA}])(?:y|e)(?![${LETRA}])`, "i");
+  /** "Entrando 2 kg lomito, 3 kg cebolla": si una línea nombra varios
+   *  insumos, cada uno va por separado y hereda la palabra clave anterior. */
+  const expandir = (linea: string): string[] => {
+    const frases = linea.split(SEPARADOR).map((f) => f.trim()).filter(Boolean);
+    if (frases.length < 2) return [linea];
+    const distintos = new Set<string>();
+    for (const f of frases) {
+      const { ins, ambiguos } = resolver(nombreDe(f));
+      if (ins) distintos.add(ins.id);
+      else if (ambiguos.length) distintos.add(`?${f}`);
+    }
+    if (distintos.size < 2) return [linea];
+    let clave = "";
+    return frases.map((f) => {
+      const k = f.match(RE_CUALQUIER_CLAVE);
+      if (k) {
+        clave = k[0];
+        return f;
+      }
+      return clave ? `${clave} ${f}` : f;
+    });
+  };
   const insumoDe = (id: string) => insumos.find((i) => i.id === id);
   /** Agrega o completa el renglón de un insumo. */
   const anotar = (
@@ -379,8 +518,33 @@ export function leerMensaje<T extends { id: string; nombre: string } & InsumoCon
     } else out.push({ insumoId, tomada, util, leido, entradaExplicita });
   };
 
-  for (const lineaOriginal of texto.split(/\n|;/)) {
-    const linea = numerosEnCifras(lineaOriginal);
+  for (const lineaOriginal of texto.split(/\n|;/)) for (const linea of expandir(numerosEnCifras(lineaOriginal))) {
+    // "2 tazas de arroz": no se convierte a kg sin adivinar.
+    const rara = linea.match(RE_UNIDAD_RARA);
+    if (rara) {
+      const nombre = nombreDe(linea.replace(RE_UNIDAD_RARA, " "));
+      const { ins, ambiguos } = resolver(nombre);
+      out.push({ insumoId: ins?.id ?? "", tomada: null, util: null, leido: nombre, unidadRara: rara[0].trim(), ambiguos: ambiguos.length ? ambiguos : undefined });
+      continue;
+    }
+    // Pérdidas y devoluciones: la cantidad va en `util`.
+    const especial = RE_PERDIDA.test(linea) ? "perdida" : RE_DEVOLUCION.test(linea) ? "devolucion" : null;
+    if (especial) {
+      const cantidades = cantidadesDe(linea);
+      if (cantidades.length === 0) continue;
+      const nombre = nombreDe(linea);
+      const { ins, ambiguos } = resolver(nombre);
+      out.push({
+        insumoId: ins?.id ?? "",
+        tomada: null,
+        util: enPlantilla(cantidades[0], ins),
+        leido: nombre,
+        especial,
+        motivo: especial === "perdida" ? motivoPerdida(linea) : undefined,
+        ambiguos: ambiguos.length ? ambiguos : undefined,
+      });
+      continue;
+    }
     const claves = [...linea.matchAll(RE_CLAVE)];
     const previo = out[out.length - 1];
 
@@ -389,7 +553,11 @@ export function leerMensaje<T extends { id: string; nombre: string } & InsumoCon
       if (cantidades.length === 0) continue;
       const nombre = nombreDe(linea);
       if (!/[a-záéíóúñ]{3,}/i.test(nombre) && !(previo && cantidades.length === 1)) continue;
-      const ins = buscar(nombre);
+      const { ins, ambiguos } = resolver(nombre);
+      if (ambiguos.length) {
+        out.push({ insumoId: "", tomada: cantidades[0]?.n ?? null, util: cantidades[1]?.n ?? null, leido: nombre, ambiguos });
+        continue;
+      }
       // "Lomito 8 kg" y en la línea siguiente "6 kg": completa el renglón anterior.
       if (!ins && previo && previo.util == null && cantidades.length === 1) {
         previo.util = enPlantilla(cantidades[0], insumoDe(previo.insumoId));
@@ -404,7 +572,11 @@ export function leerMensaje<T extends { id: string; nombre: string } & InsumoCon
     // Con palabras clave. La línea se parte en frases (por coma o "y"); en cada
     // frase la palabra clave va con su peso, esté antes o después:
     // "Entrando 8 kg lomito", "Lomito 8 kg entrando", "Lomito entrando 8 kg".
-    const ins = buscar(nombreDe(linea));
+    const { ins, ambiguos } = resolver(nombreDe(linea));
+    if (ambiguos.length) {
+      out.push({ insumoId: "", tomada: null, util: null, leido: nombreDe(linea), ambiguos });
+      continue;
+    }
     // Sin nombre en la línea ("procesado 6 kg"): es del insumo anterior.
     const destino = ins ?? (previo?.insumoId ? insumoDe(previo.insumoId) ?? null : null);
     let tomada: number | null = null;

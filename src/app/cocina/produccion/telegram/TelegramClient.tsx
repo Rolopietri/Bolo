@@ -169,6 +169,13 @@ export function TelegramClient() {
               <ul className="space-y-1 text-cacao-soft">
                 <li>· Bolo lo registra al instante. El bot solo responde si algo no se pudo registrar.</li>
                 <li>· Una salida sin su entrada se rechaza: el bot pide primero cuánto entró.</li>
+                <li>
+                  · Para corregir: responde al mensaje equivocado con <b className="text-cacao">deshacer</b>, o edítalo.
+                </li>
+                <li>
+                  · Daños y vencidos: «Se dañaron 2 kg de tomate». Devoluciones: «Devolviendo 3 panes al almacén».
+                </li>
+                <li>· Si el nombre o la medida es dudoso (por ejemplo «queso» o «2 tazas»), no se registra y el bot pregunta.</li>
                 <li>· Un insumo por mensaje o por línea.</li>
                 <li>
                   · También vale <b className="text-cacao">Sin procesar</b> y <b className="text-cacao">Procesado</b>.

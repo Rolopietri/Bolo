@@ -30,7 +30,7 @@ import { fechaISOEnCaracas, restarDiasISO, salidasDeVenta } from "@/lib/stock-li
 import { displayCantidad, opcionesCantidad } from "@/lib/units";
 import { extractError } from "@/lib/data/error";
 import { aplicarPendiente, listPendientes, marcarPendiente, urlFotoPendiente, type Pendiente } from "@/lib/data/telegram";
-import { accionesDeMensaje, respuestaBot, type ResultadoBot } from "@/lib/telegram-acciones";
+import { accionesDeMensaje, hayProblemas, respuestaBot, type ResultadoBot } from "@/lib/telegram-acciones";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { CameraIcon, ChatIcon, ChevronIcon, DocIcon, ImageIcon, PlusIcon, TrashIcon } from "@/components/icons";
@@ -202,7 +202,7 @@ export function ProduccionClient() {
       // que viene después en la misma tanda tiene que verlo así.
       const locales = insumos.map((i) => ({ ...i }));
       for (const p of orden) {
-        const { acciones, noReconocidos, sinPresentacion } = accionesDeMensaje(p.texto ?? "", locales);
+        const { acciones, problemas } = accionesDeMensaje(p.texto ?? "", locales);
         for (const a of acciones) {
           if (a.tipo === "entrada" || a.tipo === "completo") {
             const l = locales.find((x) => x.id === a.insumo_id);
@@ -211,11 +211,11 @@ export function ProduccionClient() {
         }
         if (acciones.length === 0) {
           await marcarPendiente(p.id, "descartado");
-          if (noReconocidos.length || sinPresentacion.length) lineas.push(respuestaBot([], noReconocidos, {}, sinPresentacion));
+          if (hayProblemas(problemas)) lineas.push(respuestaBot([], problemas));
           continue;
         }
         const res: ResultadoBot[] = await aplicarPendiente(p.id, acciones, p.remitente);
-        lineas.push(respuestaBot(res, noReconocidos, {}, sinPresentacion));
+        lineas.push(respuestaBot(res, problemas));
       }
       setResumenAplicado(lineas.filter(Boolean).join("\n") || "No había movimientos que registrar.");
       setVersion((v) => v + 1);

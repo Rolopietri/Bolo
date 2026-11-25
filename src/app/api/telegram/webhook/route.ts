@@ -4,16 +4,25 @@
  * cabecera.
  *
  * Telegram directo (BOLO-10): el mensaje se registra al instante —entrada a la
- * mesa, salida a en uso con su merma, o uso por unidad—. En el grupo el bot solo
- * responde lo que NO se pudo registrar (BOLO-11); lo registrado va al resumen
- * diario que recibe el gerente en privado ("/gerente CODIGO", "/resumen"). Las fotos quedan en Producción para
- * revisarlas (la lectura de la foto corre en el navegador).
+ * mesa, salida a en uso con su merma, uso por unidad, pérdida o devolución—.
+ * En el grupo el bot solo responde lo que NO se pudo registrar (BOLO-11); lo
+ * registrado va al resumen diario que recibe el gerente en privado
+ * ("/gerente CODIGO", "/resumen"). Si algo es dudoso no se registra (BOLO-13).
+ * Responder "deshacer" a un mensaje lo revierte; editarlo aplica el texto nuevo.
+ * Las fotos quedan en Producción (la lectura de la foto corre en el navegador).
  * Siempre responde 200 para que Telegram no reintente sin fin.
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { telegram } from "@/lib/telegram";
-import { accionesDeMensaje, respuestaBot, type InsumoBot, type ResultadoBot } from "@/lib/telegram-acciones";
+import {
+  accionesDeMensaje,
+  hayProblemas,
+  legible,
+  respuestaBot,
+  type InsumoBot,
+  type ResultadoBot,
+} from "@/lib/telegram-acciones";
 import { textoResumen, type DatosResumen } from "@/lib/telegram-resumen";
 
 export const runtime = "nodejs";
@@ -28,7 +37,29 @@ type Recibido = {
   remitente?: string | null;
   foto?: boolean;
   message_id?: number;
+  objetivo?: number;
+  motivo?: string;
+  es_gerente?: boolean;
 };
+
+// Que Telegram también avise de los mensajes editados (una vez por instancia).
+let edicionesAseguradas = false;
+async function asegurarEdiciones(token: string, secreto: string, req: NextRequest) {
+  if (edicionesAseguradas) return;
+  try {
+    const info = await telegram<{ url?: string; allowed_updates?: string[] }>(token, "getWebhookInfo");
+    if (!info.allowed_updates?.includes("edited_message") && info.url) {
+      await telegram(token, "setWebhook", {
+        url: info.url,
+        secret_token: secreto,
+        allowed_updates: ["message", "edited_message"],
+      });
+    }
+    edicionesAseguradas = true;
+  } catch (e) {
+    console.error("asegurarEdiciones", e instanceof Error ? e.message : e, req.nextUrl.host);
+  }
+}
 
 export async function POST(req: NextRequest) {
   const secreto = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
@@ -38,9 +69,12 @@ export async function POST(req: NextRequest) {
   if (!secreto || !update || !url || !key) return NextResponse.json({ ok: true });
 
   const sb = createClient(url, key, { auth: { persistSession: false } });
-  const { data, error } = await sb.rpc("telegram_recibir", { p_secreto: secreto, p_update: update });
+  const editado = Boolean((update as { edited_message?: unknown }).edited_message);
+  const { data, error } = editado
+    ? await sb.rpc("telegram_editar", { p_secreto: secreto, p_update: update })
+    : await sb.rpc("telegram_recibir", { p_secreto: secreto, p_update: update });
   if (error) {
-    console.error("telegram_recibir", error.message);
+    console.error(editado ? "telegram_editar" : "telegram_recibir", error.message);
     return NextResponse.json({ ok: true });
   }
 
@@ -53,32 +87,84 @@ export async function POST(req: NextRequest) {
           ...(r.message_id ? { reply_parameters: { message_id: r.message_id, allow_sending_without_reply: true } } : {}),
         }).catch(() => {})
       : Promise.resolve();
+  if (r.token) await asegurarEdiciones(r.token, secreto, req);
 
-  if (r.accion === "vinculado") {
-    await responder(
-      "Listo: este grupo quedó conectado a Bolo. Escriban «Entrando 8 kg lomito» al sacar algo para procesar, «Saliendo 6 kg lomito» al terminar, y «Saliendo 12 plátanos» para los productos por unidad. Bolo lo registra al instante; solo responderé si algo no se pudo registrar.",
-    );
-  } else if (r.accion === "gerente_vinculado") {
-    await responder("Listo: cada noche te enviaré aquí el resumen de producción del día. Escribe /resumen para verlo en cualquier momento.");
-  } else if (r.accion === "gerente_codigo_invalido") {
-    await responder("Ese código no coincide. Revísalo en Bolo › Producción › Grupo de Telegram.");
-  } else if (r.accion === "start") {
-    await responder(
-      (r as { es_gerente?: boolean }).es_gerente
-        ? "Hola. Escribe /resumen para ver la producción de hoy."
-        : "Hola. Soy el bot de producción de Bolo. Si eres el gerente, escribe /gerente seguido del código que aparece en Bolo › Producción › Grupo de Telegram para recibir el resumen diario.",
-    );
-  } else if (r.accion === "resumen_pedido") {
-    const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
-    const { data: rs, error: e } = await sb.rpc("telegram_resumen_secreto", { p_secreto: secreto, p_fecha: hoy });
-    if (e) console.error("telegram_resumen_secreto", e.message);
-    else await responder(textoResumen((rs as { datos: DatosResumen }).datos));
-  } else if (r.accion === "codigo_invalido") {
-    await responder("Ese código no coincide. Revísalo en Bolo › Producción › Grupo de Telegram.");
-  } else if (r.accion === "guardado" && r.id) {
-    await aplicarMensaje(sb, secreto, r, responder);
+  switch (r.accion) {
+    case "vinculado":
+      await responder(
+        "Listo: este grupo quedó conectado a Bolo. Escriban «Entrando 8 kg lomito» al sacar algo para procesar, «Saliendo 6 kg lomito» al terminar, y «Saliendo 12 plátanos» para los productos por unidad. Bolo lo registra al instante; solo responderé si algo no se pudo registrar. Para corregir, respondan al mensaje con «deshacer».",
+      );
+      break;
+    case "gerente_vinculado":
+      await responder("Listo: cada noche te enviaré aquí el resumen de producción del día. Escribe /resumen para verlo en cualquier momento.");
+      break;
+    case "gerente_codigo_invalido":
+    case "codigo_invalido":
+      await responder("Ese código no coincide. Revísalo en Bolo › Producción › Grupo de Telegram.");
+      break;
+    case "start":
+      await responder(
+        r.es_gerente
+          ? "Hola. Escribe /resumen para ver la producción de hoy."
+          : "Hola. Soy el bot de producción de Bolo. Si eres el gerente, escribe /gerente seguido del código que aparece en Bolo › Producción › Grupo de Telegram para recibir el resumen diario.",
+      );
+      break;
+    case "resumen_pedido": {
+      const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
+      const { data: rs, error: e } = await sb.rpc("telegram_resumen_secreto", { p_secreto: secreto, p_fecha: hoy });
+      if (e) console.error("telegram_resumen_secreto", e.message);
+      else await responder(textoResumen((rs as { datos: DatosResumen }).datos));
+      break;
+    }
+    case "deshacer_sin_respuesta":
+      await responder("Para deshacer, responde al mensaje equivocado con «deshacer».");
+      break;
+    case "deshacer":
+      await deshacer(sb, secreto, r, responder);
+      break;
+    case "edicion_rechazada":
+      await responder(`✕ No pude aplicar la edición: ${r.motivo ?? "error de Bolo"}`);
+      break;
+    case "guardado":
+    case "editado":
+      if (r.id) await aplicarMensaje(sb, secreto, r, responder);
+      break;
   }
   return NextResponse.json({ ok: true });
+}
+
+const QUE: Record<string, string> = {
+  entrada: "la entrada",
+  salida: "la salida",
+  completo: "el procesamiento",
+  uso: "la salida a uso",
+  perdida: "la pérdida",
+  devolucion: "la devolución",
+};
+
+async function deshacer(sb: SupabaseClient, secreto: string, r: Recibido, responder: (t: string) => Promise<unknown>) {
+  const { data, error } = await sb.rpc("telegram_deshacer", {
+    p_secreto: secreto,
+    p_chat: r.chat_id,
+    p_message_id: r.objetivo,
+  });
+  if (error) {
+    console.error("telegram_deshacer", error.message);
+    await responder("No pude deshacer por un error de Bolo. Inténtalo de nuevo en un momento.");
+    return;
+  }
+  const d = (data ?? {}) as { ok?: boolean; motivo?: string; resultado?: ResultadoBot[] };
+  if (!d.ok) {
+    await responder(`✕ No pude deshacer: ${d.motivo ?? "error de Bolo"}`);
+    return;
+  }
+  const hechos = (d.resultado ?? [])
+    .filter((x) => x.ok)
+    .map((x) => {
+      const n = x.tipo === "salida" || x.tipo === "completo" ? x.procesado : x.tipo === "entrada" ? x.crudo : x.cantidad;
+      return `${QUE[x.tipo] ?? "el registro"} de ${x.nombre ?? "el insumo"} (${legible(n, x.unidad_base ?? "")})`;
+    });
+  await responder(`↺ Deshecho: ${hechos.join(", ") || "el registro"}. Si hace falta, escribe el mensaje correcto.`);
 }
 
 async function aplicarMensaje(
@@ -94,10 +180,10 @@ async function aplicarMensaje(
     return;
   }
   const insumos = ((ctx as { insumos?: InsumoBot[] } | null)?.insumos ?? []) as InsumoBot[];
-  const { acciones, noReconocidos, sinPresentacion } = accionesDeMensaje(r.texto ?? "", insumos);
+  const { acciones, problemas } = accionesDeMensaje(r.texto ?? "", insumos);
 
   // Números sueltos sin nada reconocible ("somos 5"): se ignora en silencio.
-  if (acciones.length === 0 && noReconocidos.length === 0 && sinPresentacion.length === 0) {
+  if (acciones.length === 0 && !hayProblemas(problemas)) {
     await sb.rpc("telegram_marcar", { p_secreto: secreto, p_pendiente: r.id, p_estado: "descartado", p_resultado: null });
     return;
   }
@@ -117,14 +203,12 @@ async function aplicarMensaje(
     }
     resultados = (res ?? []) as ResultadoBot[];
   } else {
-    await sb.rpc("telegram_marcar", {
-      p_secreto: secreto,
-      p_pendiente: r.id,
-      p_estado: "rechazado",
-      p_resultado: { no_reconocidos: noReconocidos, sin_presentacion: sinPresentacion },
-    });
+    await sb.rpc("telegram_marcar", { p_secreto: secreto, p_pendiente: r.id, p_estado: "rechazado", p_resultado: problemas });
   }
-  // En el grupo solo lo que no se pudo registrar.
-  const texto = respuestaBot(resultados, noReconocidos, { soloErrores: true }, sinPresentacion);
+  // En el grupo solo lo que no se pudo registrar (y las correcciones).
+  let texto = respuestaBot(resultados, problemas, { soloErrores: true });
+  if (r.accion === "editado" && acciones.length > 0 && resultados.every((x) => x.ok) && !hayProblemas(problemas)) {
+    texto = ["✓ Apliqué la edición del mensaje.", texto].filter(Boolean).join("\n");
+  }
   if (texto) await responder(texto);
 }
