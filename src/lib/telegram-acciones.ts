@@ -36,6 +36,8 @@ export type ResultadoBot = {
   faltaba?: boolean;
   almacen_antes?: number;
   marcado_procesa?: boolean;
+  /** Salida: cuántas entradas abiertas se juntaron para cerrarla. */
+  lotes?: number;
 };
 
 export function accionesDeMensaje(
@@ -91,7 +93,8 @@ export function respuestaBot(resultados: ResultadoBot[], noReconocidos: string[]
       } else if (r.tipo === "salida" || r.tipo === "completo") {
         const est = r.estandar != null ? `, estándar ${pct(Number(r.estandar))}` : "";
         const merma = (r.merma ?? 0) > 0 ? ` Merma ${q(r.merma)} (${pct(r.merma_porc ?? 0)}${est}).` : " Sin merma.";
-        lineas.push(`✓ ${nombre}: entró ${q(r.crudo)}, salió ${q(r.procesado)}.${merma} Pasa a en uso.${almacen}`);
+        const juntas = (r.lotes ?? 1) > 1 ? ` (juntando ${r.lotes} entradas)` : "";
+        lineas.push(`✓ ${nombre}: entró ${q(r.crudo)}${juntas}, salió ${q(r.procesado)}.${merma} Pasa a en uso.${almacen}`);
       } else if (r.tipo === "uso") {
         lineas.push(`✓ ${nombre}: salen ${q(r.cantidad)} del almacén, quedan en uso.${almacen}`);
       }
@@ -102,7 +105,8 @@ export function respuestaBot(resultados: ResultadoBot[], noReconocidos: string[]
         `✕ ${nombre}: no registré la salida porque no hay una entrada abierta. Indica primero cuánto entró sin procesar («Entrando … ${nombre.toLowerCase()}») y luego vuelve a enviar la salida.`,
       );
     } else if (r.error === "mas_que_entrada") {
-      lineas.push(`✕ ${nombre}: la salida (${q(r.procesado)}) es mayor que la entrada (${q(r.crudo)}). Revisa los números.`);
+      const abiertas = (r.lotes ?? 1) > 1 ? `las ${r.lotes} entradas abiertas suman` : "la entrada abierta es de";
+      lineas.push(`✕ ${nombre}: la salida (${q(r.procesado)}) es mayor que lo que entró: ${abiertas} ${q(r.crudo)}. Revisa los números.`);
     } else if (r.error === "cantidad") {
       lineas.push(`✕ ${nombre}: revisa la cantidad.`);
     } else {

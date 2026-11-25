@@ -8,7 +8,9 @@
 --   • "Saliendo 6 kg lomito"  → cierra el lote: 6 kg pasan a EN USO
 --                               (stock_procesado), la diferencia queda como
 --                               merma y el lote entra al historial
---                               (procesamientos), como antes.
+--                               (procesamientos), como antes. La entrada
+--                               puede ser de horas o días antes; si la salida
+--                               cubre varias entradas, se juntan.
 --                               Sin entrada abierta, se rechaza.
 --   • "Saliendo 12 plátanos"  → producto que no se procesa: sale del almacén
 --                               directo a EN USO (stock_procesado) y queda
@@ -112,45 +114,68 @@ begin
     'marcado_procesa', not coalesce(r.se_procesa, false), 'lote_id', v_lote);
 end $$;
 
--- Salida: cierra el lote abierto más antiguo del insumo.
+-- Salida: cierra el lote abierto más antiguo del insumo. Si la salida es
+-- mayor que ese lote (se procesaron juntas varias entradas, por ejemplo las
+-- que se dejaron listas el día anterior), junta las entradas abiertas, de la
+-- más vieja a la más nueva, hasta cubrir la salida y las cierra como un solo
+-- lote. La entrada puede haberse hecho horas o días antes.
 create or replace function public._prod_salida(
   p_insumo uuid, p_procesado numeric, p_responsable text
 ) returns jsonb language plpgsql security definer set search_path = public, pg_temp as $$
-declare r public.insumos; lo public.procesamientos_abiertos; v_merma numeric; v_porc numeric; v_fecha date := public._prod_hoy();
+declare
+  r public.insumos; lo record; v_fecha date := public._prod_hoy();
+  v_total numeric := 0; v_ids uuid[] := '{}'; v_n int := 0;
+  v_resp text; v_origen text; v_desde timestamptz; v_merma numeric; v_porc numeric;
 begin
   if p_procesado is null or p_procesado < 0 then
     return jsonb_build_object('ok', false, 'tipo', 'salida', 'error', 'cantidad');
   end if;
   select * into r from public.insumos where id = p_insumo for update;
   if not found then return jsonb_build_object('ok', false, 'tipo', 'salida', 'error', 'insumo'); end if;
-  select * into lo from public.procesamientos_abiertos
-   where insumo_id = p_insumo order by abierto_at asc limit 1 for update;
-  if not found then
+
+  for lo in
+    select * from public.procesamientos_abiertos
+     where insumo_id = p_insumo order by abierto_at asc for update
+  loop
+    v_total := v_total + lo.crudo;
+    v_ids := v_ids || lo.id;
+    v_n := v_n + 1;
+    v_resp := coalesce(v_resp, lo.responsable);
+    v_origen := coalesce(v_origen, lo.origen);
+    v_desde := coalesce(v_desde, lo.abierto_at);
+    exit when v_total + 0.00005 >= p_procesado;
+  end loop;
+
+  if v_n = 0 then
     return jsonb_build_object('ok', false, 'tipo', 'salida', 'error', 'sin_entrada',
       'insumo_id', p_insumo, 'nombre', r.nombre, 'unidad_base', r.unidad_base, 'procesado', p_procesado);
   end if;
-  if p_procesado > lo.crudo + 0.00005 then
+  if p_procesado > v_total + 0.00005 then
     return jsonb_build_object('ok', false, 'tipo', 'salida', 'error', 'mas_que_entrada',
-      'insumo_id', p_insumo, 'nombre', r.nombre, 'unidad_base', r.unidad_base, 'procesado', p_procesado, 'crudo', lo.crudo);
+      'insumo_id', p_insumo, 'nombre', r.nombre, 'unidad_base', r.unidad_base,
+      'procesado', p_procesado, 'crudo', v_total, 'lotes', v_n);
   end if;
-  v_merma := lo.crudo - p_procesado;
-  v_porc := case when lo.crudo > 0 then v_merma / lo.crudo * 100 else 0 end;
+
+  v_merma := v_total - p_procesado;
+  v_porc := case when v_total > 0 then v_merma / v_total * 100 else 0 end;
   perform set_config('bolo.motivo', 'procesamiento', true);
   update public.insumos set stock_procesado = coalesce(stock_procesado, 0) + p_procesado where id = p_insumo;
   if v_merma > 0 then
     insert into public.stock_movimientos (insumo_id, tipo, capa, cantidad, motivo, fecha, nota)
     values (p_insumo, 'merma', 'total', -v_merma, 'Procesamiento', v_fecha,
-            'Lote ' || case when lo.origen = 'telegram' then 'desde Telegram' else 'de producción' end);
+            'Lote ' || case when v_origen = 'telegram' then 'desde Telegram' else 'de producción' end
+            || case when v_n > 1 then ' (' || v_n || ' entradas juntas)' else '' end);
   end if;
   insert into public.procesamientos (insumo_id, fecha, crudo, procesado, merma_porc, nota, responsable, origen, created_by)
-  values (p_insumo, v_fecha, lo.crudo, p_procesado, v_porc, null,
-          coalesce(lo.responsable, nullif(btrim(coalesce(p_responsable, '')), '')),
-          case when lo.origen in ('manual', 'escaneo', 'telegram') then lo.origen else 'telegram' end, auth.uid());
-  delete from public.procesamientos_abiertos where id = lo.id;
+  values (p_insumo, v_fecha, v_total, p_procesado, v_porc,
+          case when v_n > 1 then v_n || ' entradas juntas' end,
+          coalesce(v_resp, nullif(btrim(coalesce(p_responsable, '')), '')),
+          case when v_origen in ('manual', 'escaneo', 'telegram') then v_origen else 'telegram' end, auth.uid());
+  delete from public.procesamientos_abiertos where id = any (v_ids);
   return jsonb_build_object(
     'ok', true, 'tipo', 'salida', 'insumo_id', p_insumo, 'nombre', r.nombre, 'unidad_base', r.unidad_base,
-    'crudo', lo.crudo, 'procesado', p_procesado, 'merma', v_merma, 'merma_porc', round(v_porc, 1),
-    'estandar', r.merma_coccion_porc);
+    'crudo', v_total, 'procesado', p_procesado, 'merma', v_merma, 'merma_porc', round(v_porc, 1),
+    'estandar', r.merma_coccion_porc, 'lotes', v_n, 'desde', v_desde);
 end $$;
 
 -- Uso por unidad: del almacén directo a EN USO.
