@@ -38,6 +38,9 @@ export type ResultadoBot = {
   marcado_procesa?: boolean;
   /** Salida: cuántas entradas abiertas se juntaron para cerrarla. */
   lotes?: number;
+  /** Entrada: salidas rechazadas antes (sin entrada) que esta entrada permitió registrar. */
+  corregidos?: ResultadoBot[];
+  corregido?: boolean;
 };
 
 export function accionesDeMensaje(
@@ -88,6 +91,13 @@ export function respuestaBot(
 ): string {
   const lineas: string[] = [];
   for (const r of resultados) {
+    // Correcciones: la entrada que faltaba registró una salida rechazada. Se
+    // avisa siempre, para que nadie la vuelva a enviar.
+    for (const c of r.corregidos ?? []) {
+      const u = c.unidad_base ?? "";
+      const merma = (c.merma ?? 0) > 0 ? ` Merma ${legible(c.merma, u)} (${pct(c.merma_porc ?? 0)}).` : "";
+      lineas.push(`✓ Corregido: ${c.nombre ?? "el insumo"} entró ${legible(c.crudo, u)}, salió ${legible(c.procesado, u)}.${merma} La salida quedó registrada.`);
+    }
     if (r.ok && opciones.soloErrores) continue;
     const u = r.unidad_base ?? "";
     const q = (n: number | undefined) => legible(n, u);
@@ -108,11 +118,13 @@ export function respuestaBot(
     }
     if (r.error === "sin_entrada") {
       lineas.push(
-        `✕ ${nombre}: no registré la salida porque no hay una entrada abierta. Indica primero cuánto entró sin procesar («Entrando … ${nombre.toLowerCase()}») y luego vuelve a enviar la salida.`,
+        `✕ ${nombre}: no registré la salida porque no hay una entrada abierta. Indica cuánto entró sin procesar («Entrando … ${nombre.toLowerCase()}») y la salida se registrará sola.`,
       );
     } else if (r.error === "mas_que_entrada") {
       const abiertas = (r.lotes ?? 1) > 1 ? `las ${r.lotes} entradas abiertas suman` : "la entrada abierta es de";
-      lineas.push(`✕ ${nombre}: la salida (${q(r.procesado)}) es mayor que lo que entró: ${abiertas} ${q(r.crudo)}. Revisa los números.`);
+      lineas.push(
+        `✕ ${nombre}: la salida (${q(r.procesado)}) es mayor que lo que entró: ${abiertas} ${q(r.crudo)}. Si faltó una entrada, escríbela y la salida se registrará sola.`,
+      );
     } else if (r.error === "cantidad") {
       lineas.push(`✕ ${nombre}: revisa la cantidad.`);
     } else {
