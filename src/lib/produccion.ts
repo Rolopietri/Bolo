@@ -226,7 +226,27 @@ const RE_NUMERO_PALABRA = new RegExp(
   `(?<![a-záéíóúñ])(${Object.keys(NUMEROS).join("|")})(?=\\s+(?:${PRESENTACIONES}|kilos?|kg|litros?|unidades|gramos?))`,
   "gi",
 );
-const numerosEnCifras = (t: string) => t.replace(RE_NUMERO_PALABRA, (m) => NUMEROS[m.toLowerCase()] ?? m);
+// Fracciones antes de una presentación o unidad: "un cuarto de caja",
+// "tres cuartos de kilo", "un tercio de paquete", "1/4 de caja".
+const UNIDAD_SIGUE = `(?=\\s+(?:de\\s+)?(?:${PRESENTACIONES}|kilos?|kg|litros?|lts?|unidades|unid|gramos?|grs?))`;
+const FRACCIONES: Record<string, number> = { cuarto: 1 / 4, tercio: 1 / 3, octavo: 1 / 8, medio: 1 / 2 };
+const RE_FRACCION_PALABRA = new RegExp(
+  `(?<![a-záéíóúñ])(?:(${Object.keys(NUMEROS).join("|")}|\\d+)\\s+)?(cuarto|tercio|octavo|medio)s?${UNIDAD_SIGUE}`,
+  "gi",
+);
+const RE_FRACCION_CIFRAS = new RegExp(`(?<![\\d/])(\\d+)\\s*/\\s*(\\d+)${UNIDAD_SIGUE}`, "gi");
+const redondeo = (n: number) => String(Math.round(n * 10000) / 10000);
+const numerosEnCifras = (t: string) =>
+  t
+    .replace(RE_FRACCION_CIFRAS, (m, a: string, b: string) => (Number(b) > 0 ? redondeo(Number(a) / Number(b)) : m))
+    // Fechas y horas escritas en el mensaje no son cantidades: "25/11", "9:30".
+    .replace(/(?<![\d.,])\d{1,2}\s*\/\s*\d{1,2}(?:\s*\/\s*\d{2,4})?(?![\d.,])/g, " ")
+    .replace(/(?<![\d.,])\d{1,2}:\d{2}(?:\s*(?:a\.?\s*m\.?|p\.?\s*m\.?|am|pm))?/gi, " ")
+    .replace(RE_FRACCION_PALABRA, (m, n: string | undefined, f: string) => {
+      const veces = n ? Number(NUMEROS[n.toLowerCase()] ?? n) : 1;
+      return redondeo(veces * (FRACCIONES[f.toLowerCase()] ?? 0));
+    })
+    .replace(RE_NUMERO_PALABRA, (m) => NUMEROS[m.toLowerCase()] ?? m);
 
 type InsumoConPresentacion = { unidadBase: string; unidadCompra?: string | null; cantidadPorCompra?: number | null };
 
