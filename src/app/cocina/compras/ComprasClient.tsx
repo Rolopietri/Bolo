@@ -34,6 +34,13 @@ import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
+import {
+  deltaStockEdicion,
+  faltanteSiBajaStock,
+  parseAlarmaStock,
+  textoAlarmaStock,
+  type AlarmaStock,
+} from "@/lib/stock-compra";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { modalidadAlElegirProveedor } from "@/lib/modalidad-pago";
@@ -154,6 +161,7 @@ export function ComprasClient() {
   const [escaneando, setEscaneando] = useState(false);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
+  const [alarmaStock, setAlarmaStock] = useState<AlarmaStock | null>(null);
   // Edición de una compra existente (null = alta nueva).
   const [editingId, setEditingId] = useState<string | null>(null);
   // Se marca en el mismo instante de abrir la edición, antes de que vuelva
@@ -732,7 +740,20 @@ export function ComprasClient() {
       fleteUsd: Number(form.fleteUsd) > 0 ? Number(form.fleteUsd) : undefined,
       // Si la factura ya existe, hereda su estado de pago (se paga completa).
       pagada: facturaLock ? facturaLock.pagada : !form.pagarDespues,
+      // Al editar se conserva la fecha de pago guardada. No se sustituye por
+      // la fecha de la compra.
+      fechaPago: editingId
+        ? (compras.find((c) => c.id === editingId)?.fechaPago ?? null)
+        : undefined,
     };
+    if (editingId) {
+      const original = compras.find((c) => c.id === editingId);
+      const alarma = original ? alarmaAlEditar(original, input.cantidad) : null;
+      if (alarma) {
+        setAlarmaStock(alarma);
+        return;
+      }
+    }
     try {
       if (editingId) {
         // La base mueve el stock por la diferencia y deja el mismo id. En la
@@ -755,11 +776,50 @@ export function ComprasClient() {
       setInsumos(fresh);
       resetForm();
     } catch (e) {
+      const alarma = parseAlarmaStock(extractError(e, ""));
+      if (alarma) {
+        setAlarmaStock(alarma);
+        return;
+      }
       setError(e instanceof Error ? e.message : "Error guardando");
     }
   }
 
+  function alarmaDeDelta(insumoId: string, deltaBase: number): AlarmaStock | null {
+    const ins = insumos.find((i) => i.id === insumoId);
+    if (!ins) return null;
+    const faltante = faltanteSiBajaStock(ins.stockTotal, deltaBase);
+    if (faltante == null) return null;
+    return { insumo: ins.nombre, stock: ins.stockTotal, unidad: ins.unidadBase, faltante };
+  }
+
+  function alarmaAlEditar(original: Compra, cantidadNueva: number): AlarmaStock | null {
+    const viejo = insumos.find((i) => i.id === original.insumoId);
+    const nuevo = insumos.find((i) => i.id === form.insumoId);
+    const { deltaViejo, deltaNuevo } = deltaStockEdicion({
+      mismoInsumo: original.insumoId === form.insumoId,
+      cantidadVieja: original.cantidad,
+      factorViejo: original.cantidadPorCompraSnap ?? viejo?.cantidadPorCompra ?? 1,
+      cantidadNueva,
+      factorNuevo: nuevo?.cantidadPorCompra ?? 1,
+    });
+    return (
+      alarmaDeDelta(original.insumoId, deltaViejo) ??
+      (deltaNuevo == null ? null : alarmaDeDelta(form.insumoId, deltaNuevo))
+    );
+  }
+
   async function handleDelete(id: string) {
+    const compra = compras.find((c) => c.id === id);
+    if (compra) {
+      const ins = insumos.find((i) => i.id === compra.insumoId);
+      const factor = compra.cantidadPorCompraSnap ?? ins?.cantidadPorCompra ?? 1;
+      const alarma = alarmaDeDelta(compra.insumoId, -compra.cantidad * factor);
+      if (alarma) {
+        setAlarmaStock(alarma);
+        return;
+      }
+    }
     try {
       await deleteCompra(id);
       setCompras((prev) => prev.filter((c) => c.id !== id));
@@ -768,6 +828,11 @@ export function ComprasClient() {
       const fresh = await listInsumos();
       setInsumos(fresh);
     } catch (e) {
+      const alarma = parseAlarmaStock(extractError(e, ""));
+      if (alarma) {
+        setAlarmaStock(alarma);
+        return;
+      }
       setError(e instanceof Error ? e.message : "Error eliminando");
     }
   }
@@ -1559,6 +1624,16 @@ export function ComprasClient() {
           setPendienteBorrar(null);
         }}
         onCancel={() => setPendienteBorrar(null)}
+      />
+
+      <ConfirmDialog
+        open={alarmaStock !== null}
+        title="No se puede, faltaría stock"
+        message={alarmaStock ? textoAlarmaStock(alarmaStock) : ""}
+        confirmLabel="Entendido"
+        cancelLabel="Cerrar"
+        onConfirm={() => setAlarmaStock(null)}
+        onCancel={() => setAlarmaStock(null)}
       />
     </div>
   );

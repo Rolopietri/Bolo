@@ -351,6 +351,48 @@ igual(
   ["Lácteos", "Otros", "Sin categoría"],
 );
 
+const {
+  faltanteSiBajaStock,
+  deltaStockEdicion,
+  parseAlarmaStock,
+  textoAlarmaStock,
+} = await import("../src/lib/stock-compra.ts");
+
+igual("bajar de 2 en 1 no falta", faltanteSiBajaStock(2, -1), null);
+igual("quedar en cero no falta", faltanteSiBajaStock(5, -5), null);
+igual("faltar 3", faltanteSiBajaStock(2, -5), 3);
+const mismo = deltaStockEdicion({
+  mismoInsumo: true,
+  cantidadVieja: 5,
+  factorViejo: 1,
+  cantidadNueva: 6,
+  factorNuevo: 1,
+});
+igual("editar 5 a 6 suma 1", mismo.deltaViejo, 1);
+igual("mismo insumo no toca otro", mismo.deltaNuevo, null);
+const otro = deltaStockEdicion({
+  mismoInsumo: false,
+  cantidadVieja: 5,
+  factorViejo: 1,
+  cantidadNueva: 5,
+  factorNuevo: 1,
+});
+igual("cambiar insumo resta la compra vieja", otro.deltaViejo, -5);
+igual("cambiar insumo suma la nueva", otro.deltaNuevo, 5);
+const leida = parseAlarmaStock("ERROR: BOLO_STOCK_NEGATIVO|Queso blanco|2|kg|3");
+igual("lee el insumo", leida?.insumo, "Queso blanco");
+igual("lee el stock", leida?.stock, 2);
+igual("lee la unidad", leida?.unidad, "kg");
+igual("lee el faltante", leida?.faltante, 3);
+igual("sin prefijo no es alarma", parseAlarmaStock("otro error"), null);
+igual(
+  "el texto nombra insumo, stock y faltante",
+  textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("Queso") &&
+    textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("2 kg") &&
+    textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("3 kg"),
+  true,
+);
+
 if (fallas > 0) {
   console.error(`${fallas} prueba(s) fallaron.`);
   process.exit(1);

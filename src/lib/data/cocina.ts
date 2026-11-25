@@ -403,6 +403,7 @@ type CompraRow = {
   flete_usd: number | string | null;
   pagada: boolean | null;
   fecha_pago: string | null;
+  cantidad_por_compra_snap?: number | string | null;
   base_usd?: number | string | null;
   iva_usd?: number | string | null;
   exento_usd?: number | string | null;
@@ -429,7 +430,9 @@ function rowToCompra(r: CompraRow): Compra {
     exentoUsd: r.exento_usd == null ? undefined : Number(r.exento_usd),
     costoUsd: r.costo_usd == null ? undefined : Number(r.costo_usd),
     pagada: r.pagada ?? true,
-    fechaPago: r.fecha_pago ?? undefined,
+    fechaPago: r.fecha_pago,
+    cantidadPorCompraSnap:
+      r.cantidad_por_compra_snap == null ? undefined : Number(r.cantidad_por_compra_snap),
   };
 }
 
@@ -564,7 +567,12 @@ export async function updateCompra(
     p_numero_factura: input.numeroFactura ?? null,
     p_flete_usd: input.fleteUsd ?? null,
     p_pagada: input.pagada ?? true,
-    p_fecha_pago: input.pagada === false ? null : (input.fechaPago ?? input.fecha),
+    p_fecha_pago:
+      input.pagada === false
+        ? null
+        : input.fechaPago !== undefined
+          ? input.fechaPago
+          : input.fecha,
     p_base_usd: input.baseUsd ?? null,
     p_iva_usd: input.ivaUsd ?? null,
     p_exento_usd: input.exentoUsd ?? null,
