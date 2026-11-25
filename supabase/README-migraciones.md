@@ -45,22 +45,18 @@ con `pg_get_functiondef`). Se consolidó así:
   (`se_procesa` → descuenta o repone `stock_procesado`). `bolo-08-…` tiene la
   misma lógica pero ordena antes; no dejes la Fase D solo ahí, porque `zzz` la
   pisaría. Un archivo `bolo-09b-*.sql` tampoco gana: la `b` va antes que la `c`.
-- `apply_compra_to_insumo` y `revertir_compra_de_insumo`: la versión vigente
-  es **`cocina-recupera-iva-compras.sql`**. Ordena después de
-  `cocina-precio-frescura.sql` (el apply anterior) y de
-  `cocina-compra-zzzz-revertir-precio-anterior.sql` (el revertir anterior),
-  así que al reaplicar en orden alfabético es la que gana. El precio del
-  insumo sale de `costo_usd` si la compra lo trae; si no, de
-  `precio_total_usd`.
-- `reemplazar_compra`: la versión vigente es **`cocina-recupera-iva-editar.sql`**.
-  Ordena después de `cocina-recupera-iva-compras.sql` (ahí la función todavía
-  borra y vuelve a insertar). La nueva actualiza el mismo renglón, bloquea la
-  compra y el insumo (`for update`) antes de la diferencia, y mueve el stock
-  por esa diferencia. No usa `greatest(0, …)` en la edición y no borra datos.
-  El execute queda solo para `authenticated` (se revoca de `public` y `anon`).
-  El mismo archivo vuelve a crear `compra_vincula_proveedor` para que también
-  corra al cambiar el proveedor. Antes de correrlo en una base que ya tiene
-  esas funciones, compara:
+- `apply_compra_to_insumo`: la versión vigente es **`cocina-recupera-iva-compras.sql`**.
+  Ordena después de `cocina-precio-frescura.sql`. El precio del insumo sale
+  de `costo_usd` si la compra lo trae; si no, de `precio_total_usd`.
+- `revertir_compra_de_insumo`, `reemplazar_compra` y `vincular_proveedor_insumo`:
+  la versión vigente es **`cocina-recupera-iva-stock.sql`**. Ordena después de
+  `cocina-recupera-iva-editar.sql`. Si editar o borrar dejaría el stock
+  negativo, cancela la operación (no usa `greatest(0, …)`). La última compra
+  del proveedor se recalcula al mover la fecha o al borrar.
+- `cocina-recupera-iva-editar.sql` sigue siendo el paso anterior (delta de stock,
+  bloqueo `for update`, revoke a `public`/`anon`). `cocina-recupera-iva-stock.sql`
+  lo vuelve a escribir con el rechazo si quedaría negativo. Antes de pegar el
+  archivo nuevo, compara:
 
   ```sql
   select p.proname, pg_get_functiondef(p.oid)
@@ -71,7 +67,8 @@ con `pg_get_functiondef`). Se consolidó así:
       'apply_compra_to_insumo',
       'revertir_compra_de_insumo',
       'reemplazar_compra',
-      'vincular_proveedor_insumo'
+      'vincular_proveedor_insumo',
+      'bolo_rechazar_stock_negativo'
     );
 
   select tgname, pg_get_triggerdef(t.oid)
