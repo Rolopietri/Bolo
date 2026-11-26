@@ -15,7 +15,13 @@
 // convertir, presentación desconocida, un mensaje que corrige otro), no se
 // registra nada y el bot dice por qué.
 
-import { leerMensaje, unidadPlantilla } from "@/lib/produccion";
+import {
+  cantidadesDeRespuesta,
+  leerMensaje,
+  movimientosSinCantidad,
+  unidadPlantilla,
+  type MovimientoSinCantidad,
+} from "@/lib/produccion";
 
 export type InsumoBot = {
   id: string;
@@ -240,4 +246,130 @@ export function respuestaBot(
     lineas.push(`✕ ${n}: lo procesado no vuelve al almacén. Si sobró, sigue en uso.`);
   }
   return lineas.join("\n");
+}
+
+// ── Mensajes sin peso ("Saliendo algo de lomito") ──────────────────────────
+// En vez de ignorarlos, el bot pregunta cuánto y, cuando le responden con la
+// cantidad, registra el movimiento por el camino normal (telegram_aplicar).
+
+export type FaltaCantidad = MovimientoSinCantidad & { nombre: string; unidadBase: string };
+
+/** Lo que el mensaje nombra sin cantidad. Las correcciones no cuentan. */
+export function faltantesDeMensaje(texto: string, insumos: InsumoBot[]): FaltaCantidad[] {
+  if (RE_CORRECCION.test(texto)) return [];
+  const porId = new Map(insumos.map((i) => [i.id, i] as const));
+  return movimientosSinCantidad(texto, insumos).flatMap((m) => {
+    const ins = porId.get(m.insumoId);
+    return ins ? [{ ...m, nombre: ins.nombre, unidadBase: ins.unidadBase }] : [];
+  });
+}
+
+const VERBO: Record<FaltaCantidad["movimiento"], string> = {
+  entrada: "entró",
+  salida: "salió",
+  perdida: "se perdió",
+  devolucion: "vuelve al almacén",
+};
+const verbo = (f: FaltaCantidad) =>
+  f.movimiento === "perdida" && f.motivo === "mal_estado"
+    ? "se dañó"
+    : f.movimiento === "perdida" && f.motivo === "vencimiento"
+      ? "se venció"
+      : VERBO[f.movimiento];
+
+/** "el peso, por ejemplo 1,2 kg" / "la cantidad, por ejemplo 12 unid". */
+function ejemploCantidad(unidadBase: string): { que: string; ejemplo: string } {
+  const u = unidadPlantilla(unidadBase).unidad;
+  if (u === "kg") return { que: "el peso", ejemplo: "1,2 kg" };
+  if (u === "L") return { que: "la cantidad", ejemplo: "1,5 L" };
+  if (u === "unid") return { que: "la cantidad", ejemplo: "12 unid" };
+  return { que: "la cantidad", ejemplo: `2 ${u}` };
+}
+
+/**
+ * Pregunta del bot por la cantidad que faltó. Con `porRespuesta` se pide
+ * responder a ese mismo aviso; si no (el mensaje ya registró otras cosas), se
+ * pide escribir el movimiento completo.
+ */
+export function preguntaCantidad(faltan: FaltaCantidad[], porRespuesta = true): string {
+  if (faltan.length === 0) return "";
+  if (faltan.length === 1) {
+    const f = faltan[0];
+    const { que, ejemplo } = ejemploCantidad(f.unidadBase);
+    const como = porRespuesta
+      ? `Respóndeme a este mensaje con ${que}, por ejemplo ${ejemplo}.`
+      : `Escríbelo con ${que}, por ejemplo «${f.movimiento === "entrada" ? "Entrando" : "Saliendo"} ${ejemplo} ${f.nombre}».`;
+    return `¿Cuánto ${f.nombre} ${verbo(f)}? ${como}`;
+  }
+  const lista = faltan.map((f) => `${f.nombre} (${verbo(f)})`).join(", ");
+  const ejemplo = faltan
+    .slice(0, 2)
+    .map((f) => `${f.nombre} ${ejemploCantidad(f.unidadBase).ejemplo}`)
+    .join(", ");
+  return porRespuesta
+    ? `¿Cuánto fue de cada uno? ${lista}. Respóndeme a este mensaje con la cantidad de cada uno, por ejemplo «${ejemplo}».`
+    : `Me faltó la cantidad de: ${lista}. Escríbelos de nuevo con su peso o cantidad.`;
+}
+
+/** Arma la acción de un movimiento sin cantidad con la cantidad que llegó
+ *  (en unidad de la plantilla). Mismo criterio que accionesDeMensaje. */
+function accionConCantidad(f: FaltaCantidad, ins: InsumoBot, valor: number, problemas: ProblemasBot): AccionBot | null {
+  const base = Math.round(valor * unidadPlantilla(ins.unidadBase).factor * 10000) / 10000;
+  switch (f.movimiento) {
+    case "entrada":
+      return { tipo: "entrada", insumo_id: ins.id, crudo: base };
+    case "salida":
+      return ins.seProcesa
+        ? { tipo: "salida", insumo_id: ins.id, procesado: base }
+        : { tipo: "uso", insumo_id: ins.id, cantidad: base };
+    case "perdida":
+      return { tipo: "perdida", insumo_id: ins.id, cantidad: base, motivo: f.motivo ?? "perdida" };
+    case "devolucion":
+      if (ins.seProcesa) {
+        problemas.procesadosDevueltos.push(ins.nombre);
+        return null;
+      }
+      return { tipo: "devolucion", insumo_id: ins.id, cantidad: base };
+  }
+}
+
+/**
+ * Junta la respuesta ("1,2 kg") con lo que faltaba. Devuelve las acciones a
+ * registrar, los problemas (medida rara, presentación desconocida) y lo que
+ * sigue sin cantidad.
+ */
+export function completarConCantidad(
+  faltan: FaltaCantidad[],
+  respuesta: string,
+  insumos: InsumoBot[],
+): { acciones: AccionBot[]; problemas: ProblemasBot; siguenSinCantidad: FaltaCantidad[] } {
+  const acciones: AccionBot[] = [];
+  const problemas = sinProblemas();
+  const siguenSinCantidad: FaltaCantidad[] = [];
+  const porId = new Map(insumos.map((i) => [i.id, i] as const));
+  const de = faltan.flatMap((f) => {
+    const ins = porId.get(f.insumoId);
+    return ins ? [ins] : [];
+  });
+  const { cantidades, unidadRara } = cantidadesDeRespuesta(respuesta, de);
+  for (const f of faltan) {
+    const ins = porId.get(f.insumoId);
+    if (!ins) continue;
+    if (unidadRara) {
+      problemas.unidadesRaras.push({ leido: ins.nombre, medida: unidadRara });
+      continue;
+    }
+    const v = cantidades.get(ins.id);
+    if (v == null || v <= 0) {
+      siguenSinCantidad.push(f);
+      continue;
+    }
+    if (Number.isNaN(v)) {
+      problemas.sinPresentacion.push(ins.nombre);
+      continue;
+    }
+    const a = accionConCantidad(f, ins, v, problemas);
+    if (a) acciones.push(a);
+  }
+  return { acciones, problemas, siguenSinCantidad };
 }
