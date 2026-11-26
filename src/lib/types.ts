@@ -561,8 +561,10 @@ export type Compra = {
   /** Estado de pago al proveedor. true = ya pagada (default). false = cuenta por
    *  pagar (pago diferido). */
   pagada: boolean;
-  /** Fecha en que se pagó (null mientras está por pagar). */
-  fechaPago?: string;
+  /** Fecha en que se pagó. null o ausente: no hay fecha de pago guardada. */
+  fechaPago?: string | null;
+  /** Factor congelado al comprar (unidades base por unidad de compra). */
+  cantidadPorCompraSnap?: number;
 };
 
 export type TasaBcv = {

@@ -218,7 +218,8 @@ export function filaCompra(
     numeroFactura?: string;
     fleteUsd?: number;
     pagada?: boolean;
-    fechaPago?: string;
+    /** undefined: compra nueva, se usa la fecha de la compra. null: se conserva vacío. */
+    fechaPago?: string | null;
     baseUsd?: number;
     ivaUsd?: number;
     exentoUsd?: number;
@@ -239,7 +240,12 @@ export function filaCompra(
     numero_factura: input.numeroFactura?.trim() || null,
     flete_usd: input.fleteUsd ?? null,
     pagada: input.pagada ?? true,
-    fecha_pago: input.pagada === false ? null : (input.fechaPago ?? input.fecha),
+    fecha_pago:
+      input.pagada === false
+        ? null
+        : input.fechaPago !== undefined
+          ? input.fechaPago
+          : input.fecha,
   };
   if (conDesglose) {
     fila.base_usd = input.baseUsd ?? null;
