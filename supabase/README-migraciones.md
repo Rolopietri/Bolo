@@ -93,3 +93,24 @@ una carpeta `migrations/` numerada queda como higiene futura, sin urgencia.
 `supabase/demo/cocina-demo-seed.sql` **no** forma parte del orden alfabético.
 Es un ejemplo para el proyecto de ensayo bolodemo. No lo pegues en una base
 con operación real. Cómo correrlo: ver el encabezado de ese archivo y el README.
+
+
+### Jornada de cocina (cierre de caja)
+- Tablas y funciones nuevas en **`cocina-jornada-cierre.sql`**. No pisa el motor ni las `_prod_*`.
+- El cierre de jornada se engancha con un disparador `AFTER INSERT` en `cierre_caja` (hoy `guardarCierre` inserta la primera vez y luego actualiza).
+- Antes de aplicar, compara en vivo:
+
+  ```sql
+  select p.proname, pg_get_functiondef(p.oid)
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname in (
+      '_cocina_jornada_cerrar',
+      '_cocina_jornada_respaldo',
+      'cocina_tablero_en_uso',
+      'trg_cierre_caja_jornada'
+    );
+  ```
+
+- Pruebas locales (no correr en producción): `bash scripts/probar-jornada-cierre.sh`
