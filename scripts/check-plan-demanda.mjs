@@ -58,8 +58,8 @@ function insumo(extra) {
   };
 }
 
-console.log("── Escenario del doc (lomito ~1.2 kg/día, horizonte 7, merma 25%) ──");
-// 4 días con venta de 4.2 kg = 16.8 kg en la ventana → 16.8/14 = 1.2 kg/día.
+console.log("── Mismo ritmo que la ficha (días con uso, no la ventana de 14) ──");
+// 4 días con venta de 4.2 kg = 16.8 kg. El ritmo es 16.8/4 = 4.2, no 16.8/14.
 const salidas = [1, 3, 6, 9].map((n) => ({
   insumoId: "lomito",
   fecha: diasAtras(n),
@@ -70,16 +70,16 @@ const [l] = planDemanda([insumo()], consumo);
 console.log(
   `  Respuesta: Procesa ${Math.round(l.faltaProcesar * 100) / 100} kg · Compra ${Math.round(l.aComprar * 100) / 100} kg en crudo`,
 );
-casi("ritmo diario", l.ritmoDiario, 1.2);
-casi("necesidad (1.2×7)", l.necesidad, 8.4);
-casi("falta procesar (8.4−6)", l.faltaProcesar, 2.4);
-casi("crudo necesario (2.4÷0.75)", l.crudoNecesario, 3.2);
-casi("a comprar (3.2−2)", l.aComprar, 1.2);
+casi("ritmo diario", l.ritmoDiario, 4.2);
+casi("necesidad (4.2×7)", l.necesidad, 29.4);
+casi("falta procesar (29.4−6)", l.faltaProcesar, 23.4);
+casi("crudo necesario (23.4÷0.75)", l.crudoNecesario, 31.2);
+casi("a comprar (31.2−2)", l.aComprar, 29.2);
 
 console.log("── Horizonte por defecto cuando el insumo no define uno ──");
 const [l2] = planDemanda([insumo({ horizonteDias: null })], consumo);
 igual("usa horizonte 14", l2.horizonteDias, HORIZONTE_DEFAULT_DIAS);
-casi("necesidad (1.2×14)", l2.necesidad, 16.8);
+casi("necesidad (4.2×14)", l2.necesidad, 58.8);
 
 console.log("── Sin ventas suficientes → sin datos, sin acción ──");
 const [l3] = planDemanda([insumo()], new Map());

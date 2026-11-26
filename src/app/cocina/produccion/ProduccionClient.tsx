@@ -289,6 +289,20 @@ export function ProduccionClient() {
     setFotoUrl(null);
     setRevisando(null);
     setCompaneros([]);
+    setFecha(hoy);
+    // El nombre del mensaje no se queda en el formulario. Vuelve el de la
+    // última vez que se guardó un registro, si lo hay.
+    try {
+      setResponsable(localStorage.getItem(CLAVE_RESPONSABLE) ?? "");
+    } catch {
+      setResponsable("");
+    }
+  }
+
+  /** Saca de la bandeja, ya, los mensajes que se acaban de cerrar. */
+  function quitarDeBandeja(ids: string[]) {
+    const quitar = new Set(ids);
+    setPendientes((prev) => prev.filter((m) => !quitar.has(m.id)));
   }
 
   /** Pasa un mensaje del grupo al formulario para revisarlo y aprobarlo. */
@@ -363,6 +377,9 @@ export function ProduccionClient() {
     // los dos: si solo se descarta el primero, el otro queda pendiente y al
     // recargar aparece como "Esperando la entrada".
     const ids = p ? [p.id, ...companeros.map((m) => m.id)] : [];
+    // La fila sale al toque, igual que al aprobar: no se espera a que
+    // responda el servidor ni a recargar la página.
+    if (ids.length > 0) quitarDeBandeja(ids);
     limpiarRevision();
     if (!p) return;
     try {
@@ -370,6 +387,7 @@ export function ProduccionClient() {
       setAviso(ids.length > 1 ? "Entrada y salida descartadas." : "Mensaje descartado.");
       setVersion((v) => v + 1);
     } catch (e) {
+      setVersion((v) => v + 1);
       setError(extractError(e, "No se pudo descartar el mensaje."));
     }
   }
@@ -459,7 +477,9 @@ export function ProduccionClient() {
     try {
       await crearLotes(nuevos);
       if (revisando) {
-        for (const m of [revisando, ...companeros]) await marcarPendiente(m.id, "aprobado");
+        const cerrados = [revisando, ...companeros];
+        quitarDeBandeja(cerrados.map((m) => m.id));
+        for (const m of cerrados) await marcarPendiente(m.id, "aprobado");
       }
       try {
         localStorage.setItem(CLAVE_RESPONSABLE, responsable);

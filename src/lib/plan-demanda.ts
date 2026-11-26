@@ -1,7 +1,8 @@
 // Plan por demanda (Fase C): qué procesar y qué comprar según el ritmo de venta.
 //
 // Para cada insumo que SE PROCESA:
-//   ritmo          = venta promedio por día (consumo neto ÷ ventana)
+//   ritmo          = consumo neto ÷ días con uso (el mismo que "Alcanza para"
+//                    y que "Promedio por día"; la ventana solo elige qué días entran)
 //   necesidad      = ritmo × horizonte (lo procesado que hace falta para el período)
 //   falta procesar = necesidad − procesado disponible
 //   crudo necesario= falta ÷ (1 − merma)      (para obtener ese procesado)
@@ -67,8 +68,10 @@ export type LineaPlanDemanda = {
   tienePrecio: boolean;
 };
 
-/** Ritmo de venta (unidad base/día) a partir del consumo neto de la ventana.
- *  Devuelve 0 si no hay datos suficientes (misma regla que "alcanza para"). */
+/** Ritmo de venta (unidad base/día). Igual que "Alcanza para" y que el
+ *  promedio de la ficha: lo usado en la ventana ÷ los días en que sí hubo uso.
+ *  `ventana` solo confirma que el período es válido; no diluye el ritmo en
+ *  los días quietos. Devuelve 0 si no hay datos suficientes. */
 export function ritmoDiario(
   c: ConsumoInsumo | undefined,
   ventana: number = VENTANA_RITMO_DIAS,
@@ -81,7 +84,7 @@ export function ritmoDiario(
   ) {
     return 0;
   }
-  return c.total / ventana;
+  return c.total / c.diasConConsumo;
 }
 
 /** Plan por demanda de UN insumo. */

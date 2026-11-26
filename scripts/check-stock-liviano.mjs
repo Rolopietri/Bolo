@@ -9,6 +9,7 @@ import {
   clasificarStock,
   costoPorUnidadBase,
   estimarDiasAgotar,
+  stockParaAlcanzar,
   fechaISOEnCaracas,
   filtrarLineas,
   grupoCategoriaStock,
@@ -199,12 +200,14 @@ igual("sin salidas", estimarDiasAgotar({ stockLibre: 10, consumido: 0, diasConCo
 igual("un día no inventa promedio", estimarDiasAgotar({ stockLibre: 10, consumido: 9, diasConConsumo: 1 }).estado, "sin_datos");
 
 const estimado = estimarDiasAgotar({ stockLibre: 14, consumido: 14, diasConConsumo: 2 });
-igual("14 días justos", estimado.estado === "estimado" ? estimado.dias : null, 14);
-igual("promedio diario", estimado.estado === "estimado" ? estimado.promedioDiario : null, 1);
-igual("no es pronto", seAgotaPronto(estimado), false);
+igual("el ritmo no se diluye en la ventana", estimado.estado === "estimado" ? estimado.dias : null, 2);
+igual("promedio de los días con uso", estimado.estado === "estimado" ? estimado.promedioDiario : null, 7);
+igual("con ese ritmo ya es pronto", seAgotaPronto(estimado), true);
+const holgado = estimarDiasAgotar({ stockLibre: 100, consumido: 14, diasConConsumo: 2 });
+igual("stock holgado no es pronto", seAgotaPronto(holgado), false);
 
 const pronto = estimarDiasAgotar({ stockLibre: 2, consumido: 14, diasConConsumo: 2 });
-igual("dos días", pronto.estado === "estimado" ? pronto.dias : null, 2);
+igual("stock chico contra ese ritmo", pronto.estado === "estimado" ? Math.round(pronto.dias * 1000) / 1000 : null, 0.286);
 igual("sí es pronto", seAgotaPronto(pronto), true);
 igual("umbral", DIAS_SE_AGOTA_PRONTO, 3);
 igual("texto agotado", textoDias({ estado: "agotado" }), "Agotado");
@@ -222,8 +225,59 @@ igual("bajo por la reserva", reserva.estado, "bajo");
 igual("valor de lo que hay en cámara", reserva.valorUsd, 20);
 igual("costo por unidad, no el total", reserva.costoUnitarioUsd, 2);
 igual("secos se agrupa", reserva.categoria, "Secos y granos");
-igual("días con el libre", reserva.dias.estado === "estimado" ? reserva.dias.dias : null, 2);
+igual(
+  "días con el libre y el ritmo real",
+  reserva.dias.estado === "estimado" ? Math.round(reserva.dias.dias * 1000) / 1000 : null,
+  0.286,
+);
 igual("se acaba pronto", reserva.seAgotaPronto, true);
+
+// QA: lomito queda 23,531 (6,138 crudo + 17,393 procesado), usado 6,71 kg en 4 días.
+// 6,71 / 4 = 1,6775 kg/día. 23,531 / 1,6775 = 14,03 → 14 días.
+const lomitoDias = lineaStock(
+  {
+    ...base,
+    id: "lomito",
+    nombre: "Lomito",
+    seProcesa: true,
+    stockTotal: 6.138,
+    stockProcesado: 17.393,
+    stockComprometido: 0,
+    stockMinimo: null,
+    unidadBase: "kg",
+  },
+  { total: 6.71, diasConConsumo: 4 },
+);
+igual("lomito queda crudo más procesado", stockParaAlcanzar({ stockTotal: 6.138, stockProcesado: 17.393, stockComprometido: 0, seProcesa: true }), 23.531);
+igual("lomito alcanza 14 días", lomitoDias.dias.estado === "estimado" ? textoDias(lomitoDias.dias) : null, "14 días");
+
+// QA: cebolla queda 15,97 (5,373 + 10,597), usado 1,341 kg en 4 días (335,25 g/día).
+// 15,97 / 0,33525 = 47,64 → 48 días. Antes, con solo el crudo y la ventana de 14, daba 56.
+const cebollaDias = lineaStock(
+  {
+    ...base,
+    id: "cebolla",
+    nombre: "Cebolla",
+    seProcesa: true,
+    stockTotal: 5.373,
+    stockProcesado: 10.597,
+    stockComprometido: 0,
+    stockMinimo: null,
+    unidadBase: "kg",
+  },
+  { total: 1.341, diasConConsumo: 4 },
+);
+igual(
+  "cebolla el ritmo es el de los días con uso",
+  cebollaDias.dias.estado === "estimado" ? Math.round(cebollaDias.dias.promedioDiario * 100000) / 100000 : null,
+  0.33525,
+);
+igual(
+  "cebolla dura unos 47,6 días",
+  cebollaDias.dias.estado === "estimado" ? Math.round(cebollaDias.dias.dias * 10) / 10 : null,
+  47.6,
+);
+igual("cebolla se lee 48 días", cebollaDias.dias.estado === "estimado" ? textoDias(cebollaDias.dias) : null, "48 días");
 
 const sinCosto = lineaStock({
   ...base,

@@ -725,6 +725,8 @@ export function InsumosClient({
           categoria: categoriaVisible(i.categoriaCompra),
           unidadBase: i.unidadBase,
           stockTotal: i.stockTotal,
+          stockProcesado: i.stockProcesado,
+          seProcesa: i.seProcesa,
           stockComprometido: i.stockComprometido,
           stockMinimo: i.stockMinimo,
           precioBaseUsd: i.precioBaseUsd,
@@ -1824,7 +1826,7 @@ export function InsumosClient({
 }
 
 /** Explicación general de "Alcanza para" (la misma para todos los insumos). */
-const AYUDA_ALCANCE = `Stock disponible ÷ consumo diario promedio (últimos ${VENTANA_CONSUMO_DIAS} días).`;
+const AYUDA_ALCANCE = `Lo que queda ÷ el promedio de los días en que sí se usó, dentro de los últimos ${VENTANA_CONSUMO_DIAS}. En un insumo que se procesa, lo que queda es crudo más procesado. Los días se redondean al entero más cercano.`;
 
 /** Una fila de la lista: estado, cuánto queda, cuánto dura y precio. Cada dato
  *  aparece una sola vez; el resto (uso diario, pérdidas, cambios) vive en el

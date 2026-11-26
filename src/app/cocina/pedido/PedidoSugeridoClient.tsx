@@ -526,7 +526,7 @@ export function PedidoSugeridoClient({
                       {!l.sinDatos && (
                         <span className="block text-[11px] text-cacao-mute">
                           Vendes ~{displayCantidadRedonda(l.ritmoDiario, l.unidadBase)}/día
-                          {" "}(últimos {ventanaDias} días)
+                          {" "}(promedio de los días con uso, últimos {ventanaDias})
                         </span>
                       )}
                     </div>
