@@ -30,6 +30,11 @@ declare
   v_foto numeric;
   v_tz text;
   v_ini timestamptz;
+  v_limite timestamptz;
+  v_base timestamptz;
+  v_res jsonb;
+  v_fecha date;
+  v_id uuid;
 begin
   -- 1. Tras la migración hay una jornada abierta con foto de apertura.
   select count(*) into v_n from public.cocina_jornadas where cerrado_at is null;
@@ -133,38 +138,167 @@ begin
   perform public._assert(v_pend = 3 and v_lotes = 1,
     format('pendientes B debía ser 3/1, fue %s/%s', v_pend, v_lotes));
 
-  -- 9. Respaldo: jornada empezada ayer, ya pasó la hora de corte → cierra.
-  update public.cocina_jornadas
-     set iniciado_at = now() - interval '30 hours'
-   where id = v_j2;
-  v_j3 := public._cocina_jornada_respaldo();
-  perform public._assert(v_j3 = v_j2, 'el respaldo debía cerrar la jornada abierta de ayer');
+  -- 9. Fecha de negocio = fecha civil de iniciado_at. jornada_actual / jornada_de / jornada_fecha.
   perform public._assert(
-    (select origen from public.cocina_jornadas where id = v_j2) = 'respaldo',
-    'origen debía ser respaldo');
-  select count(*) into v_n from public.cocina_jornadas where cerrado_at is null;
-  perform public._assert(v_n = 1, 'tras el respaldo debe quedar una jornada abierta');
+    (select fecha from public.cocina_jornadas where id = v_j1) is not null,
+    'la jornada 1 debe tener fecha de negocio');
+  select fecha into v_fecha from public.jornada_actual();
+  perform public._assert(v_fecha = public._cocina_fecha_civil(now()),
+    format('jornada_actual().fecha debía ser %s, fue %s', public._cocina_fecha_civil(now()), v_fecha));
+  perform public._assert(
+    (select id from public.jornada_de(now())) = (select id from public.jornada_actual()),
+    'jornada_de(now()) debe ser la jornada abierta');
+  perform public._assert(
+    public.jornada_fecha(now()) = (select fecha from public.jornada_actual()),
+    'jornada_fecha(now()) debe coincidir con la jornada abierta');
 
-  -- 10. Segundo respaldo: la nueva empezó ahora (después de medianoche) → no-op.
-  perform public._assert(public._cocina_jornada_respaldo() is null,
-    'un segundo respaldo no debe cerrar la jornada recién abierta');
-  select count(*) into v_n from public.cocina_jornadas;
-  perform public._assert(v_n = 3, format('deben quedar 3 jornadas, hay %s', v_n));
-
-  -- 11. Jornada nacida de madrugada (después de medianoche local) no la corta el respaldo.
+  -- 10. Horario que cruza medianoche: apertura 18:00, cierre 02:00.
+  --     Jornada empezada ayer a las 18:00 → límite hoy a las 02:00.
+  --     Si ya pasó esa hora, el automático cierra con origen automatico.
   v_tz := public._cocina_zona_horaria();
-  v_ini := timezone(v_tz, date_trunc('day', timezone(v_tz, now())) + time '03:00');
-  if v_ini > now() then
-    -- Si todavía no son las 3:00 locales, usa un minuto después de medianoche.
-    v_ini := timezone(v_tz, date_trunc('day', timezone(v_tz, now())) + interval '1 minute');
-  end if;
-  if v_ini <= now() then
+  update public.negocio_config
+     set hora_apertura_habitual = time '18:00',
+         hora_cierre_maxima = time '02:00',
+         jornada_horario_nota = 'Prueba: cruza medianoche'
+   where id = 1;
+  v_ini := timezone(v_tz, date_trunc('day', timezone(v_tz, now())) - interval '1 day' + time '18:00');
+  update public.cocina_jornadas
+     set iniciado_at = v_ini,
+         fecha = public._cocina_fecha_civil(v_ini)
+   where id = v_j2;
+  v_base := public._cocina_jornada_limite_base(v_ini, public._cocina_fecha_civil(v_ini));
+  perform public._assert(v_base = timezone(v_tz, date_trunc('day', timezone(v_tz, now())) + time '02:00'),
+    format('el límite base de una jornada nocturna debía ser hoy 02:00, fue %s', v_base));
+  -- A estas alturas del día (después de las 02:00) el automático debe cerrar.
+  -- Si la prueba corre antes de las 02:00 locales, se simula avanzando iniciado
+  -- no: el límite ya es hoy 02:00; si now() < 02:00 no cierra. En ese caso
+  -- comprobamos solo el límite y aplazamos el close a un caso con horario pasado.
+  if now() >= v_base then
+    v_j3 := public._cocina_jornada_automatico();
+    perform public._assert(v_j3 = v_j2, 'el automático debía cerrar la jornada que cruzó medianoche');
+    perform public._assert(
+      (select origen from public.cocina_jornadas where id = v_j2) = 'automatico',
+      'origen debía ser automatico');
+  else
+    -- Todavía no son las 02:00: no cierra, y un respaldo viejo tampoco.
+    perform public._assert(public._cocina_jornada_automatico() is null,
+      'antes de las 02:00 no debe cerrar');
+    -- Fuerza un límite ya vencido (apertura 08:00, cierre hace una hora).
+    update public.negocio_config
+       set hora_apertura_habitual = time '08:00',
+           hora_cierre_maxima = (timezone(v_tz, now()) - interval '1 hour')::time
+     where id = 1;
+    -- Si esa hora de cierre es <= 08:00, el límite cae mañana; lo evitamos
+    -- usando una hora de cierre estrictamente después de las 08:00.
+    if (timezone(v_tz, now()) - interval '1 hour')::time <= time '08:00' then
+      update public.negocio_config
+         set hora_apertura_habitual = time '00:01',
+             hora_cierre_maxima = (timezone(v_tz, now()) - interval '1 hour')::time
+       where id = 1;
+    end if;
     update public.cocina_jornadas
-       set iniciado_at = v_ini
-     where cerrado_at is null;
-    perform public._assert(public._cocina_jornada_respaldo() is null,
-      'una jornada empezada hoy de madrugada no se cierra por respaldo');
+       set iniciado_at = timezone(v_tz, date_trunc('day', timezone(v_tz, now())) + time '09:00'),
+           fecha = public._cocina_fecha_civil(now())
+     where id = v_j2
+       and cerrado_at is null;
+    -- Si por la hora de inicio (antes de las 09:00) el iniciado queda a futuro,
+    -- usa una hora ya pasada.
+    if (select iniciado_at from public.cocina_jornadas where id = v_j2) > now()
+       and (select cerrado_at from public.cocina_jornadas where id = v_j2) is null then
+      update public.cocina_jornadas
+         set iniciado_at = now() - interval '4 hours',
+             fecha = public._cocina_fecha_civil(now() - interval '4 hours')
+       where id = v_j2;
+    end if;
+    v_j3 := public._cocina_jornada_automatico();
+    perform public._assert(v_j3 = v_j2, 'el automático debía cerrar al pasar la hora máxima');
+    perform public._assert(
+      (select origen from public.cocina_jornadas where id = v_j2) = 'automatico',
+      'origen debía ser automatico');
   end if;
+  perform public._assert(
+    (select count(*) from public.cocina_jornadas where cerrado_at is null) = 1,
+    'tras el automático debe quedar una jornada abierta');
+
+  -- 11. Cierre de caja posterior: se revincula a la jornada automática de esa
+  --     fecha y no cierra la jornada nueva.
+  -- Si esa fecha ya tiene un cierre (el de la prueba 4), se usa el día anterior
+  -- para no chocar con la unique de cierre_caja ni revincular la jornada 1.
+  v_fecha := (select fecha from public.cocina_jornadas where id = v_j2);
+  if exists (select 1 from public.cierre_caja where fecha = v_fecha) then
+    v_fecha := v_fecha - 1;
+    update public.cocina_jornadas set fecha = v_fecha where id = v_j2;
+  end if;
+  v_id := (select id from public.cocina_jornadas where cerrado_at is null);
+  insert into public.cierre_caja (id, fecha)
+  values ('cccccccc-cccc-cccc-cccc-cccccccccccc', v_fecha);
+  perform public._assert(
+    (select cierre_caja_id from public.cocina_jornadas where id = v_j2)
+      = 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    'el cierre de caja posterior debía revinculirse a la jornada automática');
+  perform public._assert(
+    (select origen from public.cocina_jornadas where id = v_j2) = 'cierre_caja',
+    'el origen pasa a cierre_caja al revinclarlo');
+  perform public._assert(
+    (select id from public.cocina_jornadas where cerrado_at is null) = v_id,
+    'la jornada abierta no se debe cerrar por el cierre de caja posterior');
+
+  -- 12. Posposiciones: «Recordar en 1 hora», tope de 6, la séptima falla.
+  --     Límite a las 23:59 del mismo día (siempre a futuro si la prueba corre
+  --     antes de esa hora; si ya pasó, se usa un inicio reciente y no se
+  --     exige que el automático se abstenga).
+  update public.negocio_config
+     set hora_apertura_habitual = time '00:00',
+         hora_cierre_maxima = time '23:59',
+         jornada_horario_nota = 'Prueba: posposiciones'
+   where id = 1;
+  update public.cocina_jornadas
+     set iniciado_at = now() - interval '2 hours',
+         fecha = public._cocina_fecha_civil(now() - interval '2 hours')
+   where cerrado_at is null;
+  v_id := (select id from public.cocina_jornadas where cerrado_at is null);
+  v_limite := public._cocina_jornada_limite_efectivo(v_id);
+  perform public._assert(v_limite is not null, 'debe haber límite efectivo para posponer');
+  if now() >= v_limite then
+    -- Ya son las 23:59 o más: corre el día un poco hacia atrás el límite
+    -- moviendo la hora de cierre a dentro de una hora (sin cruzar a <= 00:00).
+    update public.negocio_config
+       set hora_cierre_maxima = (timezone(v_tz, now()) + interval '1 hour')::time
+     where id = 1;
+    if (select hora_cierre_maxima from public.negocio_config where id = 1) <= time '00:00' then
+      -- Caería mañana; no usamos posponer sobre un límite lejano. Forzamos
+      -- apertura 00:00 y cierre 23:59 del día siguiente vía iniciado de ayer
+      -- no aplica. En este borde se omite el assert de «aún no cierra».
+      null;
+    else
+      v_limite := public._cocina_jornada_limite_efectivo(v_id);
+    end if;
+  end if;
+  if now() < public._cocina_jornada_limite_efectivo(v_id) then
+    perform public._assert(public._cocina_jornada_automatico() is null,
+      'con el límite todavía en el futuro no debe cerrar');
+  end if;
+  v_limite := public._cocina_jornada_limite_efectivo(v_id);
+
+  for v_n in 1..6 loop
+    v_res := public.cocina_jornada_posponer();
+    perform public._assert((v_res ->> 'ok')::boolean,
+      format('la posposición %s debía ser ok: %s', v_n, v_res));
+    perform public._assert((v_res ->> 'posposiciones')::int = v_n,
+      format('debía llevar %s posposiciones, fue %s', v_n, v_res ->> 'posposiciones'));
+  end loop;
+  perform public._assert(
+    (select count(*) from public.cocina_jornada_posposiciones where jornada_id = v_id) = 6,
+    'deben quedar registradas 6 posposiciones');
+  v_res := public.cocina_jornada_posponer();
+  perform public._assert(not (v_res ->> 'ok')::boolean and v_res ->> 'error' = 'tope',
+    format('la séptima posposición debía fallar por tope, fue %s', v_res));
+  perform public._assert(
+    public._cocina_jornada_limite_efectivo(v_id) = v_limite + interval '6 hours',
+    'el límite efectivo debía alargarse seis horas');
+
+  -- Tras el tope, si el límite ya pasó, el automático cierra.
+  -- Con +6 horas desde un límite a 20 minutos, todavía no. No se fuerza.
 
   raise notice 'OK: todas las pruebas de jornada de cocina pasaron';
 end;

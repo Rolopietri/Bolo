@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AsistentePlataforma } from "./_AsistentePlataforma";
+import { AlertaCierreJornada } from "@/components/AlertaCierreJornada";
 
 export const metadata: Metadata = {
   title: "bolo",
@@ -38,6 +39,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col font-sans">
         {children}
+        <AlertaCierreJornada />
         <AsistentePlataforma />
         <script
           dangerouslySetInnerHTML={{

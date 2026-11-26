@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prueba local de supabase/cocina-jornada-cierre.sql en una base descartable.
+# Prueba local de supabase/cocina-jornada-cierre.sql y
+# cocina-jornada-horario.sql en una base descartable.
 # NO apunta a producción.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -17,6 +18,10 @@ createdb "$DB"
 "${PSQL[@]}" -d "$DB" <<'SQL'
 create extension if not exists pgcrypto;
 create extension if not exists "uuid-ossp";
+create schema if not exists auth;
+create table if not exists auth.users (id uuid primary key);
+create or replace function auth.uid()
+returns uuid language sql stable as $$ select null::uuid $$;
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then
     create role anon nologin;
@@ -72,6 +77,7 @@ insert into public.insumos (id, nombre, unidad_base, stock_actual, stock_procesa
 SQL
 
 "${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-cierre.sql"
+"${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-horario.sql"
 "${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-cierre-pruebas.sql"
 
 dropdb "$DB"

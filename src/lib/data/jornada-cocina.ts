@@ -67,7 +67,7 @@ export function esFaltaTablaJornada(e: unknown): boolean {
     code === "42P01" ||
     code === "PGRST202" ||
     code === "PGRST205" ||
-    /cocina_tablero_en_uso|cocina_jornadas|schema cache/i.test(msg)
+    /cocina_tablero_en_uso|cocina_jornadas|cocina_jornada_revisar|cocina_jornada_posponer|cocina_jornada_estado|jornada_actual|jornada_de|jornada_fecha|schema cache/i.test(msg)
   );
 }
 
@@ -81,4 +81,99 @@ export async function listTableroEnUso(): Promise<TableroEnUso[] | null> {
     throw error;
   }
   return ((data as Fila[]) ?? []).map(deFila);
+}
+
+
+export type EstadoJornadaCocina = {
+  jornadaId: string | null;
+  fecha: string | null;
+  iniciadoAt: string | null;
+  horaAperturaHabitual: string | null;
+  horaCierreMaxima: string | null;
+  nota: string | null;
+  limiteEfectivo: string | null;
+  alertaDesde: string | null;
+  posposiciones: number;
+  puedePosponer: boolean;
+  mostrarAlerta: boolean;
+  debeCerrar: boolean;
+  /** Jornada que esta llamada acaba de cerrar en automático, si hubo. */
+  cerroJornadaId: string | null;
+};
+
+type EstadoRow = {
+  jornada_id?: string | null;
+  fecha?: string | null;
+  iniciado_at?: string | null;
+  hora_apertura_habitual?: string | null;
+  hora_cierre_maxima?: string | null;
+  nota?: string | null;
+  limite_efectivo?: string | null;
+  alerta_desde?: string | null;
+  posposiciones?: number | string | null;
+  puede_posponer?: boolean | null;
+  mostrar_alerta?: boolean | null;
+  debe_cerrar?: boolean | null;
+  cerro_jornada_id?: string | null;
+};
+
+function deEstado(r: EstadoRow | null | undefined): EstadoJornadaCocina {
+  const row = r ?? {};
+  return {
+    jornadaId: row.jornada_id ?? null,
+    fecha: row.fecha ?? null,
+    iniciadoAt: row.iniciado_at ?? null,
+    horaAperturaHabitual: row.hora_apertura_habitual ?? null,
+    horaCierreMaxima: row.hora_cierre_maxima ?? null,
+    nota: row.nota ?? null,
+    limiteEfectivo: row.limite_efectivo ?? null,
+    alertaDesde: row.alerta_desde ?? null,
+    posposiciones: num(row.posposiciones),
+    puedePosponer: !!row.puede_posponer,
+    mostrarAlerta: !!row.mostrar_alerta,
+    debeCerrar: !!row.debe_cerrar,
+    cerroJornadaId: row.cerro_jornada_id ?? null,
+  };
+}
+
+/** Revisa si toca el cierre automático y devuelve el estado de la jornada
+ *  abierta. Si la migración aún no está, devuelve null. */
+export async function revisarJornadaCocina(): Promise<EstadoJornadaCocina | null> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("cocina_jornada_revisar");
+  if (error) {
+    if (esFaltaTablaJornada(error)) return null;
+    throw error;
+  }
+  return deEstado((data ?? {}) as EstadoRow);
+}
+
+export type ResultadoPosponer =
+  | { ok: true; jornadaId: string; posposiciones: number; limiteEfectivo: string | null }
+  | { ok: false; error: "tope" | "cerrada" | "sin_horario" | string };
+
+/** «Recordar en 1 hora»: alarga el límite una hora (tope de 6). */
+export async function posponerCierreJornada(): Promise<ResultadoPosponer> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("cocina_jornada_posponer");
+  if (error) {
+    if (esFaltaTablaJornada(error)) return { ok: false, error: "sin_horario" };
+    throw error;
+  }
+  const r = (data ?? {}) as {
+    ok?: boolean;
+    error?: string;
+    jornada_id?: string;
+    posposiciones?: number | string;
+    limite_efectivo?: string | null;
+  };
+  if (!r.ok) {
+    return { ok: false, error: r.error ?? "error" };
+  }
+  return {
+    ok: true,
+    jornadaId: r.jornada_id ?? "",
+    posposiciones: num(r.posposiciones),
+    limiteEfectivo: r.limite_efectivo ?? null,
+  };
 }

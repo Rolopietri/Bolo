@@ -98,6 +98,7 @@ con operación real. Cómo correrlo: ver el encabezado de ese archivo y el READM
 ### Jornada de cocina (cierre de caja)
 - Tablas y funciones nuevas en **`cocina-jornada-cierre.sql`**. No pisa el motor ni las `_prod_*`.
 - El cierre de jornada se engancha con un disparador `AFTER INSERT` en `cierre_caja` (hoy `guardarCierre` inserta la primera vez y luego actualiza).
+- Horario del local, alerta y cierre automático: **`cocina-jornada-horario.sql`** (aditivo, después del anterior). Agrega `hora_apertura_habitual`, `hora_cierre_maxima` y `jornada_horario_nota` en `negocio_config`; la fecha de negocio en `cocina_jornadas`; `jornada_actual()`, `jornada_de(ts)` y `jornada_fecha(ts default now())`. Si se pasa la hora máxima y no hay cierre de caja, se cierra la jornada con origen `automatico`. Media hora antes avisa (posponer 1 hora, tope de 6, registradas). El respaldo fijo de las 6:00 queda reemplazado. Las demás áreas (compras, ventas, administración) todavía no usan `jornada_fecha`: eso va en otro cambio.
 - Antes de aplicar, compara en vivo:
 
   ```sql
@@ -108,9 +109,14 @@ con operación real. Cómo correrlo: ver el encabezado de ese archivo y el READM
     and p.proname in (
       '_cocina_jornada_cerrar',
       '_cocina_jornada_respaldo',
+      '_cocina_jornada_automatico',
       'cocina_tablero_en_uso',
+      'jornada_actual',
+      'jornada_de',
+      'jornada_fecha',
       'trg_cierre_caja_jornada'
     );
   ```
 
 - Pruebas locales (no correr en producción): `bash scripts/probar-jornada-cierre.sh`
+- pg_cron no está instalado hoy; en el archivo de horario hay un ejemplo cada 15 minutos, sin activarlo. No aplicar estos SQL en producción sin la aprobación de Lucia.
