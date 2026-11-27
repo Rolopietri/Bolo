@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtPorc, textoInputDecimal } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -380,19 +384,19 @@ export function RentabilidadClient() {
                     )}
                   </td>
                   <td className="px-3 py-3 text-right text-cacao">
-                    ${rent.costoPorPorcion.toFixed(2)}
+                    {fmtUsd(rent.costoPorPorcion)}
                   </td>
                   <td className="px-3 py-3 text-right">
                     {rent.precioVentaUsd !== null ? (
                       <>
                         <div className="text-cacao font-medium">
-                          ${rent.precioVentaUsd.toFixed(2)}
+                          {fmtUsd(rent.precioVentaUsd)}
                           <span className="text-[10px] text-cacao-mute ml-1">
                             s/IVA
                           </span>
                         </div>
                         <div className="text-[10px] text-cacao-soft">
-                          ${rent.precioVentaConIvaUsd!.toFixed(2)} c/IVA
+                          {fmtUsd(rent.precioVentaConIvaUsd!)} c/IVA
                         </div>
                       </>
                     ) : (
@@ -401,17 +405,17 @@ export function RentabilidadClient() {
                   </td>
                   <td className="px-3 py-3 text-right text-cacao-soft text-xs">
                     {rent.foodCostPorc !== null
-                      ? `${rent.foodCostPorc.toFixed(0)}%`
+                      ? fmtPorc(rent.foodCostPorc)
                       : "—"}
                   </td>
                   <td className="px-3 py-3 text-right text-cacao-soft text-xs">
                     {rent.margenBrutoPorc !== null
-                      ? `${rent.margenBrutoPorc.toFixed(0)}%`
+                      ? fmtPorc(rent.margenBrutoPorc)
                       : "—"}
                   </td>
                   <td className="px-3 py-3 text-right text-cacao-soft text-xs">
                     {rent.margenNetoPorc !== null
-                      ? `${rent.margenNetoPorc.toFixed(0)}%`
+                      ? fmtPorc(rent.margenNetoPorc)
                       : "—"}
                   </td>
                   <td className="px-3 py-3">
@@ -498,7 +502,7 @@ function ConfigEditor({
           Food cost objetivo %
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             max="100"
             value={foodCost}
@@ -513,7 +517,7 @@ function ConfigEditor({
           Gastos operativos %
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             max="100"
             value={gastos}
@@ -528,7 +532,7 @@ function ConfigEditor({
           Verde · margen ≥ %
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             max="100"
             value={verde}
@@ -540,7 +544,7 @@ function ConfigEditor({
           Amarillo · margen ≥ %
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             max="100"
             value={amarillo}
@@ -559,7 +563,7 @@ function ConfigEditor({
           IVA carta %
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             max="100"
             value={iva}
@@ -597,7 +601,7 @@ function ConfigEditor({
       </div>
 
       <GastosOperativosCalculator
-        onAplicar={(porc) => setGastos(porc.toFixed(1))}
+        onAplicar={(porc) => setGastos(textoInputDecimal(porc))}
       />
 
       <div className="text-right">
@@ -749,7 +753,7 @@ function GastosOperativosCalculator({
             <div className="mt-2 text-right text-sm">
               <span className="text-cacao-mute">Total gastos: </span>
               <span className="text-cacao font-medium">
-                ${totalGastos.toFixed(2)}
+                {fmtUsd(totalGastos)}
               </span>
             </div>
           </div>
@@ -781,10 +785,10 @@ function GastosOperativosCalculator({
                   Gastos operativos
                 </div>
                 <div className="text-2xl font-cinzel text-cacao">
-                  {porcentaje.toFixed(1)}%
+                  {fmtPorc(porcentaje)}
                 </div>
                 <div className="text-[10px] text-cacao-soft italic font-serif mt-0.5">
-                  ${totalGastos.toFixed(2)} ÷ ${ventasNum.toFixed(2)} × 100
+                  {fmtUsd(totalGastos)} ÷ {fmtUsd(ventasNum)} × 100
                 </div>
               </div>
               <button

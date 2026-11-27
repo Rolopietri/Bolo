@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ESTADOS_PRESUPUESTO, type Presupuesto } from "@/lib/types";
@@ -124,7 +126,7 @@ export function PresupuestosList() {
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-cacao font-medium">
-                        ${p.total.toFixed(2)}
+                        {fmtUsd(p.total)}
                       </div>
                       <div className="mt-1 inline-block">
                         <span

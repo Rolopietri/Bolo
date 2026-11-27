@@ -28,13 +28,12 @@ export function formatoMonto(n: number): string {
   });
 }
 
-/** La tasa oficial trae más de dos decimales. Se muestra así para que
- *  coincida con la cuenta de la calculadora. */
+/** La tasa se muestra con dos decimales. El cálculo usa el valor completo. */
 export function formatoTasa(n: number): string {
   if (!Number.isFinite(n)) return "";
   return n.toLocaleString("es-VE", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
+    maximumFractionDigits: 2,
   });
 }
 

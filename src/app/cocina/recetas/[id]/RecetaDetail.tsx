@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtPorc } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -226,16 +230,16 @@ export function RecetaDetail({
               Costo / porción
             </div>
             <div className="text-2xl font-cinzel text-cacao">
-              ${porPorcion.toFixed(2)}
+              {fmtUsd(porPorcion)}
             </div>
             {receta.precioSugeridoUsd && (
               <div className="text-xs text-cacao-soft mt-1">
-                P. sugerido: ${receta.precioSugeridoUsd.toFixed(2)}
+                P. sugerido: {fmtUsd(receta.precioSugeridoUsd)}
                 {margen !== null && (
                   <span
                     className={`ml-2 ${margen >= (config?.margenVerdeMin ?? 70) ? "text-[#15803D]" : margen >= (config?.margenAmarilloMin ?? 50) ? "text-[#A16207]" : "text-terracotta"}`}
                   >
-                    · margen {margen.toFixed(0)}%
+                    · margen {fmtPorc(margen)}
                   </span>
                 )}
               </div>
@@ -361,7 +365,7 @@ export function RecetaDetail({
               </div>
               <div className="col-span-2 text-cacao-mute text-xs text-right">
                 {i.costoSubtotal !== undefined && i.costoSubtotal > 0
-                  ? `$${i.costoSubtotal.toFixed(3)}`
+                  ? fmtUsd(i.costoSubtotal)
                   : ""}
               </div>
             </li>
@@ -386,10 +390,10 @@ export function RecetaDetail({
         })()}
         <div className="mt-4 border-t border-marfil pt-3 text-right space-y-1">
           <div className="text-sm text-cacao-soft">
-            Costo total: <span className="text-cacao">${total.toFixed(3)}</span>
+            Costo total: <span className="text-cacao">{fmtUsd(total)}</span>
           </div>
           <div className="text-lg font-cinzel tracking-wide text-cacao">
-            Por porción: ${porPorcion.toFixed(2)}
+            Por porción: {fmtUsd(porPorcion)}
           </div>
         </div>
       </section>
@@ -424,7 +428,7 @@ export function RecetaDetail({
                     Food cost {s.fc}%
                   </div>
                   <div className="text-2xl font-cinzel text-cacao mt-1">
-                    ${s.precio.toFixed(2)}
+                    {fmtUsd(s.precio)}
                   </div>
                   {isTarget && (
                     <div className="text-[10px] uppercase tracking-widest text-terracotta mt-1">
@@ -442,7 +446,7 @@ export function RecetaDetail({
                   Food cost real
                 </div>
                 <div className="text-cacao font-medium">
-                  {rent.foodCostPorc?.toFixed(1)}%
+                  {rent.foodCostPorc != null ? fmtPorc(rent.foodCostPorc) : "—"}
                 </div>
               </div>
               <div>
@@ -450,7 +454,7 @@ export function RecetaDetail({
                   Margen bruto
                 </div>
                 <div className="text-cacao font-medium">
-                  {rent.margenBrutoPorc?.toFixed(1)}%
+                  {rent.margenBrutoPorc != null ? fmtPorc(rent.margenBrutoPorc) : "—"}
                 </div>
               </div>
               <div>
@@ -458,7 +462,7 @@ export function RecetaDetail({
                   Margen neto
                 </div>
                 <div className="text-cacao font-medium">
-                  {rent.margenNetoPorc?.toFixed(1)}%{" "}
+                  {rent.margenNetoPorc != null ? fmtPorc(rent.margenNetoPorc) : "—"}{" "}
                   <span className="text-[10px] text-cacao-mute">
                     (− {config.gastosOperativosPorc}% gastos op.)
                   </span>

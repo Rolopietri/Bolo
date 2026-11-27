@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 // Catálogo unificado para Presupuestos.
 //
 // Lee de 3 fuentes y devuelve un tipo común que el formulario de
@@ -53,7 +55,7 @@ function formatPrecio(precio: number | null, manual: boolean, incluido: boolean)
   if (incluido) return "Incluido";
   if (manual) return "Manual";
   if (precio === null) return "—";
-  return `$${precio.toFixed(2)}`;
+  return fmtUsd(precio);
 }
 
 function servicioToEntry(s: Servicio): CatalogoEntry {

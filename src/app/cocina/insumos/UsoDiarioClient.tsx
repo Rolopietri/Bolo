@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtDec } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 // Uso diario de insumos (pestaña de Insumos). Muestra, día por día, cuánto
@@ -52,9 +56,6 @@ function fmtCant(n: number, unidad: string): string {
   return displayCantidad(n, unidad).replace(/ unidad$/, " unid");
 }
 
-function fUSD(n: number): string {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 /** "Hoy", "Ayer" o "mar 11 nov". */
 function fDia(iso: string, hoy: string): string {
@@ -92,7 +93,7 @@ function DetalleProductos({ dia, unidad }: { dia: UsoDia; unidad: string }) {
       {filas.map(([producto, p]) => (
         <li key={producto} className="flex justify-between gap-3">
           <span className="min-w-0 truncate">
-            {Number(p.unidades.toFixed(2))} × {producto}
+            {fmtDec(p.unidades)} × {producto}
           </span>
           <span className="shrink-0 tabular-nums text-cacao">{fmtCant(p.cantidad, unidad)}</span>
         </li>
@@ -313,7 +314,7 @@ export function UsoDiarioClient({
                 <span className="text-xs text-cacao-mute">
                   {filas.length === 0
                     ? "sin ventas registradas"
-                    : `${Number(ventas.toFixed(2))} vendidos · ${fUSD(valor)} en insumos`}
+                    : `${fmtDec(ventas)} vendidos · ${fmtUsd(valor)} en insumos`}
                 </span>
               </div>
               {filas.length > 0 && (
@@ -343,7 +344,7 @@ export function UsoDiarioClient({
                             </span>
                             {c != null && (
                               <span className="block text-[11px] tabular-nums text-cacao-mute">
-                                {fUSD(total * c)}
+                                {fmtUsd(total * c)}
                               </span>
                             )}
                           </span>
@@ -404,7 +405,7 @@ function VistaInsumo({
           {
             t: "Usado en el período",
             v: fmtCant(h.usadoTotal, u),
-            s: costo != null ? fUSD(h.usadoTotal * costo) : null,
+            s: costo != null ? fmtUsd(h.usadoTotal * costo) : null,
           },
           {
             t: "Promedio por día",

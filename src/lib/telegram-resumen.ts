@@ -2,6 +2,7 @@
 // (BOLO-11). Módulo puro: recibe los datos de _telegram_resumen_datos y arma
 // el texto.
 
+import { fmtDec } from "@/lib/decimal";
 import { compararMerma } from "@/lib/produccion";
 import { legible, type ResultadoBot } from "@/lib/telegram-acciones";
 
@@ -51,7 +52,7 @@ export function textoResumen(d: DatosResumen): string {
         const real = Number(p.merma_porc);
         const est = p.estandar != null ? Number(p.estandar) : null;
         const etiqueta = ETIQUETA[compararMerma(real, est)];
-        return `• ${p.nombre}: ${legible(Number(p.crudo), p.unidad_base)} → ${legible(Number(p.procesado), p.unidad_base)} · merma ${(Math.round(real * 10) / 10).toLocaleString("es-VE")} %${est != null ? ` (estándar ${est} %)` : ""}${etiqueta ? ` · ${etiqueta}` : ""}${p.nota ? ` · ${p.nota}` : ""}`;
+        return `• ${p.nombre}: ${legible(Number(p.crudo), p.unidad_base)} → ${legible(Number(p.procesado), p.unidad_base)} · merma ${fmtDec(real)} %${est != null ? ` (estándar ${fmtDec(est)} %)` : ""}${etiqueta ? ` · ${etiqueta}` : ""}${p.nota ? ` · ${p.nota}` : ""}`;
       })].join("\n"),
     );
   }

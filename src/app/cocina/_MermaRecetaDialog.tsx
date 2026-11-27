@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtDec, fmtCantidad, textoInputDecimal } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useFechaJornadaDefault } from "@/components/JornadaProvider";
 
 import { useMemo, useState } from "react";
@@ -123,7 +127,7 @@ export function MermaRecetaDialog({
       });
       const detalle =
         unidad === "gramos"
-          ? `${Number(gramos)} ${rendUnidad} (≈ ${racionesCalc.toFixed(2)} raciones)`
+          ? `${Number(gramos)} ${rendUnidad} (≈ ${fmtCantidad(racionesCalc, "raciones")} raciones)`
           : `${racionesCalc} ración${racionesCalc === 1 ? "" : "es"}`;
       onRegistered(`Merma registrada: ${detalle} de ${receta.nombre}.`);
       onClose();
@@ -177,7 +181,7 @@ export function MermaRecetaDialog({
           <div className="rounded-lg bg-[#F1F4ED] ring-1 ring-[#C9D6BC] p-2.5 text-sm text-[#2F4A1F] flex items-center justify-between gap-2 flex-wrap">
             <span>
               Quedan{" "}
-              <strong>{Number(racionesEnPlanes.total.toFixed(2))} raciones</strong>{" "}
+              <strong>{fmtCantidad(racionesEnPlanes.total, "raciones")} raciones</strong>{" "}
               reservadas en{" "}
               {racionesEnPlanes.planes === 1
                 ? "1 plan activo"
@@ -188,7 +192,7 @@ export function MermaRecetaDialog({
               type="button"
               onClick={() => {
                 setUnidad("raciones");
-                setRaciones(String(Number(racionesEnPlanes.total.toFixed(2))));
+                setRaciones(textoInputDecimal(racionesEnPlanes.total));
               }}
               className="rounded-lg ring-1 ring-[#C9D6BC] px-2.5 py-1 text-xs font-medium hover:bg-white"
             >
@@ -227,7 +231,7 @@ export function MermaRecetaDialog({
               <input
                 type="number"
                 min="0"
-                step="any"
+                step="0.01"
                 value={gramos}
                 onChange={(e) => setGramos(e.target.value)}
                 required
@@ -240,7 +244,7 @@ export function MermaRecetaDialog({
               <input
                 type="number"
                 min="0"
-                step="any"
+                step="0.01"
                 value={raciones}
                 onChange={(e) => setRaciones(e.target.value)}
                 required
@@ -271,9 +275,9 @@ export function MermaRecetaDialog({
         )}
         {unidad === "gramos" && gramosPorRacion && (
           <p className="text-xs text-cacao-soft font-serif leading-relaxed">
-            Rendimiento: {gramosPorRacion.toFixed(0)} {rendUnidad}/ración
+            Rendimiento: {fmtDec(gramosPorRacion)} {rendUnidad}/ración
             {Number.isFinite(racionesCalc)
-              ? ` · equivale a ≈ ${racionesCalc.toFixed(2)} raciones`
+              ? ` · equivale a ≈ ${fmtCantidad(racionesCalc, "raciones")} raciones`
               : ""}
             .
           </p>
@@ -301,7 +305,7 @@ export function MermaRecetaDialog({
         {costoPreview !== null && (
           <div className="rounded-lg bg-marfil-soft p-3 text-xs text-cacao-soft">
             Costo estimado de la merma:{" "}
-            <strong className="text-cacao">${costoPreview.toFixed(2)} USD</strong>
+            <strong className="text-cacao">{fmtUsd(costoPreview)} USD</strong>
           </div>
         )}
         <div className="flex gap-2 pt-2">

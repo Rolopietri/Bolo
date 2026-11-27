@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtPorc } from "@/lib/decimal";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 // Análisis administrativo: agrupa el análisis de Ventas y el de Compras, y un
@@ -32,7 +34,7 @@ export function AnalisisAdministrativo() {
 }
 
 // ── Resumen / Utilidad real ────────────────────────────────────────────────
-const fPct = (n: number) => `${n.toFixed(1)}%`;
+const fPct = (n: number) => fmtPorc(n);
 function rangoMes(hoy: string) {
   return { desde: `${hoy.slice(0, 8)}01`, hasta: hoy };
 }

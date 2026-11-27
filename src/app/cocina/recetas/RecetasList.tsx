@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtPorc } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -343,7 +347,7 @@ export function RecetasList() {
                     <div className="text-xs text-cacao-mute">no se vende directo</div>
                   </Link>
                   <div className="text-right">
-                    <div className="font-cinzel text-cacao">${porPorcion.toFixed(2)}</div>
+                    <div className="font-cinzel text-cacao">{fmtUsd(porPorcion)}</div>
                     <div className="text-[10px] text-cacao-mute">costo /porc.</div>
                   </div>
                 </div>
@@ -370,8 +374,8 @@ export function RecetasList() {
                 <Link href={`/cocina/recetas/${r.id}`} className="flex-1 min-w-0">
                   <div className="font-medium text-cacao truncate">{r.nombre}</div>
                   <div className="text-xs text-cacao-mute">
-                    Costo ${porPorcion.toFixed(2)} /porc.
-                    {margen != null && ` · margen ${margen.toFixed(0)}%`}
+                    Costo {fmtUsd(porPorcion)} /porc.
+                    {margen != null && ` · margen ${fmtPorc(margen)}`}
                   </div>
                 </Link>
                 <div className="flex flex-col items-end gap-1.5">
@@ -458,12 +462,12 @@ export function RecetasList() {
                       Costo
                     </div>
                     <div className="text-cacao font-medium">
-                      ${porPorcion.toFixed(2)}
+                      {fmtUsd(porPorcion)}
                       <span className="text-cacao-mute"> /porc.</span>
                     </div>
                     {r.porciones > 1 && (
                       <div className="text-cacao-mute">
-                        ${total.toFixed(2)} total
+                        {fmtUsd(total)} total
                       </div>
                     )}
                   </div>
@@ -474,20 +478,20 @@ export function RecetasList() {
                           P. sugerido
                         </div>
                         <div className="text-cacao font-medium">
-                          ${r.precioSugeridoUsd.toFixed(2)}
+                          {fmtUsd(r.precioSugeridoUsd)}
                           <span className="text-[10px] text-cacao-mute ml-1">
                             s/IVA
                           </span>
                         </div>
                         <div className="text-[10px] text-cacao-soft">
-                          ${precioConIva(r.precioSugeridoUsd, ivaPorc).toFixed(2)}{" "}
+                          {fmtUsd(precioConIva(r.precioSugeridoUsd, ivaPorc))}{" "}
                           c/IVA
                         </div>
                         {margen !== null && (
                           <div
                             className={`text-[10px] mt-0.5 ${margen >= margenVerdeMin ? "text-[#15803D]" : margen >= margenAmarilloMin ? "text-[#A16207]" : "text-terracotta"}`}
                           >
-                            margen {margen.toFixed(0)}%
+                            margen {fmtPorc(margen)}
                           </div>
                         )}
                       </>

@@ -42,7 +42,7 @@ igual("cero", parseMonto("0"), 0);
 igual("negativo no", parseMonto("-5"), null);
 igual("texto no", parseMonto("abc"), null);
 igual("cuatro decimales no", parseMonto("1.2345"), null);
-igual("formato entero", formatoMonto(4500), "4500");
+igual("formato entero", formatoMonto(4500), "4500.00");
 igual("formato con centavos", formatoMonto(120.5), "120.50");
 igual("formato cero queda vacío", formatoMonto(0), "");
 

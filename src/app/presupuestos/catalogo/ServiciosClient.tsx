@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -371,7 +373,7 @@ export function ServiciosClient() {
                             ? "Incluido"
                             : s.manual
                             ? "Manual"
-                            : `$${Number(s.precioUnitario).toFixed(2)}`}
+                            : fmtUsd(Number(s.precioUnitario))}
                         </div>
                         <div className="text-xs text-cacao-soft">
                           por {unidadLabel(s.unidad)}

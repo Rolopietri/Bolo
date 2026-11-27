@@ -1328,11 +1328,11 @@ function VistaObjetivoDetalle({
           <div className="grid sm:grid-cols-3 gap-3">
             <div>
               <label className={lbl}>Valor actual</label>
-              <input type="number" step="any" className={inp} value={actual} onChange={(e) => { setActual(e.target.value); setOk(false); }} />
+              <input type="number" step="0.01" className={inp} value={actual} onChange={(e) => { setActual(e.target.value); setOk(false); }} />
             </div>
             <div>
               <label className={lbl}>Meta</label>
-              <input type="number" step="any" className={inp} value={meta} onChange={(e) => { setMeta(e.target.value); setOk(false); }} />
+              <input type="number" step="0.01" className={inp} value={meta} onChange={(e) => { setMeta(e.target.value); setOk(false); }} />
             </div>
             <div>
               <label className={lbl}>Unidad</label>

@@ -182,11 +182,11 @@ export function parseMonto(raw: string): number | null {
   return redondearCentavos(n);
 }
 
-/** Cómo mostrar un monto guardado para que el campo lo vuelva a leer igual. */
+/** Cómo mostrar un monto guardado para que el campo lo vuelva a leer igual.
+ *  Cero queda vacío (campo sin llenar). El resto, dos decimales con punto. */
 export function formatoMonto(n: number): string {
   if (!Number.isFinite(n) || n === 0) return "";
-  const r = redondearCentavos(n);
-  return Number.isInteger(r) ? String(r) : r.toFixed(2);
+  return redondearCentavos(n).toFixed(2);
 }
 
 export type TotalesCaja = {

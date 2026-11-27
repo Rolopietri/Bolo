@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtPorc, fmtDec, textoInputDecimal } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { WarningIcon } from "@/components/icons";
@@ -33,6 +37,7 @@ import {
   dimension,
   ordenarPorCantidadDesc,
   unidadesEnUso,
+  precioLegible,
 } from "@/lib/units";
 
 type LineForm = {
@@ -651,7 +656,7 @@ export function RecetaForm({
               Rendimiento (cuánto produce 1 batch)
               <input
                 type="number"
-                step="0.0001"
+                step="0.01"
                 min="0"
                 placeholder="200"
                 value={rendimiento}
@@ -864,7 +869,7 @@ export function RecetaForm({
                   </span>
                   <input
                     type="number"
-                    step="0.0001"
+                    step="0.01"
                     min="0"
                     placeholder="Ej: 8.62"
                     value={precioSugerido}
@@ -883,10 +888,9 @@ export function RecetaForm({
                     placeholder="Ej: 10.00"
                     value={
                       precioSugerido
-                        ? precioConIva(
-                            Number(precioSugerido),
-                            ivaPorc,
-                          ).toFixed(2)
+                        ? textoInputDecimal(
+                            precioConIva(Number(precioSugerido), ivaPorc),
+                          )
                         : ""
                     }
                     onChange={(e) => {
@@ -897,7 +901,7 @@ export function RecetaForm({
                       }
                       // Derivamos el sin IVA y lo guardamos (es lo canónico).
                       setPrecioSugerido(
-                        precioSinIva(conIva, ivaPorc).toFixed(4),
+                        textoInputDecimal(precioSinIva(conIva, ivaPorc)),
                       );
                     }}
                     className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
@@ -937,7 +941,7 @@ export function RecetaForm({
                   <span className="text-sm text-cacao">{sub.nombre}</span>
                   <span className="text-xs text-cacao-mute shrink-0">
                     {costoUnit > 0
-                      ? `$${costoUnit.toFixed(5)}/${unidadDisplay}`
+                      ? `${fmtUsd(costoUnit)}/${unidadDisplay}`
                       : "sin costo (revisar ingredientes)"}
                   </span>
                 </button>
@@ -1017,7 +1021,7 @@ export function RecetaForm({
                         <span className="text-sm text-cacao">{ins.nombre}</span>
                         <span className="text-xs text-cacao-mute shrink-0">
                           {ins.precioBaseUsd !== null
-                            ? `$${ins.precioBaseUsd.toFixed(5)}/${ins.unidadBase}`
+                            ? `${fmtUsd(precioLegible(ins.precioBaseUsd, ins.unidadBase).precio)}/${precioLegible(ins.precioBaseUsd, ins.unidadBase).unidad}`
                             : "sin precio"}
                         </span>
                       </button>
@@ -1200,7 +1204,7 @@ export function RecetaForm({
                   <div className="grid grid-cols-12 gap-2 items-center">
                     <input
                       type="number"
-                      step="0.0001"
+                      step="0.01"
                       min="0"
                       placeholder="Cant."
                       value={l.cantidad}
@@ -1228,7 +1232,7 @@ export function RecetaForm({
                           title="Precio viene del catálogo"
                         >
                           {ins && ins.precioBaseUsd !== null
-                            ? `$${ins.precioBaseUsd.toFixed(5)} / ${ins.unidadBase}`
+                            ? `${fmtUsd(precioLegible(ins.precioBaseUsd, ins.unidadBase).precio)} / ${precioLegible(ins.precioBaseUsd, ins.unidadBase).unidad}`
                             : "—"}
                         </div>
                       ) : l.subrecetaId ? (
@@ -1237,13 +1241,13 @@ export function RecetaForm({
                           title="Precio calculado desde los ingredientes de la sub-receta"
                         >
                           {subUnitPrice > 0
-                            ? `$${subUnitPrice.toFixed(5)} / ${l.unidad}`
+                            ? `${fmtUsd(subUnitPrice)} / ${l.unidad}`
                             : "—"}
                         </div>
                       ) : (
                         <input
                           type="number"
-                          step="0.000001"
+                          step="0.01"
                           min="0"
                           placeholder={`$ / ${l.unidad}`}
                           value={l.costoManual}
@@ -1265,7 +1269,7 @@ export function RecetaForm({
                       className="col-span-12 sm:col-span-3 rounded ring-1 ring-marfil px-2 py-1.5 text-sm"
                     />
                     <div className="col-span-12 sm:col-span-2 text-right text-sm text-cacao font-medium">
-                      {sub > 0 ? `$${sub.toFixed(3)}` : "—"}
+                      {sub > 0 ? fmtUsd(sub) : "—"}
                     </div>
                   </div>
                   {/* Feedback de conversión: equivalencia o warning */}
@@ -1363,21 +1367,20 @@ export function RecetaForm({
         <div className="mt-4 border-t border-marfil pt-3 text-right space-y-1">
           <div className="text-sm text-cacao-soft">
             Costo total:{" "}
-            <span className="text-cacao">${costo.total.toFixed(3)}</span>
+            <span className="text-cacao">{fmtUsd(costo.total)}</span>
           </div>
           <div className="text-lg font-cinzel tracking-wide text-cacao">
-            Costo por porción: ${costo.porPorcion.toFixed(2)}
+            Costo por porción: {fmtUsd(costo.porPorcion)}
           </div>
           {precioSugerido && Number(precioSugerido) > 0 && (
             <div className="text-sm">
               Margen sobre precio sugerido:{" "}
               <span className="text-cacao font-medium">
-                {(
+                {fmtPorc(
                   ((Number(precioSugerido) - costo.porPorcion) /
                     Number(precioSugerido)) *
-                  100
-                ).toFixed(1)}
-                %
+                    100,
+                )}
               </span>
             </div>
           )}
@@ -1457,7 +1460,5 @@ export function RecetaForm({
 // Formato compacto para mostrar la cantidad convertida (sin ceros sobrantes).
 function formatCantConv(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  const abs = Math.abs(n);
-  const dec = abs >= 100 ? 1 : abs >= 1 ? 2 : abs >= 0.01 ? 3 : 5;
-  return n.toFixed(dec).replace(/\.?0+$/, "");
+  return fmtDec(n);
 }

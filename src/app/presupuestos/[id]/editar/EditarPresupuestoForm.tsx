@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -621,7 +623,7 @@ export function EditarPresupuestoForm({ id }: { id: string }) {
                     className="col-span-4 sm:col-span-2 rounded ring-1 ring-marfil px-2 py-1.5 text-sm"
                   />
                   <div className="col-span-3 sm:col-span-2 text-right text-sm text-cacao font-medium">
-                    ${(l.cantidad * l.precioUnitario).toFixed(2)}
+                    {fmtUsd(l.cantidad * l.precioUnitario)}
                   </div>
                   <button
                     type="button"
@@ -676,16 +678,16 @@ export function EditarPresupuestoForm({ id }: { id: string }) {
         <div className="border-t border-marfil pt-4 space-y-1 text-right">
           <div className="text-sm text-cacao-soft">
             Subtotal:{" "}
-            <span className="text-cacao">${subtotal.toFixed(2)}</span>
+            <span className="text-cacao">{fmtUsd(subtotal)}</span>
           </div>
           {descNum > 0 && (
             <div className="text-sm text-cacao-soft">
               Descuento:{" "}
-              <span className="text-cacao">−${descNum.toFixed(2)}</span>
+              <span className="text-cacao">−{fmtUsd(descNum)}</span>
             </div>
           )}
           <div className="text-xl font-cinzel tracking-wide text-cacao">
-            Total: ${total.toFixed(2)} USD
+            Total: {fmtUsd(total)} USD
           </div>
         </div>
       </section>

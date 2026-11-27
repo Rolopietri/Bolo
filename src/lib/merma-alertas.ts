@@ -4,7 +4,9 @@
 //     tolerable (una merma rara, de más o de menos).
 //   • Deriva: las últimas producciones, en promedio, vienen corridas del
 //     estándar (el proceso se está yendo de a poco).
-// Módulo puro, sin imports, para poder probarlo con Node.
+// Lo prueba Node con alias-loader.
+
+import { fmtDec } from "@/lib/decimal";
 
 /** Tolerancia en puntos porcentuales (piso). */
 export const UMBRAL_PUNTUAL_PTS = 3;
@@ -74,7 +76,7 @@ export function evaluarMerma(
 export function textoAlertaMerma(a: AlertaMerma): string {
   const signo = a.delta > 0 ? "+" : "";
   const dir = a.sentido === "alta" ? "más merma" : "menos merma";
-  return `${dir} de lo normal (${a.valor.toFixed(0)}%, ${signo}${a.delta.toFixed(0)} pts)`;
+  return `${dir} de lo normal (${fmtDec(a.valor)}%, ${signo}${fmtDec(a.delta)} pts)`;
 }
 
 export type EstadoMerma = "cumple" | "peor" | "mejor" | "sin_estandar";

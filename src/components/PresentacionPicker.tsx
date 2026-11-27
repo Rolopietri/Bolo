@@ -130,7 +130,7 @@ export function PresentacionPicker({
             ¿Cuánto trae?
             <input
               type="number"
-              step="any"
+              step="0.01"
               min="0"
               inputMode="decimal"
               value={p.cantidad}

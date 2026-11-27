@@ -10,6 +10,7 @@
  *
  * Si falta RESEND_API_KEY, la ruta no hace nada (no rompe el deploy).
  */
+import { fmtUsd } from "@/lib/moneda";
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { registrarCorrida } from "@/lib/monitoreo";
@@ -115,7 +116,7 @@ export async function GET(request: Request) {
           `Faltan ${faltan} día${faltan === 1 ? "" : "s"} para que cierre el mes y hay clientes con saldo pendiente.`,
           "",
           `Clientes con saldo: ${clientesConSaldo.length}`,
-          usd ? `Total aproximado: $${usd.toFixed(2)}` : "",
+          usd ? `Total aproximado: ${fmtUsd(usd)}` : "",
           "",
           "Entra al Panel de Administración → Cuentas por cobrar para cobrarlas.",
           "",

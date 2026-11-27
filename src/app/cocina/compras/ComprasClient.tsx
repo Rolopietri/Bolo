@@ -1,6 +1,8 @@
 "use client";
 
-import { limpiarDecimal } from "@/lib/decimal";
+import { fmtUsd } from "@/lib/moneda";
+
+import { limpiarDecimal, fmtDec, textoInputDecimal } from "@/lib/decimal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -88,19 +90,19 @@ type FormState = {
 /** Formatea una cantidad evitando artefactos de coma flotante (ej. 349.9999). */
 function fmtQty(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "";
-  return String(Number(n.toFixed(4)));
+  return textoInputDecimal(n);
 }
 
 /** Formatea un monto de dinero a 2 decimales para el campo enlazado. */
 /** Precio por unidad legible: 2 decimales, o más si es muy chico. */
 function fmtPrecio(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  return `$${n >= 0.01 ? n.toFixed(2) : n.toPrecision(2)}`;
+  return fmtUsd(n);
 }
 
 function fmtMoney(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "";
-  return String(Number(n.toFixed(2)));
+  return textoInputDecimal(n);
 }
 
 /** Fecha larga en español para los encabezados de grupo (ej. "21 jul 2026"). */
@@ -1272,7 +1274,7 @@ export function ComprasClient() {
               />
               {tasaSugerida !== null && (
                 <span className="text-xs text-cacao-mute block mt-1">
-                  Tasa BCV del {fmtFecha(form.fecha)}: Bs {tasaSugerida.toFixed(2)}.{" "}
+                  Tasa BCV del {fmtFecha(form.fecha)}: Bs {fmtDec(tasaSugerida)}.{" "}
                   {tasaNum > 0 &&
                   Math.abs(tasaNum - tasaSugerida) > 0.009 ? (
                     <button
@@ -1292,16 +1294,16 @@ export function ComprasClient() {
               <div className="mt-3 rounded-lg bg-marfil-soft ring-1 ring-marfil px-3 py-2 text-sm">
                 <span className="text-cacao-mute">Lo que se paga: </span>
                 <span className="text-cacao font-medium">
-                  ${usdPagado.toFixed(2)}
+                  {fmtUsd(usdPagado)}
                 </span>
                 {bsPagado > 0 && (
                   <span className="text-cacao-soft">
-                    {" · "}Bs {bsPagado.toFixed(2)}
+                    {" · "}Bs {fmtDec(bsPagado)}
                   </span>
                 )}
                 {desglose.iva > 0 && (
                   <span className="text-cacao-mute block">
-                    Base ${desglose.base.toFixed(2)} · IVA ${desglose.iva.toFixed(2)}
+                    Base {fmtUsd(desglose.base)} · IVA {fmtUsd(desglose.iva)}
                     {recuperaIva ? ". El costo del insumo queda sin ese IVA." : ". Ese IVA entra en el costo del insumo."}
                   </span>
                 )}
@@ -1480,7 +1482,7 @@ export function ComprasClient() {
                     {grupo.items.length === 1 ? "compra" : "compras"}
                   </span>
                   <span className="ml-auto text-sm text-cacao font-medium">
-                    ${grupo.totalUsd.toFixed(2)}
+                    {fmtUsd(grupo.totalUsd)}
                   </span>
                 </button>
                 {abierto && (
@@ -1527,18 +1529,18 @@ export function ComprasClient() {
                           </div>
                           <div className="text-right shrink-0">
                             <div className="text-cacao font-medium">
-                              ${c.precioTotalUsd.toFixed(2)}
+                              {fmtUsd(c.precioTotalUsd)}
                             </div>
                             {c.fleteUsd ? (
                               <div className="text-xs text-cacao-soft">
-                                + flete ${c.fleteUsd.toFixed(2)}
+                                + flete {fmtUsd(c.fleteUsd)}
                               </div>
                             ) : null}
                             {c.precioTotalBs && (
                               <div className="text-xs text-cacao-soft">
-                                Bs {c.precioTotalBs.toFixed(2)}
+                                Bs {fmtDec(c.precioTotalBs)}
                                 {c.tasaBcvUsada
-                                  ? ` · tasa ${c.tasaBcvUsada.toFixed(2)}`
+                                  ? ` · tasa ${fmtDec(c.tasaBcvUsada)}`
                                   : ""}
                               </div>
                             )}

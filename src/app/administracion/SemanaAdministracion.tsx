@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtCantidad, fmtPorc } from "@/lib/decimal";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 // Semana de Administración: de un vistazo, cómo le fue al local.
@@ -777,11 +779,8 @@ function tonoMonto(n: number): string {
 }
 
 function fmtCant(n: number): string {
-  if (!Number.isFinite(n)) return "0";
-  const redondo = Math.abs(n - Math.round(n)) < 0.05;
-  return redondo
-    ? Math.round(n).toLocaleString("es-VE")
-    : n.toLocaleString("es-VE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (!Number.isFinite(n)) return fmtCantidad(0, "platos");
+  return fmtCantidad(n, "platos");
 }
 
 function palabraPlato(n: number): string {
@@ -790,13 +789,11 @@ function palabraPlato(n: number): string {
 
 function fmtPct(ratio: number | null): string {
   if (ratio == null || !Number.isFinite(ratio)) return "—";
-  return `${(ratio * 100).toFixed(1)}%`;
+  return fmtPorc(ratio * 100);
 }
 
 function fmtVariacion(ratio: number): string {
-  const pct = Math.abs(ratio * 100);
-  const texto = pct >= 10 ? pct.toFixed(0) : pct.toFixed(1);
-  return `${texto}%`;
+  return fmtPorc(Math.abs(ratio * 100));
 }
 
 function fmtFecha(iso: string): string {

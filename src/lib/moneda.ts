@@ -1,20 +1,16 @@
 /** Dólares de Bolo y su equivalente en bolívares a una tasa Bs por USD (BCV). */
 
+import { fmtDec } from "@/lib/decimal";
+
 export function fmtUsd(n: number): string {
   const v = Number.isFinite(n) ? n : 0;
-  const s = Math.abs(v).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const s = fmtDec(Math.abs(v), "en-US");
   return v < 0 ? `−$${s}` : `$${s}`;
 }
 
 export function fmtBs(n: number): string {
   const v = Number.isFinite(n) ? n : 0;
-  const s = Math.abs(v).toLocaleString("es-VE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const s = fmtDec(Math.abs(v), "es-VE");
   return v < 0 ? `−Bs ${s}` : `Bs ${s}`;
 }
 

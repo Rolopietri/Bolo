@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import {
   ESPECIALIDADES_CONTRATISTA_SUGERIDAS,
@@ -287,7 +289,7 @@ export function ContratistasClient() {
               Comisión nuestra % (si los recomendamos)
               <input
                 type="number"
-                step="0.1"
+                step="0.01"
                 min="0"
                 max="100"
                 placeholder="Opcional"
@@ -377,7 +379,7 @@ export function ContratistasClient() {
                     <div className="text-right shrink-0">
                       {c.precioReferencialUsd !== undefined && (
                         <div className="text-cacao font-medium">
-                          ${c.precioReferencialUsd.toFixed(2)}
+                          {fmtUsd(c.precioReferencialUsd)}
                           <span className="text-[10px] text-cacao-mute ml-1">
                             ref.
                           </span>

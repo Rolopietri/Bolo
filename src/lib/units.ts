@@ -15,6 +15,8 @@
 // "desconocida" — la app las trata como literales (no convierte). Eso preserva
 // el comportamiento de toda la data ya cargada.
 
+import { fmtDec } from "@/lib/decimal";
+
 export type Dimension = "peso" | "volumen" | "conteo" | "desconocida";
 
 type UnitInfo = {
@@ -117,15 +119,15 @@ export function canonica(unidad: string): string {
   return getUnit(unidad)?.canonica ?? unidad;
 }
 
-/** Número formateado: redondea a `maxDec` y quita ceros sobrantes (con punto). */
-function fmtNum(n: number, maxDec: number): string {
-  return Number(n.toFixed(maxDec)).toString();
+/** Número formateado para mostrar: siempre dos decimales, coma (es-VE). */
+function fmtNum(n: number, _maxDec?: number): string {
+  return fmtDec(n, "es-VE");
 }
 
 /**
  * Formato de cantidad para MOSTRAR en pantalla (solo visual — no cambia datos).
  * Elige la unidad más legible de la misma dimensión: montos grandes suben
- * (80000 g → "80 kg", 1500 ml → "1.5 L") y montos chicos bajan (0.065 kg →
+ * (80000 g → "80,00 kg", 1500 ml → "1,50 L") y montos chicos bajan (0.065 kg →
  * "65 g") para no perder precisión. El cálculo interno siempre sigue en la
  * unidad base.
  */
@@ -177,7 +179,7 @@ export function displayCantidadRedonda(
 
 /**
  * Precio por unidad base expresado en una unidad legible: en vez de
- * "$0.00084 / g" devuelve "$0.84 / kg". Para unidades sin escala (unidad,
+ * "$0.00084 / g" devuelve "$0.84 / kg" (siempre dos decimales). Para unidades sin escala (unidad,
  * botella…) deja la unidad tal cual.
  */
 export function precioLegible(
@@ -192,7 +194,7 @@ export function precioLegible(
 }
 
 function fmtPrecioUnit(n: number): string {
-  return n < 0.01 ? n.toFixed(5) : n.toFixed(2);
+  return fmtDec(n, "en-US");
 }
 
 /** Líneas de precio de un insumo. Si la compra y la unidad base se leen en la

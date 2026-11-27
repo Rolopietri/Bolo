@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtPorc, fmtDec } from "@/lib/decimal";
+
 import { useFechaJornadaDefault } from "@/components/JornadaProvider";
 
 import { useMemo, useState } from "react";
@@ -72,7 +74,7 @@ export function ProcesarInsumoDialog({
     setError(null);
     try {
       const pct = c > 0 ? ((c - p) / c) * 100 : 0;
-      const detalle = `Procesé ${c} ${insumo.unidadBase} crudo → ${p} ${insumo.unidadBase} procesado · merma ${(c - p).toFixed(4)} ${insumo.unidadBase} (${pct.toFixed(1)}%)`;
+      const detalle = `Procesé ${displayCantidad(c, insumo.unidadBase)} crudo → ${displayCantidad(p, insumo.unidadBase)} procesado · merma ${displayCantidad(c - p, insumo.unidadBase)} (${fmtPorc(pct)})`;
       const res = await registrarProcesamiento({
         insumoId: insumo.id,
         crudo: c,
@@ -137,7 +139,7 @@ export function ProcesarInsumoDialog({
             Crudo procesado
             <input
               type="number"
-              step="any"
+              step="0.01"
               min="0"
               value={crudo}
               onChange={(e) => setCrudo(e.target.value)}
@@ -154,7 +156,7 @@ export function ProcesarInsumoDialog({
             Procesado obtenido
             <input
               type="number"
-              step="any"
+              step="0.01"
               min="0"
               value={procesado}
               onChange={(e) => setProcesado(e.target.value)}
@@ -180,11 +182,11 @@ export function ProcesarInsumoDialog({
                 <strong>
                   {displayCantidad(Math.max(0, calc.merma), insumo.unidadBase)}
                 </strong>{" "}
-                ({calc.pct.toFixed(1)}%)
+                ({fmtPorc(calc.pct)})
               </div>
               {estandar == null ? (
                 <div className="text-[11px] text-cacao-mute">
-                  Primera vez: este {calc.pct.toFixed(0)}% se guardará como el
+                  Primera vez: este {fmtPorc(calc.pct)} se guardará como el
                   estándar de merma de este insumo.
                 </div>
               ) : (
@@ -194,7 +196,7 @@ export function ProcesarInsumoDialog({
                     <span className="text-terracotta font-medium">
                       Esta producción mermó {desviacion > 0 ? "más" : "menos"} de lo
                       normal ({desviacion > 0 ? "+" : ""}
-                      {desviacion.toFixed(1)} pts). Revisa si fue algo puntual.
+                      {fmtDec(desviacion)} pts). Revisa si fue algo puntual.
                     </span>
                   ) : (
                     <span className="text-cacao-soft">En línea con el estándar.</span>

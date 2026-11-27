@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtDec } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { fechaCivilCaracas } from "@/lib/data/jornada-cocina";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -856,8 +860,7 @@ export function InsumosClient({
     const cpc = Number(form.cantidadPorCompra) || 0;
     if (!(pr > 0) || !(cpc > 0) || !form.unidadBase) return null;
     const p = precioLegible(pr / cpc, form.unidadBase);
-    const monto = p.precio >= 0.01 ? p.precio.toFixed(2) : p.precio.toPrecision(2);
-    return "$" + monto + "/" + p.unidad;
+    return fmtUsd(p.precio) + "/" + p.unidad;
   }
 
   // Filas del resumen antes de guardar (cada una vuelve a su paso).
@@ -872,7 +875,7 @@ export function InsumosClient({
       label: "Precio",
       valor:
         Number(form.precioCompraUsd) > 0
-          ? "$" + Number(form.precioCompraUsd).toFixed(2) + (porUnidad ? " · " + porUnidad : "")
+          ? fmtUsd(Number(form.precioCompraUsd)) + (porUnidad ? " · " + porUnidad : "")
           : "Sin precio",
       paso: 2,
     },
@@ -1117,7 +1120,7 @@ export function InsumosClient({
                 Number(form.precioCompraUsd) / Number(form.cantidadPorCompra),
                 form.unidadBase,
               );
-              return `Te sale a $${p.precio >= 0.01 ? p.precio.toFixed(2) : p.precio.toPrecision(2)} por ${p.unidad}`;
+              return `Te sale a ${fmtUsd(p.precio)} por ${p.unidad}`;
             })()}
           </span>
         )}
@@ -2192,5 +2195,5 @@ function etiquetaPresentacion(i: Insumo): string {
 
 function formatN(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  return n.toFixed(2).replace(/\.?0+$/, "");
+  return fmtDec(n);
 }

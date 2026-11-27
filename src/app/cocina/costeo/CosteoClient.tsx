@@ -1,5 +1,9 @@
 "use client";
 
+import { textoInputDecimal } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { fechaCivilCaracas } from "@/lib/data/jornada-cocina";
 
 import { useEffect, useMemo, useState } from "react";
@@ -425,19 +429,19 @@ function CosteoTable({
               )}
             </td>
             <td className="px-3 py-3 text-right text-cacao font-medium">
-              ${rent.costoPorPorcion.toFixed(2)}
+              {fmtUsd(rent.costoPorPorcion)}
             </td>
             <td className="px-3 py-3 text-right text-cacao-soft text-xs">
-              <div>${rent.precioSugeridoAlObjetivo.toFixed(2)}</div>
+              <div>{fmtUsd(rent.precioSugeridoAlObjetivo)}</div>
               <div className="text-[10px] text-cacao-mute">
-                ${rent.precioSugeridoAlObjetivoConIva.toFixed(2)} c/IVA
+                {fmtUsd(rent.precioSugeridoAlObjetivoConIva)} c/IVA
               </div>
             </td>
             <td className="px-3 py-3 text-right">
               <InlinePrecio
                 valor={rent.precioVentaUsd}
                 onSave={(v) => onPrecioChange(receta.id, v)}
-                placeholder={rent.precioSugeridoAlObjetivo.toFixed(2)}
+                placeholder={textoInputDecimal(rent.precioSugeridoAlObjetivo)}
               />
             </td>
             <td className="px-3 py-3 text-right">
@@ -453,7 +457,7 @@ function CosteoTable({
                     v === null ? null : precioSinIva(v, ivaPorc),
                   )
                 }
-                placeholder={rent.precioSugeridoAlObjetivoConIva.toFixed(2)}
+                placeholder={textoInputDecimal(rent.precioSugeridoAlObjetivoConIva)}
               />
             </td>
           </tr>
@@ -473,7 +477,7 @@ function InlinePrecio({
   onSave: (v: number | null) => void;
   placeholder?: string;
 }) {
-  const [text, setText] = useState(valor !== null ? valor.toFixed(2) : "");
+  const [text, setText] = useState(textoInputDecimal(valor));
   const [editing, setEditing] = useState(false);
 
   // Si cambia el valor desde afuera (y no estás editando), sincronizar el
@@ -483,14 +487,14 @@ function InlinePrecio({
   if (valor !== prevValor) {
     setPrevValor(valor);
     if (!editing) {
-      setText(valor !== null ? valor.toFixed(2) : "");
+      setText(textoInputDecimal(valor));
     }
   }
 
   function commit() {
     setEditing(false);
     const trimmed = text.trim();
-    const mostrado = valor !== null ? valor.toFixed(2) : "";
+    const mostrado = textoInputDecimal(valor);
     // Si el texto es igual a lo que se mostró, no hubo cambio real → no guardar.
     // (Antes comparaba el "8.62" mostrado contra el "8.62068" real y "guardaba"
     //  la versión truncada con solo enfocar/desenfocar el campo.)
@@ -509,7 +513,7 @@ function InlinePrecio({
 
   function cancel() {
     setEditing(false);
-    setText(valor !== null ? valor.toFixed(2) : "");
+    setText(textoInputDecimal(valor));
   }
 
   return (
@@ -561,7 +565,7 @@ function ConfigEditor({
           Food cost objetivo %
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             max="100"
             value={foodCost}
@@ -576,7 +580,7 @@ function ConfigEditor({
           IVA carta %
           <input
             type="number"
-            step="0.1"
+            step="0.01"
             min="0"
             max="100"
             value={iva}

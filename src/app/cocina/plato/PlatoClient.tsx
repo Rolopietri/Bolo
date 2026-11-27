@@ -1,5 +1,9 @@
 "use client";
 
+import { textoInputDecimal } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { Insumo, Receta, CocinaConfig } from "@/lib/types";
@@ -47,7 +51,7 @@ const nuevaLinea = (key: number): Linea => ({
 
 function money(n: number): string {
   if (!isFinite(n)) n = 0;
-  return "$" + n.toFixed(2);
+  return fmtUsd(n);
 }
 
 /** minúsculas + sin acentos, para buscar sin que importe la tilde. */
@@ -746,7 +750,7 @@ export function PlatoClient() {
           <button
             onClick={() =>
               setPrecioVenta(
-                (rent?.precioSugeridoAlObjetivo ?? 0).toFixed(2),
+                textoInputDecimal(rent?.precioSugeridoAlObjetivo ?? 0),
               )
             }
             className="ml-auto rounded-full ring-1 ring-marfil bg-white px-3 py-1.5 text-xs font-bold text-terracotta-deep hover:ring-terracotta"

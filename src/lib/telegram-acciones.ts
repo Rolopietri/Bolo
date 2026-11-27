@@ -22,6 +22,7 @@ import {
   unidadPlantilla,
   type MovimientoSinCantidad,
 } from "@/lib/produccion";
+import { fmtCantidad, fmtDec } from "@/lib/decimal";
 
 export type InsumoBot = {
   id: string;
@@ -156,12 +157,13 @@ export function accionesDeMensaje(
   return { acciones, problemas };
 }
 
-const pct = (n: number) => `${Math.round(n)} %`;
+const pct = (n: number) => `${fmtDec(n)} %`;
 
-/** Cantidad en unidad base → texto legible ("8 kg", "0,4 kg", "12 unid"). */
+/** Cantidad en unidad base → texto legible ("8,00 kg", "0,40 kg", "12 unid"). */
 export function legible(n: number | undefined, unidadBase: string): string {
   const { unidad, factor } = unidadPlantilla(unidadBase);
-  return `${(Math.round(((n ?? 0) / factor) * 100) / 100).toLocaleString("es-VE")} ${unidad}`;
+  const valor = (n ?? 0) / factor;
+  return `${fmtCantidad(valor, unidad)} ${unidad}`;
 }
 
 const MOTIVO: Record<string, string> = { perdida: "pérdida", mal_estado: "mal estado", vencimiento: "vencido" };

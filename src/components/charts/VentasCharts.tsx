@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtPorc } from "@/lib/decimal";
+
 // Gráficos ligeros a medida (SVG/divs) para el dashboard de Análisis de Ventas.
 // Sin dependencias externas: usan la paleta de la app y son interactivos
 // (hover con detalle). Pensados para datos ya agregados en el cliente.
@@ -331,7 +333,7 @@ export function Dona({
               {format(centroValor)}
             </span>
             <span className="text-[11px] text-cacao-soft tabular-nums">
-              {centroPct.toFixed(1)}%
+              {fmtPorc(centroPct)}
             </span>
           </div>
         </div>
@@ -365,7 +367,7 @@ export function Dona({
             <span className="text-cacao truncate flex-1 min-w-0 inline-flex items-center gap-1">{s.label}{onSelect && <span className="text-cacao-mute">›</span>}</span>
             {s.sub && <span className="text-cacao-mute tabular-nums shrink-0 text-right whitespace-nowrap">{s.sub}</span>}
             <span className="text-cacao-soft tabular-nums shrink-0 w-12 text-right">
-              {((s.value / total) * 100).toFixed(1)}%
+              {fmtPorc((s.value / total) * 100)}
             </span>
             <span className="text-cacao-soft tabular-nums shrink-0 w-20 text-right whitespace-nowrap">
               {format(s.value)}
