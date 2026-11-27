@@ -1,7 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { getTasaJornadaPorFecha, jornadaHoy } from "@/lib/data/jornada-cocina";
+import { fechaCivilCaracas, getTasaJornadaPorFecha, jornadaHoy } from "@/lib/data/jornada-cocina";
 import { normalizarNombreCatalogo } from "@/lib/text";
 import { esColumnaAusente, esFuncionAusente, filaCompra } from "@/lib/iva-compra";
 import type {
@@ -334,8 +334,9 @@ export async function deleteInsumo(id: string): Promise<void> {
 
 /** Refresca el precio de un insumo al precio de hoy SIN registrar una compra.
  *  Recalcula el precio por unidad base y estampa `precio_actualizado` con la
- *  fecha de hoy, para que el costeo deje de marcarlo como viejo. Pensado para
- *  cuando conoces el precio de mercado actual pero no compraste todavía. */
+ *  fecha civil de hoy (America/Caracas), no la de la jornada: la frescura se
+ *  cuenta en días de calendario. Pensado para cuando conoces el precio de
+ *  mercado actual pero no compraste todavía. */
 /** Cambia SOLO la categoría de un insumo (para clasificar ítems de reventa
  *  desde Análisis de ventas). No toca precio ni lo demás. */
 export async function setInsumoCategoria(
@@ -367,7 +368,7 @@ export async function actualizarPrecioInsumo(
   cantidadPorCompra: number,
 ): Promise<Insumo> {
   const sb = createSupabaseBrowserClient();
-  const hoy = await jornadaHoy();
+  const hoy = fechaCivilCaracas();
   const precioBase =
     cantidadPorCompra > 0
       ? precioCompraUsd / cantidadPorCompra

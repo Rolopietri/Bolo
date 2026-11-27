@@ -91,6 +91,16 @@ begin
     (select tasa_valor from public.cocina_jornadas where id = v_id) = 36.0000,
     'la tasa de la jornada no debe cambiar cuando entra una nueva del BCV');
 
+  -- 16. Frescura: fecha civil, no la de la jornada, con una jornada del día anterior.
+  perform public._assert(public._cocina_fecha_civil(now()) = v_hoy_civil,
+    format('_cocina_fecha_civil debía ser el día civil (%s), fue %s',
+           v_hoy_civil, public._cocina_fecha_civil(now())));
+  perform public._assert(public._cocina_fecha_civil(now()) is distinct from public.jornada_fecha(),
+    'la fecha civil no debe coincidir con jornada_fecha cuando la jornada es del día anterior');
+  perform public._assert(public.jornada_fecha() = v_ayer,
+    format('jornada_fecha sigue siendo la de la jornada abierta (%s), fue %s',
+           v_ayer, public.jornada_fecha()));
+
   -- 15. Tasa propia: queda fija hasta el cierre; la siguiente jornada toma la oficial.
   v_res := public.cocina_jornada_fijar_tasa_propia(50);
   perform public._assert((v_res ->> 'ok')::boolean,

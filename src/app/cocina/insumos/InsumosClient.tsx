@@ -1,6 +1,6 @@
 "use client";
 
-import { useJornadaHoy } from "@/components/JornadaProvider";
+import { fechaCivilCaracas } from "@/lib/data/jornada-cocina";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -277,8 +277,9 @@ export function InsumosClient({
   // Análisis de Compras → Clasificar insumos. Es la lista LIMPIA, separada de
   // las categorías de venta de Administración.
   const [categoriasInsumo, setCategoriasInsumo] = useState<CategoriaInsumo[]>([]);
-  // Fecha de hoy (YYYY-MM-DD) para medir la frescura de cada precio.
-  const hoy = useJornadaHoy();
+  // Día civil de hoy (YYYY-MM-DD, America/Caracas): la frescura se cuenta
+  // en días de calendario, no de jornada.
+  const hoy = fechaCivilCaracas();
 
   useEffect(() => {
     let cancelled = false;
@@ -2032,8 +2033,8 @@ function frescuraTexto(nivel: NivelFrescuraPrecio, dias: number | null): string 
  * precio del empaque + precio por unidad base, una etiqueta de qué tan viejo
  * es (verde/amarillo/rojo según los días desde la última confirmación) y un
  * botón "Actualizar a hoy" que fija el precio de mercado actual SIN registrar
- * una compra (estampa la fecha de hoy). La frescura se mide contra
- * `precioActualizado`; si aún no existe, cae a `ultimaFecha` (última compra).
+ * una compra (estampa la fecha civil de hoy). La frescura se mide en días
+ * de calendario contra `precioActualizado`; si aún no existe, cae a `ultimaFecha`.
  */
 function PrecioCelda({
   insumo,

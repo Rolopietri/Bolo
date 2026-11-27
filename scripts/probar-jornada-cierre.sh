@@ -86,6 +86,29 @@ create table if not exists public.tasa_bcv (
   created_at timestamptz default now()
 );
 
+create table if not exists public.compras (
+  id uuid primary key default gen_random_uuid(),
+  insumo_id uuid references public.insumos(id),
+  proveedor_id uuid,
+  fecha date not null default current_date,
+  cantidad numeric,
+  precio_total_usd numeric,
+  precio_total_bs numeric,
+  tasa_bcv_usada numeric,
+  modalidad_pago text,
+  notas text,
+  numero_factura text,
+  flete_usd numeric,
+  pagada boolean default true,
+  fecha_pago date,
+  base_usd numeric,
+  iva_usd numeric,
+  exento_usd numeric,
+  costo_usd numeric,
+  cantidad_por_compra_snap numeric,
+  created_at timestamptz default now()
+);
+
 create table if not exists public.ventas (
   id uuid primary key default gen_random_uuid(),
   fecha date not null default current_date,
