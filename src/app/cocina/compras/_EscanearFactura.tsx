@@ -481,7 +481,7 @@ export function EscanearFactura({
     return () => {
       cancel = true;
     };
-  }, [paso, cab.fecha, tasaFactura]);
+  }, [paso, cab.fecha, tasaFactura, hoy]);
 
   const tasaSugerida = !tasaDia
     ? null

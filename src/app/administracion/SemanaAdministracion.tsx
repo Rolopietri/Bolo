@@ -194,7 +194,7 @@ export function SemanaAdministracion({ onVerCierres, onVerGastos }: { onVerCierr
     return () => {
       cancel = true;
     };
-  }, [lunes, intento]);
+  }, [lunes, intento, hoyJornada]);
 
   function ir(delta: number) {
     setLunes((actual) => {

@@ -100,7 +100,9 @@ export function BcvRateBanner() {
 
   useEffect(() => {
     if (!jornadaLista || !tasaJornada?.valor) return;
+    // La calculadora arranca con la tasa ya guardada de la jornada.
     if (tasaJornada.tipo === "propia") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreferida("personalizada");
       setCustomTexto(String(tasaJornada.valor));
     } else if (tasaJornada.tipo === "eur_bs") {

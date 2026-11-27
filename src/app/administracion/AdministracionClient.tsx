@@ -3877,7 +3877,7 @@ function SeccionHistorico() {
       }
     })();
     return () => { a = false; };
-  }, []);
+  }, [hoy]);
 
   async function guardarObs() {
     setGuardandoObs(true);

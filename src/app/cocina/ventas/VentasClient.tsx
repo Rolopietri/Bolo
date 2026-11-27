@@ -1,6 +1,6 @@
 "use client";
 
-import { useJornadaHoy, useFechaJornadaDefault } from "@/components/JornadaProvider";
+import { useFechaJornadaDefault } from "@/components/JornadaProvider";
 
 import { useEffect, useMemo, useState } from "react";
 import type {
@@ -84,7 +84,6 @@ function nuevoBatchId() {
 type Tab = "registrar" | "importar" | "clasificacion" | "historial";
 
 export function VentasClient() {
-  const hoy = useJornadaHoy();
   const [tab, setTab] = useState<Tab>("registrar");
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [ventas, setVentas] = useState<Venta[]>([]);

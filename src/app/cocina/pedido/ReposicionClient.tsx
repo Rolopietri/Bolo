@@ -45,7 +45,6 @@ function dinero(n: number): string {
 }
 
 export function ReposicionClient({ onVerRaciones }: { onVerRaciones: () => void }) {
-  const hoy = useJornadaHoy();
   const [resumen, setResumen] = useState<ResumenReposicion | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);

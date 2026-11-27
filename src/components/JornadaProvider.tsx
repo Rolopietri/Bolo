@@ -63,6 +63,8 @@ export function JornadaProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    // Carga la jornada al entrar (fetch, no un setState síncrono).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void recargar();
   }, [recargar]);
 

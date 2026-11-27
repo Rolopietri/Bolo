@@ -29,6 +29,8 @@ export function AlertaCierreJornada() {
 
   useEffect(() => {
     if (!estadoCtx) return;
+    // El aviso local parte del estado que ya cargó el provider.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEstado(estadoCtx);
     if (estadoCtx.cerroJornadaId) {
       setAvisoAuto(
