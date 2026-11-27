@@ -394,11 +394,11 @@ const RE_SALIDA = /^(sal|proces|qued|limpi|neto)/i;
 
 // Pérdidas ("se dañaron 2 kg de tomate") y devoluciones al almacén.
 const RE_PERDIDA = new RegExp(
-  `(?<![${LETRA}])(se\\s+dañ\\w*|dañ\\w*|da[ñn]ad[oa]s?|se\\s+bot\\w*|bot(?:é|ó|aron|amos|ad[oa]s?)|se\\s+perdi\\w*|perd(?:í|i)(?:ó|eron|mos)?|perdid[oa]s?|vencid[oa]s?|se\\s+venci\\w*|venci(?:ó|eron)|podrid[oa]s?|se\\s+pudri\\w*|se\\s+cay\\w*|p[ée]rdida)(?![${LETRA}])`,
+  `(?<![${LETRA}])(se\\s+dañ[${LETRA}]*|dañ[${LETRA}]*|da[ñn]ad[oa]s?|se\\s+bot[${LETRA}]*|bot(?:é|ó|aron|amos|ad[oa]s?)|se\\s+perdi[${LETRA}]*|perd(?:í|i)(?:ó|eron|mos)?|perdid[oa]s?|vencid[oa]s?|se\\s+venci[${LETRA}]*|venci(?:ó|eron)|podrid[oa]s?|se\\s+pudri[${LETRA}]*|se\\s+cay[${LETRA}]*|p[ée]rdida)(?![${LETRA}])`,
   "i",
 );
 const RE_DEVOLUCION = new RegExp(
-  `(?<![${LETRA}])(devolv\\w*|devuel\\w*|regres\\w*|vuelve\\s+al\\s+almac\\w*|vuelven\\s+al\\s+almac\\w*|de\\s+vuelta)(?![${LETRA}])`,
+  `(?<![${LETRA}])(devolv[${LETRA}]*|devuel[${LETRA}]*|regres[${LETRA}]*|vuelve\\s+al\\s+almac[${LETRA}]*|vuelven\\s+al\\s+almac[${LETRA}]*|de\\s+vuelta)(?![${LETRA}])`,
   "i",
 );
 function motivoPerdida(t: string): "perdida" | "mal_estado" | "vencimiento" {
@@ -436,6 +436,12 @@ function cantidadesDe(texto: string): Cantidad[] {
   return [...texto.matchAll(RE_CANTIDAD)].map(cantidadDe);
 }
 
+// Conectores que quedan pegados al nombre al quitar la cantidad y la palabra
+// clave ("1,37 kg de zanahoria" → "de zanahoria"): no son parte del nombre.
+const CONECTORES = "de|del|la|el|los|las|al|a|en|con|para|por|un|una|unos|unas";
+const RE_CONECTOR_INICIO = new RegExp(`^(?:(?:${CONECTORES})\\s+)+`, "i");
+const RE_CONECTOR_FIN = new RegExp(`(?:\\s+(?:${CONECTORES}))+$`, "i");
+
 function nombreDe(texto: string): string {
   return texto
     .replace(RE_CANTIDAD, " ")
@@ -444,7 +450,23 @@ function nombreDe(texto: string): string {
     .replace(new RegExp(RE_DEVOLUCION.source, "gi"), " ")
     .replace(new RegExp(`[^${LETRA}\\s]`, "gi"), " ")
     .replace(/\s+/g, " ")
-    .trim();
+    .trim()
+    .replace(RE_CONECTOR_INICIO, "")
+    .replace(RE_CONECTOR_FIN, "");
+}
+
+/** Insumo del nombre escrito; si varios empatan, ninguno (y la lista). */
+function resolverNombre<T extends { id: string; nombre: string }>(
+  nombre: string,
+  insumos: T[],
+): { ins: T | null; ambiguos: string[] } {
+  if (!/[a-záéíóúñ]{3,}/i.test(nombre)) return { ins: null, ambiguos: [] };
+  const emp = empatados(nombre, insumos);
+  if (emp.length > 1) return { ins: null, ambiguos: emp.map((i) => i.nombre) };
+  return {
+    ins: sugerirInsumo(nombre, insumos) ?? porPalabraPrincipal(nombre, insumos) ?? emp[0] ?? null,
+    ambiguos: [],
+  };
 }
 
 /**
@@ -467,16 +489,7 @@ export function leerMensaje<T extends { id: string; nombre: string } & InsumoCon
   insumos: T[],
 ): RenglonLeido[] {
   const out: RenglonLeido[] = [];
-  /** Insumo del nombre escrito; si varios empatan, ninguno (y la lista). */
-  const resolver = (nombre: string): { ins: T | null; ambiguos: string[] } => {
-    if (!/[a-záéíóúñ]{3,}/i.test(nombre)) return { ins: null, ambiguos: [] };
-    const emp = empatados(nombre, insumos);
-    if (emp.length > 1) return { ins: null, ambiguos: emp.map((i) => i.nombre) };
-    return {
-      ins: sugerirInsumo(nombre, insumos) ?? porPalabraPrincipal(nombre, insumos) ?? emp[0] ?? null,
-      ambiguos: [],
-    };
-  };
+  const resolver = (nombre: string) => resolverNombre(nombre, insumos);
   const RE_CUALQUIER_CLAVE = new RegExp(`${RE_CLAVE.source}|${RE_PERDIDA.source}|${RE_DEVOLUCION.source}`, "i");
   const SEPARADOR = new RegExp(`(?<!\\d),|,(?!\\d)|(?<![${LETRA}])(?:y|e)(?![${LETRA}])`, "i");
   /** "Entrando 2 kg lomito, 3 kg cebolla": si una línea nombra varios
@@ -616,4 +629,71 @@ export function leerMensaje<T extends { id: string; nombre: string } & InsumoCon
     anotar(destino?.id ?? "", tomada, util, nombreDe(linea), entradaPorClave);
   }
   return out;
+}
+
+/** Movimiento que el mensaje nombra sin decir cuánto ("Saliendo lomito"). */
+export type MovimientoSinCantidad = {
+  insumoId: string;
+  movimiento: "entrada" | "salida" | "perdida" | "devolucion";
+  motivo?: "perdida" | "mal_estado" | "vencimiento";
+};
+
+/**
+ * Renglones del mensaje con palabra de movimiento y un insumo reconocido,
+ * pero sin peso ni cantidad: "Saliendo algo de lomito", "Se dañó el tomate".
+ * El bot pide la cantidad en vez de ignorarlos. No cuenta las preguntas
+ * ("¿salió el lomito?"), los nombres ambiguos ni los números sueltos.
+ */
+export function movimientosSinCantidad<T extends { id: string; nombre: string }>(
+  texto: string,
+  insumos: T[],
+): MovimientoSinCantidad[] {
+  const out: MovimientoSinCantidad[] = [];
+  for (const lineaOriginal of texto.split(/\n|;/)) {
+    const linea = numerosEnCifras(lineaOriginal).trim();
+    if (!linea || /[¿?]/.test(linea)) continue;
+    if (RE_UNIDAD_RARA.test(linea) || cantidadesDe(linea).length > 0) continue;
+    let movimiento: MovimientoSinCantidad["movimiento"];
+    let motivo: MovimientoSinCantidad["motivo"];
+    if (RE_PERDIDA.test(linea)) {
+      movimiento = "perdida";
+      motivo = motivoPerdida(linea);
+    } else if (RE_DEVOLUCION.test(linea)) {
+      movimiento = "devolucion";
+    } else {
+      const claves = [...linea.matchAll(RE_CLAVE)];
+      if (claves.length === 0) continue;
+      movimiento = claves.every((k) => RE_SALIDA.test(k[1])) ? "salida" : "entrada";
+    }
+    const { ins, ambiguos } = resolverNombre(nombreDe(linea), insumos);
+    if (!ins || ambiguos.length > 0 || out.some((x) => x.insumoId === ins.id)) continue;
+    out.push({ insumoId: ins.id, movimiento, ...(motivo ? { motivo } : {}) });
+  }
+  return out;
+}
+
+/**
+ * Lee la respuesta a "¿Cuánto salió?" ("1,2 kg", "800 g", "12"): la cantidad
+ * de cada insumo en la unidad de la plantilla (kg, L, unid). Con un solo
+ * insumo vale el primer número; con varios, cada número va con su nombre
+ * ("lomito 1,2 kg, cebolla 3 kg"). NaN = medida que no se puede convertir.
+ */
+export function cantidadesDeRespuesta<T extends { id: string; nombre: string } & InsumoConPresentacion>(
+  texto: string,
+  insumos: T[],
+): { cantidades: Map<string, number>; unidadRara: string | null } {
+  const cantidades = new Map<string, number>();
+  const limpio = numerosEnCifras(texto);
+  const rara = limpio.match(RE_UNIDAD_RARA);
+  if (rara) return { cantidades, unidadRara: rara[1] };
+  if (insumos.length === 1) {
+    const v = enPlantilla(cantidadesDe(limpio)[0], insumos[0]);
+    if (v != null) cantidades.set(insumos[0].id, v);
+    return { cantidades, unidadRara: null };
+  }
+  for (const r of leerMensaje(texto, insumos)) {
+    const v = r.tomada ?? r.util;
+    if (r.insumoId && v != null && !cantidades.has(r.insumoId)) cantidades.set(r.insumoId, v);
+  }
+  return { cantidades, unidadRara: null };
 }

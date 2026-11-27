@@ -9,6 +9,8 @@
  * registrado va al resumen diario que recibe el gerente en privado
  * ("/gerente CODIGO", "/resumen"). Si algo es dudoso no se registra (BOLO-13).
  * Responder "deshacer" a un mensaje lo revierte; editarlo aplica el texto nuevo.
+ * Si el mensaje nombra un movimiento sin peso ("Saliendo algo de lomito"), el
+ * bot pregunta cuánto; al responderle con la cantidad se registra (BOLO-15).
  * Las fotos quedan en Producción (la lectura de la foto corre en el navegador).
  * Siempre responde 200 para que Telegram no reintente sin fin.
  */
@@ -17,10 +19,15 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { telegram } from "@/lib/telegram";
 import {
   accionesDeMensaje,
+  completarConCantidad,
+  faltantesDeMensaje,
   hayProblemas,
   legible,
+  preguntaCantidad,
   respuestaBot,
+  type FaltaCantidad,
   type InsumoBot,
+  type ProblemasBot,
   type ResultadoBot,
 } from "@/lib/telegram-acciones";
 import { textoResumen, type DatosResumen } from "@/lib/telegram-resumen";
@@ -40,7 +47,11 @@ type Recibido = {
   objetivo?: number;
   motivo?: string;
   es_gerente?: boolean;
+  /** Mensaje (del grupo o del bot) al que este responde. */
+  respuesta_a?: number | null;
 };
+
+type MensajeTelegram = { reply_to_message?: { message_id?: number } };
 
 // Que Telegram también avise de los mensajes editados (una vez por instancia).
 let edicionesAseguradas = false;
@@ -79,6 +90,9 @@ export async function POST(req: NextRequest) {
   }
 
   const r = (data ?? {}) as Recibido;
+  // telegram_editar no devuelve a qué respondía el mensaje: se lee del aviso.
+  const u = update as { message?: MensajeTelegram; edited_message?: MensajeTelegram };
+  r.respuesta_a ??= (u.message ?? u.edited_message)?.reply_to_message?.message_id ?? null;
   /** Responde en el chat (como respuesta al mensaje) y devuelve el id del aviso. */
   const responder = async (text: string): Promise<number | undefined> => {
     if (!r.token || !r.chat_id) return undefined;
@@ -150,11 +164,73 @@ const QUE: Record<string, string> = {
 
 type Responder = (t: string) => Promise<number | undefined>;
 
+/** Mensaje del grupo al que se respondió (directo o a través de un aviso del bot). */
+type Original = {
+  id: string;
+  texto: string | null;
+  estado: string;
+  resultado: unknown;
+  message_id: number | null;
+  via: "mensaje" | "respuesta";
+  enviado_at: string;
+};
+
+/** Lo que se guarda en `resultado` del mensaje al que le faltó la cantidad. */
+type MarcaSinCantidad = Partial<ProblemasBot> & {
+  sin_cantidad: FaltaCantidad[];
+  /** insumo_id → pendiente (la respuesta) que registró su cantidad. */
+  completados?: Record<string, string>;
+  /** message_id de la última respuesta que registró algo (para «deshacer»). */
+  completado_con_mensaje?: number;
+};
+
+const marcaDe = (o: Original | null): MarcaSinCantidad | null => {
+  const m = o?.resultado as MarcaSinCantidad | null | undefined;
+  return m && !Array.isArray(m) && typeof m === "object" && Array.isArray(m.sin_cantidad) ? m : null;
+};
+
+/** Busca el mensaje original (BOLO-15). Sin el SQL aplicado devuelve null y
+ *  todo sigue como antes. */
+async function buscarOriginal(
+  sb: SupabaseClient,
+  secreto: string,
+  chat: number | undefined,
+  messageId: number | null | undefined,
+): Promise<Original | null> {
+  if (!chat || !messageId) return null;
+  const { data, error } = await sb.rpc("telegram_mensaje_original", {
+    p_secreto: secreto,
+    p_chat: chat,
+    p_message_id: messageId,
+  });
+  if (error) {
+    console.error("telegram_mensaje_original", error.message);
+    return null;
+  }
+  return (data ?? null) as Original | null;
+}
+
+async function guardarAviso(sb: SupabaseClient, secreto: string, chat: number | undefined, idAviso: number | undefined, pendiente: string) {
+  if (!idAviso || !chat) return;
+  await sb.rpc("telegram_guardar_respuesta", {
+    p_secreto: secreto,
+    p_chat: chat,
+    p_bot_message_id: idAviso,
+    p_pendiente: pendiente,
+  });
+}
+
 async function deshacer(sb: SupabaseClient, secreto: string, r: Recibido, responder: Responder) {
+  // Si respondieron "deshacer" a una pregunta de cantidad ya contestada (o al
+  // mensaje sin peso), se deshace la respuesta que registró el movimiento.
+  let objetivo = r.objetivo;
+  const original = await buscarOriginal(sb, secreto, r.chat_id, objetivo);
+  const marca = marcaDe(original);
+  if (original && original.estado !== "aplicado" && marca?.completado_con_mensaje) objetivo = marca.completado_con_mensaje;
   const { data, error } = await sb.rpc("telegram_deshacer", {
     p_secreto: secreto,
     p_chat: r.chat_id,
-    p_message_id: r.objetivo,
+    p_message_id: objetivo,
   });
   if (error) {
     console.error("telegram_deshacer", error.message);
@@ -185,10 +261,16 @@ async function aplicarMensaje(sb: SupabaseClient, secreto: string, r: Recibido, 
     return;
   }
   const insumos = ((ctx as { insumos?: InsumoBot[] } | null)?.insumos ?? []) as InsumoBot[];
+
+  // ¿Responde con la cantidad a un mensaje que no la traía?
+  if (r.respuesta_a && (await completarCantidad(sb, secreto, r, insumos, responder))) return;
+
   const { acciones, problemas } = accionesDeMensaje(r.texto ?? "", insumos);
+  // "Saliendo algo de lomito": nombra el insumo pero no dice cuánto.
+  const faltan = faltantesDeMensaje(r.texto ?? "", insumos);
 
   // Números sueltos sin nada reconocible ("somos 5"): se ignora en silencio.
-  if (acciones.length === 0 && !hayProblemas(problemas)) {
+  if (acciones.length === 0 && !hayProblemas(problemas) && faltan.length === 0) {
     await sb.rpc("telegram_marcar", { p_secreto: secreto, p_pendiente: r.id, p_estado: "descartado", p_resultado: null });
     return;
   }
@@ -208,23 +290,101 @@ async function aplicarMensaje(sb: SupabaseClient, secreto: string, r: Recibido, 
     }
     resultados = (res ?? []) as ResultadoBot[];
   } else {
-    await sb.rpc("telegram_marcar", { p_secreto: secreto, p_pendiente: r.id, p_estado: "rechazado", p_resultado: problemas });
+    // Queda como no registrado; si faltó la cantidad, la marca permite
+    // completarlo respondiendo a la pregunta del bot.
+    const resultado = faltan.length > 0 ? ({ ...problemas, sin_cantidad: faltan } satisfies MarcaSinCantidad) : problemas;
+    await sb.rpc("telegram_marcar", { p_secreto: secreto, p_pendiente: r.id, p_estado: "rechazado", p_resultado: resultado });
   }
   // En el grupo solo lo que no se pudo registrar (y las correcciones).
   let texto = respuestaBot(resultados, problemas, { soloErrores: true });
   if (r.accion === "editado" && acciones.length > 0 && resultados.every((x) => x.ok) && !hayProblemas(problemas)) {
     texto = ["✓ Apliqué la edición del mensaje.", texto].filter(Boolean).join("\n");
   }
-  if (texto) {
-    // Si después le responden "deshacer" a este aviso, se deshace el mensaje original.
-    const idAviso = await responder(texto);
-    if (idAviso && r.chat_id) {
-      await sb.rpc("telegram_guardar_respuesta", {
-        p_secreto: secreto,
-        p_chat: r.chat_id,
-        p_bot_message_id: idAviso,
-        p_pendiente: r.id,
-      });
-    }
+  // Si el mensaje ya registró otras cosas, no se completa respondiendo: se
+  // pide escribir el movimiento completo.
+  texto = [texto, preguntaCantidad(faltan, acciones.length === 0)].filter(Boolean).join("\n");
+  if (texto && r.id) {
+    // Si después le responden "deshacer" (o la cantidad) a este aviso, se
+    // aplica al mensaje original.
+    await guardarAviso(sb, secreto, r.chat_id, await responder(texto), r.id);
   }
+}
+
+/**
+ * Respuesta con la cantidad a un mensaje sin peso (o a la pregunta del bot).
+ * Registra el movimiento en esta respuesta, por telegram_aplicar, y marca el
+ * mensaje original como completado. Devuelve false si no es ese caso (y el
+ * mensaje sigue el camino normal).
+ */
+async function completarCantidad(
+  sb: SupabaseClient,
+  secreto: string,
+  r: Recibido,
+  insumos: InsumoBot[],
+  responder: Responder,
+): Promise<boolean> {
+  if (!r.id) return false;
+  const original = await buscarOriginal(sb, secreto, r.chat_id, r.respuesta_a);
+  const marca = marcaDe(original);
+  if (!original || !marca || original.id === r.id) return false;
+  if (original.estado !== "rechazado" && original.estado !== "descartado") return false;
+  if (Date.now() - new Date(original.enviado_at).getTime() > 3 * 24 * 3600 * 1000) return false;
+  const completados = { ...(marca.completados ?? {}) };
+  // Lo que falta (o lo que esta misma respuesta registró, si la están editando).
+  const faltan = faltantesDeMensaje(original.texto ?? "", insumos).filter(
+    (f) => !completados[f.insumoId] || completados[f.insumoId] === r.id,
+  );
+  if (faltan.length === 0) return false;
+
+  const { acciones, problemas, siguenSinCantidad } = completarConCantidad(faltan, r.texto ?? "", insumos);
+
+  if (acciones.length === 0) {
+    await sb.rpc("telegram_marcar", {
+      p_secreto: secreto,
+      p_pendiente: r.id,
+      p_estado: hayProblemas(problemas) ? "rechazado" : "descartado",
+      p_resultado: hayProblemas(problemas) ? problemas : null,
+    });
+    const texto = hayProblemas(problemas)
+      ? respuestaBot([], problemas, { soloErrores: true })
+      : `No entendí la cantidad. ${preguntaCantidad(faltan)}`;
+    await guardarAviso(sb, secreto, r.chat_id, await responder(texto), original.id);
+    return true;
+  }
+
+  const { data: res, error } = await sb.rpc("telegram_aplicar", {
+    p_secreto: secreto,
+    p_pendiente: r.id,
+    p_acciones: acciones,
+    p_responsable: r.remitente ?? null,
+  });
+  if (error) {
+    console.error("telegram_aplicar", error.message);
+    await responder("No pude registrar la cantidad por un error de Bolo. Inténtalo de nuevo en un momento.");
+    return true;
+  }
+  const resultados = (res ?? []) as ResultadoBot[];
+  // _prod_aplicar devuelve un resultado por acción, en el mismo orden.
+  acciones.forEach((a, i) => {
+    if (resultados[i]?.ok) completados[a.insumo_id] = r.id!;
+  });
+  const registro = resultados.some((x) => x.ok);
+  if (registro) {
+    const pendientes = faltantesDeMensaje(original.texto ?? "", insumos).filter((f) => !completados[f.insumoId]);
+    await sb.rpc("telegram_marcar", {
+      p_secreto: secreto,
+      p_pendiente: original.id,
+      p_estado: pendientes.length === 0 ? "descartado" : "rechazado",
+      p_resultado: { ...marca, completados, completado_con_mensaje: r.message_id } satisfies MarcaSinCantidad,
+    });
+  }
+  // Aquí sí se confirma lo registrado: la persona estaba corrigiendo.
+  const texto = [respuestaBot(resultados, problemas), preguntaCantidad(siguenSinCantidad)].filter(Boolean).join("\n");
+  if (texto) {
+    // "deshacer" a esta confirmación deshace la respuesta; si aún falta algo,
+    // responder a este aviso sigue completando el mensaje original.
+    const destino = registro && siguenSinCantidad.length > 0 ? original.id : r.id;
+    await guardarAviso(sb, secreto, r.chat_id, await responder(texto), destino);
+  }
+  return true;
 }

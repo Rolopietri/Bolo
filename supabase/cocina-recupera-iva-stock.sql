@@ -29,10 +29,10 @@
 --   where n.nspname = 'public'
 --     and c.relname = 'compras'
 --     and tgname in (
-      'compra_vincula_proveedor',
-      'compra_vincula_proveedor_borrar',
-      'compra_revert_from_insumo'
-    )
+--       'compra_vincula_proveedor',
+--       'compra_vincula_proveedor_borrar',
+--       'compra_revert_from_insumo'
+--     )
 --     and not t.tgisinternal;
 
 -- Avisa y aborta si mover el stock en `p_delta` (unidad base) lo dejaría
