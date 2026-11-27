@@ -3,14 +3,21 @@
 --  N5 (penúltima compra al editar), salidas "en uso" visibles en la ficha, y
 --  «deshacer» cancela una pregunta de cantidad pendiente en Telegram.
 --
--- Aplicar en producción DESPUÉS de los SQL de los PR #26 y #27 (ya aplicados).
--- No incluye cocina-jornada-sincro.sql (va en otro PR).
+-- Aplicar en producción DESPUÉS de bolo-15, cocina-jornada-cierre,
+-- cocina-jornada-horario y cocina-jornada-sincro (ya aplicados el 27 nov 2026).
 -- Idempotente: solo CREATE OR REPLACE de funciones. No toca datos.
 --
--- Antes de aplicar, conviene comparar estas definiciones con
---   select pg_get_functiondef(p.oid)
--- de las mismas funciones en producción, por si alguien las cambió después
--- de la lectura del 27 nov 2026 con la que se armó este archivo.
+-- CORREGIDO al aplicar (27 nov 2026, hora de Caracas): el cuerpo original de
+-- este PR se armó con definiciones vivas ANTERIORES a cocina_jornada_sincro.
+-- Esta versión parte de las definiciones vivas posteriores a esa migración y
+-- solo suma los arreglos de QA (acentos, movimiento en_uso, rechazo en vez de
+-- greatest(0), cancelar la pregunta con deshacer, N5). Cambios respecto del
+-- archivo del PR:
+--   • no reescribe _telegram_resumen_datos (conserva la ventana de jornada);
+--   • reemplazar_compra conserva precio_actualizado = _cocina_fecha_civil(...)
+--     y añade el recálculo de penultima_* (N5);
+--   • registrar_perdida_stock y registrar_procesamiento siguen usando
+--     jornada_fecha() (no current_date) y rechazan si el stock no alcanza.
 --
 -- Sección 1 — las 12 funciones, solo corrección de acentos (mismo cuerpo vivo).
 -- Sección 2 — reemplazar_compra: recalcula penultima_* (N5). Si al cambiar de
@@ -303,48 +310,10 @@ begin
 end $function$;
 
 -- _telegram_resumen_datos (solo acentos, cuerpo vivo del 27 nov 2026)
-CREATE OR REPLACE FUNCTION public._telegram_resumen_datos(p_fecha date)
- RETURNS jsonb
- LANGUAGE sql
- STABLE SECURITY DEFINER
- SET search_path TO 'public', 'pg_temp'
-AS $function$
-  with dia as (
-    select (p_fecha::timestamp at time zone 'America/Caracas') as desde,
-           ((p_fecha + 1)::timestamp at time zone 'America/Caracas') as hasta
-  )
-  select jsonb_build_object(
-    'fecha', p_fecha,
-    -- Movimientos registrados desde el grupo (entradas y usos por unidad).
-    'mensajes', coalesce((
-      select jsonb_agg(jsonb_build_object('remitente', p.remitente, 'resultado', p.resultado, 'enviado_at', p.enviado_at)
-                       order by p.enviado_at)
-        from produccion_pendientes p, dia
-       where p.estado = 'aplicado' and p.enviado_at >= dia.desde and p.enviado_at < dia.hasta), '[]'::jsonb),
-    -- Procesamientos cerrados ese día (desde el grupo o desde la app).
-    'procesados', coalesce((
-      select jsonb_agg(jsonb_build_object('nombre', i.nombre, 'unidad_base', i.unidad_base, 'crudo', pr.crudo,
-                                          'procesado', pr.procesado, 'merma_porc', pr.merma_porc,
-                                          'estandar', i.merma_coccion_porc, 'responsable', pr.responsable,
-                                          'nota', pr.nota)
-                       order by pr.created_at)
-        from procesamientos pr join insumos i on i.id = pr.insumo_id
-       where pr.fecha = p_fecha), '[]'::jsonb),
-    -- Lo que sigue en la mesa al momento del resumen.
-    'abiertos', coalesce((
-      select jsonb_agg(jsonb_build_object('nombre', i.nombre, 'unidad_base', i.unidad_base, 'crudo', a.crudo,
-                                          'responsable', a.responsable, 'abierto_at', a.abierto_at)
-                       order by a.abierto_at)
-        from procesamientos_abiertos a join insumos i on i.id = a.insumo_id), '[]'::jsonb),
-    'rechazados', coalesce((
-      select jsonb_agg(jsonb_build_object('remitente', p.remitente, 'texto', p.texto) order by p.enviado_at)
-        from produccion_pendientes p, dia
-       where p.estado = 'rechazado' and p.enviado_at >= dia.desde and p.enviado_at < dia.hasta), '[]'::jsonb),
-    'avisos_pendientes', (select count(*) from avisos_inventario where estado = 'pendiente'),
-    'fotos_pendientes', (select count(*) from produccion_pendientes where estado = 'pendiente' and foto_file_id is not null)
-  )
-  from dia;
-$function$;
+-- _telegram_resumen_datos: NO se reescribe. La versión viva ya tiene la ventana
+-- de la jornada (cocina_jornada_sincro, 27 nov 2026) y los acentos limpios.
+-- El cuerpo de la sección 1 de este PR se armó antes de esa migración y
+-- devolvería el resumen al día civil.
 
 -- log_stock_auditoria (solo acentos, cuerpo vivo del 27 nov 2026)
 CREATE OR REPLACE FUNCTION public.log_stock_auditoria()
@@ -848,7 +817,8 @@ begin
         when v_factor > 0 then v_unit / v_factor
         else v_unit
       end,
-      precio_actualizado = v_ult.fecha,
+      -- Frescura: día civil del registro de la compra vigente, no su fecha de jornada.
+      precio_actualizado = public._cocina_fecha_civil(v_ult.created_at),
       proveedor_id = coalesce(v_ult.proveedor_id, proveedor_id),
       penultima_fecha = case when v_hay_pen then v_pen.fecha else null end,
       penultima_cantidad = case when v_hay_pen then v_pen.cantidad else null end,
@@ -864,7 +834,8 @@ begin
 
   return v_nueva;
 end;
-$function$;
+$function$
+;
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
@@ -1344,7 +1315,7 @@ begin
     (insumo_id, tipo, capa, cantidad, motivo, fecha, nota)
   values
     (p_insumo_id, p_tipo, 'total', -abs(p_cantidad), p_motivo,
-     coalesce(p_fecha, current_date), p_nota)
+     coalesce(p_fecha, public.jornada_fecha()), p_nota)
   returning * into v_mov;
 
   return query
@@ -1404,14 +1375,14 @@ begin
       (insumo_id, tipo, capa, cantidad, motivo, fecha, nota)
     values
       (p_insumo_id, 'merma', 'total', -v_merma, 'Procesamiento',
-       coalesce(p_fecha, current_date), p_nota)
+       coalesce(p_fecha, public.jornada_fecha()), p_nota)
     returning id into v_mov_id;
   end if;
 
   insert into public.procesamientos
     (insumo_id, fecha, crudo, procesado, merma_porc, nota, responsable, origen, created_by)
   values (
-    p_insumo_id, coalesce(p_fecha, current_date), p_crudo, p_procesado,
+    p_insumo_id, coalesce(p_fecha, public.jornada_fecha()), p_crudo, p_procesado,
     case when p_crudo > 0 then (p_crudo - p_procesado) / p_crudo * 100 else 0 end,
     p_nota, nullif(btrim(coalesce(p_responsable, '')), ''), v_origen, auth.uid()
   );
