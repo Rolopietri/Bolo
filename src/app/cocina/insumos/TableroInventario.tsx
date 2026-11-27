@@ -1,6 +1,6 @@
 "use client";
 
-import { useJornadaHoy } from "@/components/JornadaProvider";
+import { jornadaHoy } from "@/lib/data/jornada-cocina";
 
 // "¿Cómo estoy?": el tablero de arriba de Inventario. Tres datos —valor en
 // cámara, se acaba pronto y para pedir— y nada más. Sus "Ver" no abren otra
@@ -83,7 +83,7 @@ export async function cargarConsumoYTasa(
   consumo: Map<string, ConsumoInsumo>;
   tasa: TasaInventario;
 }> {
-  const hoy = useJornadaHoy();
+  const hoy = await jornadaHoy();
   const desde = inicioVentana(hoy, ventanaDias);
   const [recetas, tasa, ventas, movimientos] = await Promise.all([
     listRecetas(),
