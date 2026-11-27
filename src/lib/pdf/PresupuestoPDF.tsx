@@ -3,6 +3,7 @@
  * Usa @react-pdf/renderer (server-side).
  * Las fuentes se cargan desde /public/fonts (Node fs).
  */
+import { fmtUsd } from "@/lib/moneda";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -602,10 +603,10 @@ export function PresupuestoPDF({
                   {l.cantidad} {unidadLabel(l.unidad)}
                 </Text>
                 <Text style={[styles.tdSoft, styles.cellPrecio]}>
-                  ${l.precioUnitario.toFixed(2)}
+                  {fmtUsd(l.precioUnitario)}
                 </Text>
                 <Text style={[styles.td, styles.cellSubtotal]}>
-                  ${l.subtotal.toFixed(2)}
+                  {fmtUsd(l.subtotal)}
                 </Text>
               </View>
             ))}
@@ -616,19 +617,19 @@ export function PresupuestoPDF({
           {modo === "detallado" ? (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Subtotal</Text>
-              <Text style={styles.totalValue}>${p.subtotal.toFixed(2)}</Text>
+              <Text style={styles.totalValue}>{fmtUsd(p.subtotal)}</Text>
             </View>
           ) : null}
           {modo === "detallado" && p.descuento > 0 ? (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Descuento</Text>
               <Text style={styles.totalValue}>
-                −${p.descuento.toFixed(2)}
+                −{fmtUsd(p.descuento)}
               </Text>
             </View>
           ) : null}
           <Text style={styles.totalFinal}>
-            Total: ${p.total.toFixed(2)} USD
+            Total: {fmtUsd(p.total)} USD
           </Text>
         </View>
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -217,7 +219,7 @@ export function PresupuestoDetail({ id }: { id: string }) {
               {estado.label}
             </span>
             <div className="mt-2 text-2xl font-cinzel text-cacao">
-              ${p.total.toFixed(2)}
+              {fmtUsd(p.total)}
             </div>
             <div className="text-xs text-cacao-soft">Total USD</div>
           </div>
@@ -504,26 +506,26 @@ export function PresupuestoDetail({ id }: { id: string }) {
                 {l.cantidad} × {unidadLabel(l.unidad)}
               </div>
               <div className="col-span-2 text-cacao-soft text-xs text-right">
-                ${l.precioUnitario.toFixed(2)}
+                {fmtUsd(l.precioUnitario)}
               </div>
               <div className="col-span-2 text-cacao text-sm text-right font-medium">
-                ${l.subtotal.toFixed(2)}
+                {fmtUsd(l.subtotal)}
               </div>
             </li>
           ))}
         </ul>
         <div className="mt-4 border-t border-marfil pt-3 text-right space-y-1">
           <div className="text-sm text-cacao-soft">
-            Subtotal: <span className="text-cacao">${p.subtotal.toFixed(2)}</span>
+            Subtotal: <span className="text-cacao">{fmtUsd(p.subtotal)}</span>
           </div>
           {p.descuento > 0 && (
             <div className="text-sm text-cacao-soft">
               Descuento:{" "}
-              <span className="text-cacao">−${p.descuento.toFixed(2)}</span>
+              <span className="text-cacao">−{fmtUsd(p.descuento)}</span>
             </div>
           )}
           <div className="text-xl font-cinzel tracking-wide text-cacao">
-            Total: ${p.total.toFixed(2)} USD
+            Total: {fmtUsd(p.total)} USD
           </div>
         </div>
       </section>
@@ -633,7 +635,7 @@ export function PresupuestoDetail({ id }: { id: string }) {
                     </div>
                     <div className="text-right">
                       <div className="text-cacao text-sm font-medium">
-                        ${snap.total?.toFixed?.(2) ?? "—"}
+                        {snap.total != null ? fmtUsd(Number(snap.total)) : "—"}
                       </div>
                       <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
                         {snap.items?.length ?? 0} líneas
@@ -675,7 +677,7 @@ export function PresupuestoDetail({ id }: { id: string }) {
                           <div>
                             <span className="text-cacao-soft">Descuento: </span>
                             <span className="text-cacao">
-                              ${snap.descuento.toFixed(2)}
+                              {fmtUsd(snap.descuento)}
                             </span>
                           </div>
                         )}
@@ -704,14 +706,13 @@ export function PresupuestoDetail({ id }: { id: string }) {
                                       {it.cantidad}
                                     </td>
                                     <td className="px-2 py-1.5 text-right text-cacao-soft">
-                                      ${Number(it.precioUnitario).toFixed(2)}
+                                      {fmtUsd(Number(it.precioUnitario))}
                                     </td>
                                     <td className="px-2 py-1.5 text-right text-cacao">
-                                      $
-                                      {(
+                                      {fmtUsd(
                                         Number(it.cantidad) *
-                                        Number(it.precioUnitario)
-                                      ).toFixed(2)}
+                                          Number(it.precioUnitario),
+                                      )}
                                     </td>
                                   </tr>
                                 ),

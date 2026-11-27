@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtCantidad } from "@/lib/decimal";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarIcon, CartIcon, WarningIcon } from "@/components/icons";
@@ -554,7 +556,7 @@ export function PlanesClient() {
                   <div className="min-w-0">
                     <div className="text-cacao truncate">{m.recetaNombre}</div>
                     <div className="text-xs text-cacao-soft">
-                      {Number(m.cantidad.toFixed(2))} ración
+                      {fmtCantidad(m.cantidad, "ración")} ración
                       {m.cantidad === 1 ? "" : "es"} · {m.fecha}
                       {m.mermaMotivo ? ` · ${m.mermaMotivo}` : ""}
                     </div>
@@ -616,7 +618,7 @@ export function PlanesClient() {
               <input
                 type="number"
                 min="0"
-                step="any"
+                step="0.01"
                 value={formRaciones}
                 onChange={(e) => setFormRaciones(e.target.value)}
                 required
@@ -940,7 +942,7 @@ export function PlanesClient() {
                 <input
                   type="number"
                   min="0"
-                  step="any"
+                  step="0.01"
                   value={ajusteRaciones}
                   onChange={(e) => setAjusteRaciones(e.target.value)}
                   className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
@@ -951,7 +953,7 @@ export function PlanesClient() {
                 <input
                   type="number"
                   min="0"
-                  step="any"
+                  step="0.01"
                   value={ajusteConsumidas}
                   onChange={(e) => setAjusteConsumidas(e.target.value)}
                   className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
@@ -969,7 +971,7 @@ export function PlanesClient() {
                 <p className="mt-2 text-xs text-cacao-soft">
                   Quedarían{" "}
                   <strong className="text-cacao">
-                    {Number(porVender.toFixed(2))}
+                    {fmtCantidad(porVender, "ración")}
                   </strong>{" "}
                   por vender (reservadas en el comprometido).
                 </p>

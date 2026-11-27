@@ -1,5 +1,9 @@
 "use client";
 
+import { textoInputDecimal } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 import { useEffect, useMemo, useState } from "react";
@@ -526,7 +530,7 @@ export function MenajeClient() {
         const base = it.precioReposicionUsd ?? 0;
         next[it.id] = {
           ...sel,
-          precio: base > 0 ? ((base * pct) / 100).toFixed(2) : sel.precio,
+          precio: base > 0 ? textoInputDecimal((base * pct) / 100) : sel.precio,
         };
       }
       return next;
@@ -1033,7 +1037,7 @@ export function MenajeClient() {
                                 Reposición
                               </div>
                               <div className="text-xs text-cacao-soft">
-                                ${i.precioReposicionUsd.toFixed(2)}
+                                {fmtUsd(i.precioReposicionUsd)}
                               </div>
                             </>
                           )}
@@ -1107,10 +1111,10 @@ export function MenajeClient() {
                                       )}
                                       {m.precioTotalUsd !== undefined && (
                                         <div className="text-xs text-cacao-soft mt-0.5">
-                                          Total: ${m.precioTotalUsd.toFixed(2)}{" "}
+                                          Total: {fmtUsd(m.precioTotalUsd)}{" "}
                                           {m.precioUnitarioUsd !== undefined && (
                                             <span className="text-cacao-mute">
-                                              · ${m.precioUnitarioUsd.toFixed(2)}/u
+                                              · {fmtUsd(m.precioUnitarioUsd)}/u
                                             </span>
                                           )}
                                         </div>

@@ -67,7 +67,7 @@ function cantidadLegible(value: number, unidad: string): string {
     n = value * 1000;
     mostrar = "g";
   }
-  const texto = new Intl.NumberFormat("es-VE", { maximumFractionDigits: 3 }).format(n);
+  const texto = new Intl.NumberFormat("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
   return `${texto} ${mostrar}`.trim();
 }
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import {
   ESTADOS_INVENTARIO,
@@ -375,7 +377,7 @@ export function InventarioClient() {
                         </div>
                         <div className="text-cacao text-sm">
                           {i.precioAlquilerUsd !== undefined
-                            ? `$${i.precioAlquilerUsd.toFixed(2)}`
+                            ? fmtUsd(i.precioAlquilerUsd)
                             : "—"}
                         </div>
                       </div>

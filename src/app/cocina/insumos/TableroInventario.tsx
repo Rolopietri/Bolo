@@ -1,5 +1,6 @@
 "use client";
 
+import { fmtPorc } from "@/lib/decimal";
 import { jornadaHoy } from "@/lib/data/jornada-cocina";
 
 // "¿Cómo estoy?": el tablero de arriba de Inventario. Tres datos —valor en
@@ -47,7 +48,7 @@ export function dinero(n: number): string {
 
 function textoPorcentaje(n: number): string {
   if (n > 0 && n < 1) return "< 1%";
-  return `${Math.round(n).toLocaleString("es-VE")}%`;
+  return fmtPorc(n);
 }
 
 function preferenciaTasa(): { preferida: PreferenciaTasa | null; personalizada: number | null } {

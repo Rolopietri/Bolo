@@ -4,6 +4,7 @@
  * Dos modos: lista sin precios o cotización (con precio unitario,
  * subtotales y total).
  */
+import { fmtUsd } from "@/lib/moneda";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
@@ -271,7 +272,7 @@ export type MenajePDFData = {
 };
 
 function money(n: number): string {
-  return `$${n.toFixed(2)}`;
+  return fmtUsd(n);
 }
 
 export function MenajePDF({ data }: { data: MenajePDFData }) {

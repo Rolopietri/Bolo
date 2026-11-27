@@ -1,5 +1,9 @@
 "use client";
 
+import { textoInputDecimal } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -34,14 +38,14 @@ function decisionesIniciales(lineas: LineaReposicion[]): Record<string, Decision
     out[l.insumoId] = {
       pedir: true,
       empaques: String(l.empaques),
-      precio: l.precioCompraUsd != null ? String(Number(l.precioCompraUsd.toFixed(4))) : "",
+      precio: l.precioCompraUsd != null ? textoInputDecimal(l.precioCompraUsd) : "",
     };
   }
   return out;
 }
 
 function dinero(n: number): string {
-  return `$${n.toFixed(2)}`;
+  return fmtUsd(n);
 }
 
 export function ReposicionClient({ onVerRaciones }: { onVerRaciones: () => void }) {

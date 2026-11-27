@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtPorc, fmtCantidad } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 // Análisis de Compras — módulo ESPEJO de Análisis de Ventas, adaptado a la
@@ -38,11 +42,9 @@ import {
 import { Plegable } from "@/components/Plegable";
 
 // ── Formato ──────────────────────────────────────────────────────────────
-const fUSD = (n: number) =>
-  "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fUnid = (n: number) =>
-  Number.isInteger(n) ? n.toLocaleString("en-US") : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-const fPct = (n: number) => `${n.toFixed(1)}%`;
+const fUSD = (n: number) => fmtUsd(n);
+const fUnid = (n: number) => fmtCantidad(n, "unid", "en-US");
+const fPct = (n: number) => fmtPorc(n);
 type EgItem = { id: string; fecha: string; concepto: string | null; proveedor: string | null; categoria: string; categoria_id: string | null; usd: number; moneda: string; monto: number };
 type GastosResp = { fijos: number; variables: number; insumosEgreso: number; cortesias: number; fijosUsd?: number; variablesUsd?: number; cortesiasUsd?: number; porCategoria: { categoria: string; clasificacion: string; eur: number; usd: number }[]; items?: EgItem[]; prev: { fijos: number; variables: number; fijosUsd?: number; variablesUsd?: number } };
 

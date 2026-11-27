@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtDec } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useEffect, useMemo, useState } from "react";
 import { CalendarIcon, ChevronIcon, PlusIcon, SaveIcon } from "@/components/icons";
 import { ErrorBanner } from "@/components/ErrorBanner";
@@ -31,7 +35,7 @@ import { EstadoVacioCocina } from "@/components/EstadoVacioCocina";
 import { cargarConsumoYTasa } from "../insumos/TableroInventario";
 import { VENTANA_CONSUMO_DIAS, type ConsumoInsumo } from "@/lib/stock-liviano";
 import { planDemanda } from "@/lib/plan-demanda";
-import { displayCantidadRedonda } from "@/lib/units";
+import { displayCantidadRedonda, displayCantidad } from "@/lib/units";
 
 type Objetivo = { recetaId: string; raciones: string };
 
@@ -511,7 +515,7 @@ export function PedidoSugeridoClient({
                 {totalComprar > 0 && (
                   <span className="text-sm text-cacao-soft">
                     Total ≈{" "}
-                    <strong className="text-cacao">${totalComprar.toFixed(2)}</strong>
+                    <strong className="text-cacao">{fmtUsd(totalComprar)}</strong>
                   </span>
                 )}
               </div>
@@ -535,7 +539,7 @@ export function PedidoSugeridoClient({
                       Compra {l.empaquesComprar} {l.unidadCompra}
                       {l.aplicoMinimo ? " (mínimo)" : ""}
                       {l.tienePrecio && l.costoCompra > 0
-                        ? ` · $${l.costoCompra.toFixed(2)}`
+                        ? ` · ${fmtUsd(l.costoCompra)}`
                         : ""}
                     </span>
                   </li>
@@ -712,14 +716,14 @@ export function PedidoSugeridoClient({
                                   {it.insumoNombre}
                                   <span className="text-cacao-mute">
                                     {" "}
-                                    · falta {it.faltante.toFixed(2)}{" "}
+                                    · falta {fmtDec(it.faltante)}{" "}
                                     {it.unidadBase}
                                   </span>
                                 </span>
                                 <span className="text-cacao tabular-nums whitespace-nowrap">
                                   {it.empaquesNecesarios}× {it.unidadCompra}
                                   {it.precioCompraUsd !== null &&
-                                    ` · $${it.costoTotalEstimado.toFixed(2)}`}
+                                    ` · ${fmtUsd(it.costoTotalEstimado)}`}
                                 </span>
                               </li>
                             ))}
@@ -904,7 +908,7 @@ export function PedidoSugeridoClient({
               Costo estimado del pedido
             </div>
             <div className="font-cinzel text-3xl text-cacao mt-1">
-              ${pedido.costoTotalEstimado.toFixed(2)} USD
+              {fmtUsd(pedido.costoTotalEstimado)} USD
             </div>
           </div>
 
@@ -923,7 +927,7 @@ export function PedidoSugeridoClient({
                     {nombreProv}
                   </h3>
                   <div className="text-sm text-cacao font-medium">
-                    ${subtotal.toFixed(2)}
+                    {fmtUsd(subtotal)}
                   </div>
                 </div>
                 <ul className="divide-y divide-marfil">
@@ -937,8 +941,8 @@ export function PedidoSugeridoClient({
                           {it.insumoNombre}
                         </div>
                         <div className="text-[10px] text-cacao-mute">
-                          libre: {it.stockLibre.toFixed(2)} {it.unidadBase}{" "}
-                          · necesito {it.cantidadNecesaria.toFixed(2)}{" "}
+                          libre: {displayCantidad(it.stockLibre, it.unidadBase)}{" "}
+                          · necesito {fmtDec(it.cantidadNecesaria)}{" "}
                           {it.unidadBase}
                         </div>
                       </div>
@@ -948,11 +952,11 @@ export function PedidoSugeridoClient({
                         </span>
                       </div>
                       <div className="col-span-6 sm:col-span-2 text-xs text-cacao-soft">
-                        falta {it.faltante.toFixed(2)} {it.unidadBase}
+                        falta {displayCantidad(it.faltante, it.unidadBase)}
                       </div>
                       <div className="col-span-12 sm:col-span-2 text-right text-sm text-cacao">
                         {it.precioCompraUsd !== null
-                          ? `$${it.costoTotalEstimado.toFixed(2)}`
+                          ? fmtUsd(it.costoTotalEstimado)
                           : "— sin precio"}
                       </div>
                     </li>

@@ -1,6 +1,8 @@
 "use client";
 
-import { limpiarDecimal } from "@/lib/decimal";
+import { fmtUsd, fmtBs } from "@/lib/moneda";
+
+import { limpiarDecimal, fmtDec, textoInputDecimal } from "@/lib/decimal";
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -133,18 +135,17 @@ const nuevaKey = () => `p${++siguienteKey}`;
 
 function fmtQty(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "";
-  return String(Number(n.toFixed(4)));
+  return textoInputDecimal(n);
 }
 function fmtPrecio(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  return `$${n >= 0.01 ? n.toFixed(2) : n.toPrecision(2)}`;
+  return fmtUsd(n);
 }
 function fmtFecha(fecha: string): string {
   return new Date(fecha + "T00:00").toLocaleDateString("es-VE", { day: "numeric", month: "short", year: "numeric" });
 }
 function fmtMonto(n: number, moneda: "bs" | "usd"): string {
-  const s = n.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return moneda === "bs" ? `Bs ${s}` : `$${s}`;
+  return moneda === "bs" ? fmtBs(n) : fmtUsd(n);
 }
 
 /** La fórmula impresa en la factura (subtotal, base, IVA, exento, IGTF, total),
@@ -600,7 +601,7 @@ export function EscanearFactura({
         f.flete && moneda === "usd"
           ? String(f.flete)
           : f.flete && f.tasa
-            ? String(Number((f.flete / f.tasa).toFixed(2)))
+            ? textoInputDecimal(f.flete / f.tasa)
             : "",
     });
     setTasaFactura(f.tasa ?? null);
@@ -619,7 +620,7 @@ export function EscanearFactura({
         insumoId: "",
         cantidad: fmtQty(l.cantidad),
         unidad: "",
-        monto: l.sinPrecio ? "" : String(Number(l.total.toFixed(2))),
+        monto: l.sinPrecio ? "" : textoInputDecimal(l.total),
         alicuota: l.alicuota,
         sinPrecio: l.sinPrecio,
         exento: l.exento,
@@ -1389,7 +1390,7 @@ export function EscanearFactura({
             />
             {tasaSugerida !== null && (
               <span className="text-xs text-cacao-mute block mt-1">
-                Tasa de la jornada: Bs {Number(tasaSugerida).toFixed(2)}.{" "}
+                Tasa de la jornada: Bs {fmtDec(Number(tasaSugerida))}.{" "}
                 {tasaNum > 0 && Math.abs(tasaNum - Number(tasaSugerida)) > 0.009 ? (
                   <button type="button" onClick={() => setCab({ ...cab, tasa: String(tasaSugerida) })} className="underline hover:text-cacao">
                     usar la del día
@@ -1742,7 +1743,7 @@ export function EscanearFactura({
                 })}
               </div>
               <span className="mt-1 block text-xs text-cacao-mute">
-                {tasaNum > 0 ? `A Bs ${tasaNum.toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 4 })} por $ · ${origenTasa}` : "Falta la tasa del día"}
+                {tasaNum > 0 ? `A Bs ${fmtDec(tasaNum)} por $ · ${origenTasa}` : "Falta la tasa del día"}
                 {cab.ivaModo === "sin" && ` · el IVA va aparte`}
               </span>
               <span className="mt-1 block text-xs text-cacao">

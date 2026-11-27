@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtUsd } from "@/lib/moneda";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 // Mermas y pérdidas de insumos en un solo lugar (pestaña de Insumos):
@@ -22,9 +24,6 @@ const tipoLabel = (t: string) =>
 
 type Periodo = "30" | "90" | "todo";
 
-function fUSD(n: number): string {
-  return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 function fFecha(iso: string): string {
   const [y, m, d] = iso.split("-");
   return d && m && y ? `${d}/${m}/${y}` : iso;
@@ -190,7 +189,7 @@ export function MermasClient({
                   Valor perdido
                 </div>
                 <div className="mt-1 text-2xl font-cinzel text-terracotta tabular-nums">
-                  {fUSD(resumen.total)}
+                  {fmtUsd(resumen.total)}
                 </div>
                 <div className="text-[11px] text-cacao-mute">
                   {enPeriodo.length} registro(s)
@@ -205,7 +204,7 @@ export function MermasClient({
                   {TIPOS_PERDIDA.filter((t) => resumen.porTipo.has(t.value)).map((t) => (
                     <li key={t.value} className="flex justify-between gap-2">
                       <span className="text-cacao-soft">{t.label}</span>
-                      <span className="text-cacao tabular-nums">{fUSD(resumen.porTipo.get(t.value)!)}</span>
+                      <span className="text-cacao tabular-nums">{fmtUsd(resumen.porTipo.get(t.value)!)}</span>
                     </li>
                   ))}
                 </ul>
@@ -218,7 +217,7 @@ export function MermasClient({
                   {resumen.top.map(([id, v]) => (
                     <li key={id} className="flex justify-between gap-2">
                       <span className="text-cacao-soft truncate">{insumoById.get(id)?.nombre ?? "Insumo"}</span>
-                      <span className="text-cacao tabular-nums">{fUSD(v)}</span>
+                      <span className="text-cacao tabular-nums">{fmtUsd(v)}</span>
                     </li>
                   ))}
                 </ul>
@@ -242,7 +241,7 @@ export function MermasClient({
                     </div>
                     <div className="flex items-center gap-4 shrink-0">
                       <span className="text-terracotta tabular-nums">
-                        {val != null ? fUSD(val) : "—"}
+                        {val != null ? fmtUsd(val) : "—"}
                       </span>
                       <button
                         type="button"

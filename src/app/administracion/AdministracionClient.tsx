@@ -5,12 +5,13 @@
 // clave, y todo lo financiero se lee/escribe por /api/admin/* (que exige el
 // token). Menú desplegable con las secciones; se van construyendo por fases.
 
+import { fmtPorc, fmtDec, textoInputDecimal } from "@/lib/decimal";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { esCategoriaCortesia, esCategoriaInsumos, usdDeCompra, usdDeEgreso } from "@/lib/admin/cuadre";
 import { egresoCubiertoPorFijo, rangoMes, resumirGastos, type GastoFijo } from "@/lib/gastos-fijos";
 import { listVentasRango, totalesVentasPorMes } from "@/lib/data/ventas";
 import { listTasasBcvRango, listComprasRango, listComprasEgresoMes, listComprasPendientes, listProveedores, listInsumos, marcarCompraPagada, marcarFacturaPagada, getTasaBcvPorFecha, getTasaBcvActual } from "@/lib/data/cocina";
-import { fmtUsdBs } from "@/lib/moneda";
+import { fmtUsdBs, fmtUsd, fmtBs } from "@/lib/moneda";
 import { useFechaJornadaDefault, useJornadaHoy } from "@/components/JornadaProvider";
 import { montoVenta } from "@/lib/semana";
 import { leerAjustesVentas } from "@/lib/data/ajustes-ventas";
@@ -457,10 +458,9 @@ function parseTasa(s: string): number | null {
 }
 
 function fmtMonto(monto: number, moneda: string): string {
-  if (moneda === "USD") return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(monto);
-  const n = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(monto);
-  if (moneda === "EUR") return `${n} €`;
-  return `${n} Bs`;
+  if (moneda === "USD") return fmtUsd(monto);
+  if (moneda === "EUR") return `${fmtDec(monto, "en-US")} €`;
+  return fmtBs(monto);
 }
 
 // Equivalente en USD de una línea, si se puede calcular (si no, null).
@@ -2052,7 +2052,7 @@ function CuadreFacturas() {
   const [confirmando, setConfirmando] = useState(false);
   const [ok, setOk] = useState<string | null>(null);
 
-  const fmtArchivo = (v: number) => (v ?? 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtArchivo = (v: number) => fmtDec(v ?? 0);
 
   async function subir(file: File) {
     setError(null); setOk(null); setCargando(true); setRep(null); setArchivoB64(null);
@@ -3023,7 +3023,7 @@ function DesgloseUnico({ titulo, filas, moneda, vacio }: { titulo: string; filas
           {filas.map(([nombre, v]) => (
             <li key={nombre} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
               <span className="text-cacao-soft">{nombre}</span>
-              <span className="text-cacao text-right whitespace-nowrap tabular-nums">{fmtMonto(v, moneda)}{total > 0.005 ? ` · ${((v / total) * 100).toFixed(0)}%` : ""}</span>
+              <span className="text-cacao text-right whitespace-nowrap tabular-nums">{fmtMonto(v, moneda)}{total > 0.005 ? ` · ${fmtPorc((v / total) * 100)}` : ""}</span>
             </li>
           ))}
         </ul>
@@ -3551,7 +3551,7 @@ function ModalCobro({ cliente, tasaGlobal, onCerrar, onListo }: { cliente: Clien
   const [sel, setSel] = useState<Record<string, boolean>>(() => Object.fromEntries(filas.map((x) => [x.c.id, true])));
   const [moneda, setMoneda] = useState<"EUR" | "USD" | "Bs">("EUR");
   const [tasaBsStr, setTasaBsStr] = useState("");
-  const [montoStr, setMontoStr] = useState(totalOpenEur.toFixed(2));
+  const [montoStr, setMontoStr] = useState(textoInputDecimal(totalOpenEur));
   const [metodo, setMetodo] = useState("Punto de Venta");
   const [fecha, setFecha] = useFechaJornadaDefault();
   const [referencia, setReferencia] = useState("");
@@ -3590,7 +3590,7 @@ function ModalCobro({ cliente, tasaGlobal, onCerrar, onListo }: { cliente: Clien
   // Sugerir el monto (en la moneda elegida) = lo que resta de lo seleccionado.
   function sugerir(base = selRemEur, m = moneda, tb = tasaBs) {
     const f = m === "Bs" ? tb : 1; // € y $ van 1:1 con el euro
-    setMontoStr(f > 0 ? (base * f).toFixed(2) : "");
+    setMontoStr(f > 0 ? textoInputDecimal(base * f) : "");
   }
   function toggle(id: string) {
     setSel((s) => {
@@ -4112,7 +4112,7 @@ function Comparacion({ titulo, cur, prev, moneda, invertir }: { titulo: string; 
       <div className="font-display text-[9px] tracking-[0.2em] uppercase text-cacao-mute">{titulo}</div>
       <div className="text-cacao font-medium mt-0.5">{cur < 0 ? `− ${fmtMonto(Math.abs(cur), moneda)}` : fmtMonto(cur, moneda)}</div>
       <div className={`text-[11px] ${color}`}>
-        {p == null ? "—" : `${subio ? "↑" : cur < prev ? "↓" : ""} ${Math.abs(p).toFixed(0)}%`}
+        {p == null ? "—" : `${subio ? "↑" : cur < prev ? "↓" : ""} ${fmtPorc(Math.abs(p))}`}
       </div>
     </div>
   );

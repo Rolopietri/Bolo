@@ -1,5 +1,9 @@
 "use client";
 
+import { fmtPorc, fmtCantidad } from "@/lib/decimal";
+
+import { fmtUsd } from "@/lib/moneda";
+
 import { useJornadaHoy } from "@/components/JornadaProvider";
 
 // Dashboard "Análisis de Ventas". Usa exactamente los mismos datos que el
@@ -28,17 +32,9 @@ import {
 } from "@/components/charts/VentasCharts";
 
 // ── Formato ──────────────────────────────────────────────────────────────
-const fUSD = (n: number) =>
-  "$" +
-  n.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-const fUnid = (n: number) =>
-  Number.isInteger(n)
-    ? n.toLocaleString("en-US")
-    : n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-const fPct = (n: number) => `${n.toFixed(1)}%`;
+const fUSD = (n: number) => fmtUsd(n);
+const fUnid = (n: number) => fmtCantidad(n, "unid", "en-US");
+const fPct = (n: number) => fmtPorc(n);
 
 // Fecha ISO local (evita el corrimiento de zona horaria de toISOString()).
 function isoLocal(d: Date): string {

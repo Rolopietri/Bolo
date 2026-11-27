@@ -1181,7 +1181,7 @@ export function VentasClient() {
                           <input
                             type="number"
                             min="0"
-                            step="any"
+                            step="0.01"
                             defaultValue={c.cantidadPorUnidad ?? 1}
                             title="Cantidad por unidad vendida"
                             onBlur={(e) =>
@@ -1225,7 +1225,7 @@ export function VentasClient() {
                             type="number"
                             min="0"
                             max="100"
-                            step="0.5"
+                            step="0.01"
                             defaultValue={c.porcentajeAcuerdo ?? ""}
                             placeholder="%"
                             onBlur={(e) =>
@@ -1470,7 +1470,7 @@ export function VentasClient() {
               Cantidad a descontar por unidad vendida
               <input
                 type="number"
-                step="any"
+                step="0.01"
                 min="0"
                 value={idCantidad}
                 onChange={(e) => setIdCantidad(e.target.value)}

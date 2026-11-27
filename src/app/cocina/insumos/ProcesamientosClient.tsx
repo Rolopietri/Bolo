@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtPorc } from "@/lib/decimal";
+
 // Procesamientos de un insumo, contados como en papel (Fase E). Cada vez que se
 // procesa algo (crudo → listo para vender), una parte se pierde: esa es la
 // MERMA. Esta vista no usa gráficos: muestra, en palabras, cuánto metiste,
@@ -134,7 +136,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
                   comparacion.malo ? "text-[#7A2419]" : "text-oliva"
                 }`}
               >
-                merma de {comparacion.actualPorc.toFixed(0)}%
+                merma de {fmtPorc(comparacion.actualPorc)}
               </div>
             </div>
           </div>
@@ -179,7 +181,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
               </div>
               <div className="mt-0.5 text-sm text-cacao">
                 Merma de <b>{displayCantidad(merma, u)}</b> (
-                {p.mermaPorc.toFixed(0)}%)
+                {fmtPorc(p.mermaPorc)})
               </div>
               <div className="mt-0.5 text-[12px] text-cacao-soft">
                 De {displayCantidad(p.crudo, u)} que procesaste quedaron{" "}

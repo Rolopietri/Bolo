@@ -442,8 +442,8 @@ igual("sin prefijo no es alarma", parseAlarmaStock("otro error"), null);
 igual(
   "el texto nombra insumo, stock y faltante",
   textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("Queso") &&
-    textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("2 kg") &&
-    textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("3 kg"),
+    textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("2,00 kg") &&
+    textoAlarmaStock({ insumo: "Queso", stock: 2000, unidad: "g", faltante: 3000 }).includes("3,00 kg"),
   true,
 );
 

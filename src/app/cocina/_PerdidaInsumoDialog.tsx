@@ -181,7 +181,7 @@ export function PerdidaInsumoDialog({
                 Merma por procesamiento (%)
                 <input
                   type="number"
-                  step="1"
+                  step="0.01"
                   min="0"
                   max="99"
                   value={mermaPct}

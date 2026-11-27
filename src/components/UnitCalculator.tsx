@@ -1,5 +1,7 @@
 "use client";
 
+import { fmtDec } from "@/lib/decimal";
+
 import { useMemo, useState } from "react";
 import {
   convert,
@@ -93,7 +95,7 @@ export function UnitCalculator({
               </label>
               <input
                 type="number"
-                step="any"
+                step="0.01"
                 value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)}
                 className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2 text-sm"
@@ -198,11 +200,7 @@ export function UnitCalculator({
 
 function formatNum(n: number): string {
   if (!Number.isFinite(n)) return "—";
-  // Mostramos hasta 6 decimales pero quitamos ceros sobrantes
-  const abs = Math.abs(n);
-  const decimales = abs >= 100 ? 2 : abs >= 1 ? 3 : abs >= 0.01 ? 4 : 6;
-  const s = n.toFixed(decimales);
-  return s.replace(/\.?0+$/, "");
+  return fmtDec(n);
 }
 
 function dimensionLabel(d: Dimension): string {
