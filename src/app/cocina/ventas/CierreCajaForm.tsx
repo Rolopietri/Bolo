@@ -292,6 +292,7 @@ export function CierreCajaForm({
           <h2 className="font-display text-xs tracking-[0.3em] uppercase text-cacao-mute">Cierre de caja</h2>
           <p className="mt-1 text-sm text-cacao-soft">
             Anota cuánto entró por cada método. Bolo lo pasa a dólares con la tasa BCV y lo compara con las ventas del día.
+            Al guardar este cierre por primera vez también se cierra la jornada de cocina y se guarda el saldo del almacén y de lo que quedó en uso, aunque el local haya trabajado después de medianoche.
           </p>
         </div>
         {!mostrarFecha && (

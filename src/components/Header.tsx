@@ -38,16 +38,24 @@ export async function Header({ subtitle }: { subtitle?: string }) {
             </span>
           )}
           {email && (
-            <form action="/api/logout" method="post">
-              <button
-                type="submit"
+            <>
+              <Link
+                href="/negocio"
                 className="rounded-full px-3 py-1 text-cacao-soft hover:text-navy hover:bg-marfil-light transition-colors"
-                aria-label="Cerrar sesión"
-                title={`Cerrar sesión (${email})`}
               >
-                Salir
-              </button>
-            </form>
+                Negocio
+              </Link>
+              <form action="/api/logout" method="post">
+                <button
+                  type="submit"
+                  className="rounded-full px-3 py-1 text-cacao-soft hover:text-navy hover:bg-marfil-light transition-colors"
+                  aria-label="Cerrar sesión"
+                  title={`Cerrar sesión (${email})`}
+                >
+                  Salir
+                </button>
+              </form>
+            </>
           )}
         </div>
       </div>
