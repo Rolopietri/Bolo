@@ -122,3 +122,10 @@ con operación real. Cómo correrlo: ver el encabezado de ese archivo y el READM
 - Fecha y tasa de la jornada en toda la app: **`cocina-jornada-sincro.sql`** (aditivo, después del de horario). `_prod_hoy()` y `negocio_hoy()` delegan en `jornada_fecha()`. Los defaults de fecha de negocio pasan a `jornada_fecha()`. Cada jornada guarda `tasa_tipo`, `tasa_valor` y `tasa_fecha` (no cambia a mitad de jornada). La factura de compra tiene `fecha_documento`. El resumen de Telegram se manda al cerrar la jornada; el cron de las 11:00 p. m. queda como repesca. La frescura de precios (`precio_actualizado`) se cuenta en días de calendario (`_cocina_fecha_civil`), no de jornada.
 - Pruebas locales (no correr en producción): `bash scripts/probar-jornada-cierre.sh` (incluye cierre, horario y sincro).
 - pg_cron no está instalado hoy; en el archivo de horario hay un ejemplo cada 15 minutos, sin activarlo. No aplicar estos SQL en producción sin la aprobación de Lucia.
+
+### Arreglos de QA (27 nov 2026)
+- **`cocina-zzzz-arreglos-qa.sql`** ordena después de `cocina-zzz-motor-canonico.sql` y de `cocina-compra-zzzz-…`, así que gana para las funciones que reescribe (`reemplazar_compra`, `_prod_*`, `telegram_deshacer`, `revertir_stock_por_venta`, etc.).
+- Corrige acentos en 12 funciones vivas, deja de recortar el stock físico a 0 con `greatest(0, …)`, recalcula `penultima_*` al editar una compra (N5), hace visible la salida “en uso” (`_prod_uso` escribe `stock_movimientos`) y permite cancelar con «deshacer» una pregunta de cantidad pendiente en Telegram.
+- Aplicar después de los SQL de los PR #26 y #27. No incluye `cocina-jornada-sincro.sql` (otro PR).
+- Antes de pegar, compara en vivo las funciones que reescribe con `pg_get_functiondef`. No aplicar en producción sin la aprobación de Lucia.
+- Pruebas locales (no correr en producción): esquema `scripts/test-arreglos-qa-schema.sql` + aserciones `scripts/test-arreglos-qa.sql`.

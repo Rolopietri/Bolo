@@ -239,9 +239,21 @@ async function deshacer(sb: SupabaseClient, secreto: string, r: Recibido, respon
     await responder("No pude deshacer por un error de Bolo. Inténtalo de nuevo en un momento.");
     return;
   }
-  const d = (data ?? {}) as { ok?: boolean; motivo?: string; resultado?: ResultadoBot[] };
+  const d = (data ?? {}) as {
+    ok?: boolean;
+    motivo?: string;
+    resultado?: ResultadoBot[];
+    cancelo_pregunta?: boolean;
+    movimiento?: string;
+  };
   if (!d.ok) {
     await responder(`✕ No pude deshacer: ${d.motivo ?? "error de Bolo"}`);
+    return;
+  }
+  if (d.cancelo_pregunta) {
+    const que =
+      d.movimiento === "entrada" ? "esa entrada" : d.movimiento === "perdida" ? "esa pérdida" : "esa salida";
+    await responder(`Listo, cancelé ${que}.`);
     return;
   }
   const describir = (x: ResultadoBot, prefijo = "") => {

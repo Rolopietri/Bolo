@@ -6,7 +6,7 @@ import { useJornadaHoy } from "@/components/JornadaProvider";
 //  1. Pérdidas registradas a mano (botón "Pérdida" del catálogo): mal estado,
 //     vencimiento, merma, etc. Valoradas al precio base y con "deshacer".
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TIPOS_PERDIDA, type Insumo, type StockMovimiento } from "@/lib/types";
 import { listInsumos } from "@/lib/data/cocina";
 import { listMovimientos, deleteMovimiento } from "@/lib/data/stock-movimientos";
@@ -52,6 +52,8 @@ export function MermasClient({
   const [periodo, setPeriodo] = useState<Periodo>("30");
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
   const [devolverStock, setDevolverStock] = useState(true);
+  const devolverStockRef = useRef(devolverStock);
+  devolverStockRef.current = devolverStock;
   const hoy = useJornadaHoy();
 
   useEffect(() => {
@@ -284,7 +286,7 @@ export function MermasClient({
           </label>
         }
         onConfirm={() => {
-          if (pendienteBorrar) borrar(pendienteBorrar, devolverStock);
+          if (pendienteBorrar) borrar(pendienteBorrar, devolverStockRef.current);
           setPendienteBorrar(null);
         }}
         onCancel={() => setPendienteBorrar(null)}

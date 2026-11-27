@@ -18,6 +18,7 @@ import { crearLotes, faltaTablaProduccion, listLotes } from "@/lib/data/producci
 import {
   compararCuadre,
   compararMerma,
+  compararMermaConHistorial,
   leerMensaje,
   leerPlantilla,
   mermaReal,
@@ -86,6 +87,21 @@ function Pill({ meta }: { meta: { label: string; cls: string; dot: string } }) {
   );
 }
 
+
+function MiniaturaPendiente({ id }: { id: string }) {
+  const [ok, setOk] = useState(true);
+  if (!ok) return <ImageIcon className="size-10 shrink-0 text-terracotta" aria-hidden />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={urlFotoPendiente(id)}
+      alt=""
+      className="size-10 shrink-0 rounded-md object-cover ring-1 ring-marfil"
+      onError={() => setOk(false)}
+    />
+  );
+}
+
 export function ProduccionClient() {
   const hoy = useJornadaHoy();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
@@ -111,6 +127,8 @@ export function ProduccionClient() {
   // Otros mensajes que se juntaron con el que se revisa (la entrada en uno y la
   // salida en otro); se aprueban juntos.
   const [companeros, setCompaneros] = useState<Pendiente[]>([]);
+  const [aplicando, setAplicando] = useState(false);
+  const [resumenAplicado, setResumenAplicado] = useState<string | null>(null);
 
   // ── Comparar ───────────────────────────────────────────────────────
   const [vista, setVista] = useState<Vista>("merma");
@@ -192,8 +210,6 @@ export function ProduccionClient() {
   // llegaron antes del cambio, que se aplican de una vez.
   const pendientesTexto = useMemo(() => pendientes.filter((p) => !p.tieneFoto), [pendientes]);
   const pendientesFoto = useMemo(() => pendientes.filter((p) => p.tieneFoto), [pendientes]);
-  const [aplicando, setAplicando] = useState(false);
-  const [resumenAplicado, setResumenAplicado] = useState<string | null>(null);
   async function aplicarAnteriores() {
     setAplicando(true);
     setError(null);
@@ -286,6 +302,7 @@ export function ProduccionClient() {
   }
 
   function limpiarRevision() {
+    setError(null);
     setRenglones([renglonVacio()]);
     setDesdeEscaneo(false);
     setFotoUrl(null);
@@ -374,6 +391,7 @@ export function ProduccionClient() {
   }
 
   async function descartar() {
+    setError(null);
     const p = revisando;
     // La bandeja junta la entrada y la salida en un renglón. Hay que marcar
     // los dos: si solo se descarta el primero, el otro queda pendiente y al
@@ -384,6 +402,25 @@ export function ProduccionClient() {
     if (ids.length > 0) quitarDeBandeja(ids);
     limpiarRevision();
     if (!p) return;
+    try {
+      for (const id of ids) await marcarPendiente(id, "descartado");
+      setAviso(ids.length > 1 ? "Entrada y salida descartadas." : "Mensaje descartado.");
+      setVersion((v) => v + 1);
+    } catch (e) {
+      setVersion((v) => v + 1);
+      setError(extractError(e, "No se pudo descartar el mensaje."));
+    }
+  }
+
+  async function descartarGrupo(juntos: Pendiente[]) {
+    const ids = juntos.map((m) => m.id);
+    if (ids.length === 0) return;
+    setError(null);
+    const enEstaRevision = juntos.some(
+      (m) => m.id === revisando?.id || companeros.some((c) => c.id === m.id),
+    );
+    quitarDeBandeja(ids);
+    if (enEstaRevision) limpiarRevision();
     try {
       for (const id of ids) await marcarPendiente(id, "descartado");
       setAviso(ids.length > 1 ? "Entrada y salida descartadas." : "Mensaje descartado.");
@@ -574,14 +611,14 @@ export function ProduccionClient() {
               return (
                 <li key={p.id} className="flex items-center gap-3 py-2.5">
                   {p.tieneFoto ? (
-                    <ImageIcon className="size-4 shrink-0 text-terracotta" />
+                    <MiniaturaPendiente id={p.id} />
                   ) : (
-                    <ChatIcon className="size-4 shrink-0 text-terracotta" />
+                    <ChatIcon className="size-10 shrink-0 p-2 text-terracotta" />
                   )}
                   <span className="min-w-0 flex-1">
                     {g.renglones ? (
-                      g.renglones.map((r) => (
-                        <span key={r.insumoId} className="block truncate text-sm text-cacao">
+                      g.renglones.map((r, i) => (
+                        <span key={`${r.insumoId ?? "sin"}-${i}`} className="block truncate text-sm text-cacao">
                           {insumoPorId.get(r.insumoId)?.nombre ?? "Insumo"}: entró {cantidad(r.tomada, r.insumoId)} · salió{" "}
                           {cantidad(r.util, r.insumoId)}
                         </span>
@@ -603,6 +640,14 @@ export function ProduccionClient() {
                     className="min-h-10 shrink-0 rounded-lg px-3 text-sm text-terracotta ring-1 ring-marfil hover:bg-marfil-soft disabled:opacity-50"
                   >
                     {enRevision ? "Revisando" : "Revisar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void descartarGrupo(g.juntos)}
+                    disabled={leyendo !== null}
+                    className="min-h-10 shrink-0 rounded-lg px-3 text-sm text-cacao-soft ring-1 ring-marfil hover:bg-marfil-soft hover:text-terracotta disabled:opacity-50"
+                  >
+                    Descartar
                   </button>
                 </li>
               );
@@ -874,7 +919,11 @@ export function ProduccionClient() {
             {resumen.map((r) => {
               const ins = insumoPorId.get(r.insumoId);
               if (!ins) return null;
-              const estado = compararMerma(r.real, ins.mermaCoccionPorc);
+              const recientes = [...r.lotes]
+                .sort((a, b) => b.fecha.localeCompare(a.fecha) || b.id.localeCompare(a.id))
+                .map((l) => mermaReal(l.tomada, l.util))
+                .filter((n): n is number => n != null);
+              const estado = compararMermaConHistorial(r.real, ins.mermaCoccionPorc, recientes);
               const open = abierto === r.insumoId;
               return (
                 <li key={r.insumoId} className="py-3">

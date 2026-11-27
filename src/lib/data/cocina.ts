@@ -143,6 +143,7 @@ type InsumoRow = {
   precio_actualizado: string | null;
   stock_actual: number | string;
   se_procesa: boolean | null;
+  se_usa_por_lotes: boolean | null;
   stock_procesado: number | string | null;
   stock_comprometido: number | string | null;
   stock_minimo: number | string | null;
@@ -180,6 +181,7 @@ function rowToInsumo(r: InsumoRow): Insumo {
     // se llama stockTotal. stock_comprometido es columna nueva.
     stockTotal: Number(r.stock_actual),
     seProcesa: !!r.se_procesa,
+    seUsaPorLotes: !!r.se_usa_por_lotes,
     stockProcesado:
       r.stock_procesado === null || r.stock_procesado === undefined
         ? 0

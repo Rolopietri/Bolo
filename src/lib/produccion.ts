@@ -23,17 +23,12 @@ export function mermaReal(tomada: number, util: number): number | null {
   return ((tomada - util) / tomada) * 100;
 }
 
-/** Margen (en puntos) dentro del cual la merma real "se cumple". */
+/** @deprecated Usar umbralDesviacion(estandar). Se deja exportado por si algún
+ *  llamado viejo lo importaba; compararMerma ya no usa este margen fijo. */
 export const MARGEN_MERMA = 5;
 
-export type EstadoMerma = "cumple" | "peor" | "mejor" | "sin_estandar";
-
-export function compararMerma(real: number, estandar: number | null | undefined): EstadoMerma {
-  if (estandar == null) return "sin_estandar";
-  if (real > estandar + MARGEN_MERMA) return "peor";
-  if (real < estandar - MARGEN_MERMA) return "mejor";
-  return "cumple";
-}
+export type { EstadoMerma } from "@/lib/merma-alertas";
+export { compararMerma, compararMermaConHistorial } from "@/lib/merma-alertas";
 
 export type ResumenMerma = {
   insumoId: string;

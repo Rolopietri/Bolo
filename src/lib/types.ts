@@ -452,10 +452,12 @@ export type Insumo = {
   /** ¿Este insumo se procesa? Si es true distingue dos estados físicos: crudo
    *  (stockTotal) y procesado (stockProcesado). Lo marca el usuario. */
   seProcesa: boolean;
-  /** Stock YA PROCESADO (listo para vender), en unidad base. Solo aplica a los
-   *  insumos con seProcesa=true; en los demás queda en 0. El crudo vive en
-   *  stockTotal (DB `stock_actual`). Total físico = stockTotal + stockProcesado.
-   *  Lo mueve el evento de procesamiento (no se edita en el form del insumo). */
+  /** ¿Se usa por lotes (pasa del almacén a "en uso")? Independiente de seProcesa.
+   *  En esos insumos stockProcesado es lo que está en uso, no lo procesado. */
+  seUsaPorLotes?: boolean;
+  /** Stock YA PROCESADO (listo para vender) o, si seUsaPorLotes y no se procesa,
+   *  lo que está en uso. El almacén vive en stockTotal (DB `stock_actual`).
+   *  Total físico = stockTotal + stockProcesado. */
   stockProcesado: number;
   /** Stock reservado por planes de producción activos. Disminuye al vender
    *  por Xetux, completar producción o cancelar plan. */
@@ -492,8 +494,8 @@ export function stockLibre(i: Pick<Insumo, "stockTotal" | "stockComprometido">):
   return Math.max(0, i.stockTotal - i.stockComprometido);
 }
 
-/** Total físico de un insumo = crudo (stockTotal) + procesado (stockProcesado).
- *  Para insumos que no se procesan, stockProcesado es 0 → coincide con stockTotal. */
+/** Total físico de un insumo = almacén (stockTotal) + procesado/en uso (stockProcesado).
+ *  Si no se procesa ni se usa por lotes, stockProcesado es 0 → coincide con stockTotal. */
 export function stockFisicoTotal(
   i: Pick<Insumo, "stockTotal" | "stockProcesado">,
 ): number {
@@ -1087,7 +1089,8 @@ export type TipoMovimientoStock =
   | "venta"
   | "comprometido_in"
   | "comprometido_out"
-  | "plan_completado";
+  | "plan_completado"
+  | "en_uso";
 
 /** Capa de stock afectada. */
 export type CapaStock = "total" | "comprometido";

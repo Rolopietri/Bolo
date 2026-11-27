@@ -10,6 +10,7 @@ import { stockFisicoTotal, type Insumo } from "@/lib/types";
 import { displayCantidad } from "@/lib/units";
 import { UsoDiarioClient } from "./UsoDiarioClient";
 import { ProcesamientosClient } from "./ProcesamientosClient";
+import { EnUsoMovimientos } from "./EnUsoMovimientos";
 
 export function DetalleInsumo({
   insumo,
@@ -58,6 +59,14 @@ export function DetalleInsumo({
                     {" · "}
                     total {displayCantidad(stockFisicoTotal(insumo), insumo.unidadBase)}
                   </>
+                ) : insumo.seUsaPorLotes || (insumo.stockProcesado ?? 0) > 0 ? (
+                  <>
+                    Almacén {displayCantidad(insumo.stockTotal, insumo.unidadBase)}
+                    {" · "}
+                    en uso {displayCantidad(insumo.stockProcesado ?? 0, insumo.unidadBase)}
+                    {" · "}
+                    total {displayCantidad(stockFisicoTotal(insumo), insumo.unidadBase)}
+                  </>
                 ) : (
                   <>
                     {insumo.unidadCompra} · stock {displayCantidad(insumo.stockTotal, insumo.unidadBase)}
@@ -94,6 +103,10 @@ export function DetalleInsumo({
             </h3>
             <UsoDiarioClient insumoInicial={insumo.id} fijo />
           </section>
+
+          {(insumo.seUsaPorLotes || (insumo.stockProcesado ?? 0) > 0) && !insumo.seProcesa && (
+            <EnUsoMovimientos insumoId={insumo.id} unidadBase={insumo.unidadBase} />
+          )}
 
           {/* Procesamientos y merma, solo si el insumo se procesa. */}
           {insumo.seProcesa && (
