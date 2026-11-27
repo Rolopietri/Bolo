@@ -76,3 +76,32 @@ export function textoAlertaMerma(a: AlertaMerma): string {
   const dir = a.sentido === "alta" ? "más merma" : "menos merma";
   return `${dir} de lo normal (${a.valor.toFixed(0)}%, ${signo}${a.delta.toFixed(0)} pts)`;
 }
+
+export type EstadoMerma = "cumple" | "peor" | "mejor" | "sin_estandar";
+
+/** Compara la merma real con el estándar usando el mismo umbral que las alertas
+ *  (piso de 3 pts o 15% del estándar, el que sea mayor). */
+export function compararMerma(real: number, estandar: number | null | undefined): EstadoMerma {
+  if (estandar == null) return "sin_estandar";
+  const umbral = umbralDesviacion(estandar);
+  if (real > estandar + umbral) return "peor";
+  if (real < estandar - umbral) return "mejor";
+  return "cumple";
+}
+
+/** Si el período "cumple" pero el último lote o los últimos 3 disparan una
+ *  alerta, no se muestra "Se cumple". mermasRecientes va de la más reciente
+ *  a la más vieja. */
+export function compararMermaConHistorial(
+  realPeriodo: number,
+  estandar: number | null | undefined,
+  mermasRecientes: number[],
+): EstadoMerma {
+  const base = compararMerma(realPeriodo, estandar);
+  if (base !== "cumple") return base;
+  const ev = evaluarMerma(estandar, mermasRecientes);
+  if (!ev) return base;
+  const alerta = ev.puntual ?? ev.deriva;
+  if (!alerta) return base;
+  return alerta.sentido === "alta" ? "peor" : "mejor";
+}
