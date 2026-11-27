@@ -76,3 +76,16 @@ export function textoAlarmaStock(a: AlarmaStock): string {
   const falta = cantidadLegible(a.faltante, a.unidad);
   return `${a.insumo} tiene ${stock}. Faltarían ${falta}. Ya se usó parte de esta compra, así que no se guardó nada.`;
 }
+
+/** Rechazo de stock insuficiente, sin hablar de compras (Telegram, ventas, uso). */
+export function textoRechazoStock(a: AlarmaStock): string {
+  const stock = cantidadLegible(a.stock, a.unidad);
+  const falta = cantidadLegible(a.faltante, a.unidad);
+  return `${a.insumo}: en el almacén hay ${stock}; faltarían ${falta}. No se registró el movimiento.`;
+}
+
+/** Si el error de la base trae BOLO_STOCK_NEGATIVO, un mensaje claro; si no, el fallback. */
+export function respuestaStockNegativo(mensaje: string, fallback: string): string {
+  const a = parseAlarmaStock(mensaje);
+  return a ? `✕ ${textoRechazoStock(a)}` : fallback;
+}

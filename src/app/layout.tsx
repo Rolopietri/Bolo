@@ -26,7 +26,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es" className="h-full antialiased">
-      <head>
+      <body className="min-h-full flex flex-col font-sans">
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
           rel="preconnect"
@@ -37,8 +37,6 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Nunito:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&display=swap"
           rel="stylesheet"
         />
-      </head>
-      <body className="min-h-full flex flex-col font-sans">
         <JornadaProvider>
         {children}
         <AlertaCierreJornada />

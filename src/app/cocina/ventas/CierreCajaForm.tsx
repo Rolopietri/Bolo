@@ -329,7 +329,9 @@ export function CierreCajaForm({
       )}
 
       <p className="text-[11px] text-cacao-mute">
-        {tasaParaCuenta ? (
+        {cargando && !tasaParaCuenta ? (
+          <>Cargando la tasa…</>
+        ) : tasaParaCuenta ? (
           tasaParaCuenta.fecha.slice(0, 10) === fecha.slice(0, 10) ? (
             <>BCV de este día: {fmtBs(tasaParaCuenta.usdBs)} por $1.</>
           ) : (

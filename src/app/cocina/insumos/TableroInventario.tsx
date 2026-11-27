@@ -119,7 +119,7 @@ export function PastillaEstado({ estado }: { estado: EstadoStock }) {
   const meta = {
     agotado: { label: "Agotado", cls: "bg-red-50 text-red-800 ring-red-200", dot: "bg-red-500" },
     bajo: { label: "Bajo mínimo", cls: "bg-amber-50 text-amber-800 ring-amber-200", dot: "bg-amber-500" },
-    ok: { label: "En orden", cls: "bg-emerald-50 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500" },
+    ok: { label: "Stock en orden", cls: "bg-emerald-50 text-emerald-800 ring-emerald-200", dot: "bg-emerald-500" },
     sin_minimo: { label: "Sin mínimo", cls: "bg-stone-100 text-stone-700 ring-stone-200", dot: "bg-stone-400" },
   }[estado];
   return (

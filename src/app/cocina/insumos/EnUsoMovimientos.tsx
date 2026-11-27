@@ -8,6 +8,17 @@ import { listMovimientos } from "@/lib/data/stock-movimientos";
 import { displayCantidad } from "@/lib/units";
 import type { StockMovimiento } from "@/lib/types";
 
+function horaLocal(iso: string | undefined): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleTimeString("es-VE", {
+    timeZone: "America/Caracas",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 export function EnUsoMovimientos({
   insumoId,
   unidadBase,
@@ -46,7 +57,11 @@ export function EnUsoMovimientos({
           const fecha = d && mo && y ? `${d}/${mo}/${y}` : m.fecha;
           return (
             <li key={m.id} className="flex justify-between gap-3 py-2">
-              <span className="text-cacao-soft">{fecha}{m.nota ? ` · ${m.nota}` : ""}</span>
+              <span className="text-cacao-soft">
+                {fecha}
+                {horaLocal(m.createdAt) ? `, ${horaLocal(m.createdAt)}` : ""}
+                {m.nota ? ` · ${m.nota}` : ""}
+              </span>
               <span className="tabular-nums">
                 {displayCantidad(qty, unidadBase)} del almacén
               </span>

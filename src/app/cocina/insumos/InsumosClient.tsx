@@ -185,7 +185,7 @@ const ESTADOS_LISTA: { id: FiltroEstadoStock; label: string }[] = [
   { id: "pronto", label: "Se acaba pronto" },
   { id: "agotado", label: "Agotado" },
   { id: "bajo", label: "Bajo mínimo" },
-  { id: "ok", label: "En orden" },
+  { id: "ok", label: "Stock en orden" },
   { id: "sin_minimo", label: "Sin mínimo" },
 ];
 

@@ -1495,10 +1495,13 @@ export function ComprasClient() {
                       const modalidad = MODALIDADES_PAGO.find(
                         (m) => m.value === c.modalidadPago,
                       );
+                      const doc = (c.fechaDocumento ?? "").slice(0, 10);
+                      const reg = (c.fecha ?? "").slice(0, 10);
                       const meta = [
                         proveedor?.nombre,
                         modalidad?.label,
                         c.numeroFactura ? `Factura ${c.numeroFactura}` : null,
+                        doc && doc !== reg ? `Fecha de factura ${fmtFecha(doc)}` : null,
                       ]
                         .filter(Boolean)
                         .join(" · ");

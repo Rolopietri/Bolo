@@ -6,10 +6,27 @@ import {
   guardarHorarioNegocio,
   type HorarioNegocio,
 } from "@/lib/data/negocio";
+import { useJornada } from "@/components/JornadaProvider";
 
 function campoHora(v: string): string | null {
   const t = v.trim();
   return t ? t : null;
+}
+
+/** Hora civil actual en America/Caracas, HH:MM. */
+function horaAhoraCaracas(): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "America/Caracas",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date());
+}
+
+function yaPasoCierre(cierre: string): boolean {
+  const t = cierre.trim().slice(0, 5);
+  if (!t) return false;
+  return horaAhoraCaracas() >= t;
 }
 
 export function NegocioForm() {
@@ -24,6 +41,7 @@ export function NegocioForm() {
   const [nota, setNota] = useState("");
   const [zona, setZona] = useState("America/Caracas");
   const [tasaPred, setTasaPred] = useState<"usd_bs" | "eur_bs">("usd_bs");
+  const { recargar } = useJornada();
 
   useEffect(() => {
     let cancel = false;
@@ -82,6 +100,7 @@ export function NegocioForm() {
         jornadaHorarioNota: nota,
         tasaPredeterminada: tasaPred,
       });
+      await recargar();
       setOk(true);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
@@ -155,6 +174,13 @@ export function NegocioForm() {
         Si se pasa la hora máxima y no hay cierre de caja, se cierra sola la jornada de inventario.
         Media hora antes avisa, como un despertador, para hacer el cierre o recordar en una hora.
       </p>
+      {campoHora(apertura) && campoHora(cierre) && yaPasoCierre(cierre) && (
+        <p className="rounded-lg bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-3 text-sm text-[#7A2419]">
+          Esta hora máxima ya pasó hoy. Si la guardas, Bolo puede cerrar sola la jornada actual
+          en cuanto se recargue una pantalla. Si vas a hacer un cierre de caja de prueba,
+          elige una hora posterior.
+        </p>
+      )}
       <div>
         <label htmlFor="horario-nota" className="block text-sm font-medium text-cacao">
           Observación
