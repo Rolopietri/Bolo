@@ -1,5 +1,7 @@
 "use client";
 
+import { fechaCivilCaracas } from "@/lib/data/jornada-cocina";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { WarningIcon } from "@/components/icons";
@@ -14,7 +16,7 @@ import {
   type Insumo,
   type CocinaConfig,
 } from "@/lib/types";
-import { hoyISO, pillClass } from "@/lib/ui";
+import { pillClass } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import {
@@ -130,9 +132,9 @@ export function CosteoClient() {
   );
 
   // Insumos cuyo precio ya está viejo (economía volátil): el costeo que ves
-  // puede estar basado en precios desactualizados. La frescura se mide contra
-  // `precioActualizado`; si no existe, contra la fecha de la última compra.
-  const hoy = useMemo(() => hoyISO(), []);
+  // puede estar basado en precios desactualizados. La frescura se mide en días
+  // de calendario (fecha civil de Caracas), no de jornada.
+  const hoy = fechaCivilCaracas();
   const insumosViejos = useMemo(
     () =>
       insumos.filter(

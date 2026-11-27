@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 import { useEffect, useMemo, useState } from "react";
 import { DocIcon, PaperclipIcon } from "@/components/icons";
 import {
@@ -10,7 +12,7 @@ import {
   type MenajeItem,
   type MovimientoMenaje,
 } from "@/lib/types";
-import { hoyISO, pillClass } from "@/lib/ui";
+import { pillClass } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import {
@@ -52,6 +54,7 @@ const emptyForm: FormItem = {
 };
 
 export function MenajeClient() {
+  const hoy = useJornadaHoy();
   const [items, setItems] = useState<MenajeItem[]>([]);
   const [movs, setMovs] = useState<MovimientoMenaje[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,7 +78,7 @@ export function MenajeClient() {
   const [initialFactura, setInitialFactura] = useState<File | null>(null);
   const [initialPrecioUnit, setInitialPrecioUnit] = useState("");
   const [initialFecha, setInitialFecha] = useState(
-    () => hoyISO(),
+    () => hoy,
   );
   const [initialProveedor, setInitialProveedor] = useState("");
   const [creando, setCreando] = useState(false);
@@ -86,7 +89,7 @@ export function MenajeClient() {
   const [bajaCant, setBajaCant] = useState("");
   const [bajaTipo, setBajaTipo] = useState<TipoBaja>("rotura");
   const [bajaFecha, setBajaFecha] = useState(
-    () => hoyISO(),
+    () => hoy,
   );
   const [bajaMotivo, setBajaMotivo] = useState("");
   const [bajaNota, setBajaNota] = useState("");
@@ -97,7 +100,7 @@ export function MenajeClient() {
   const [compraPrecioUnit, setCompraPrecioUnit] = useState("");
   const [compraPrecioTotal, setCompraPrecioTotal] = useState("");
   const [compraFecha, setCompraFecha] = useState(
-    () => hoyISO(),
+    () => hoy,
   );
   const [compraFactura, setCompraFactura] = useState<File | null>(null);
   const [compraMotivo, setCompraMotivo] = useState("");
@@ -224,7 +227,7 @@ export function MenajeClient() {
     setAdding(false);
     setInitialFactura(null);
     setInitialPrecioUnit("");
-    setInitialFecha(hoyISO());
+    setInitialFecha(hoy);
     setInitialProveedor("");
   }
   function startEdit(it: MenajeItem) {
@@ -364,7 +367,7 @@ export function MenajeClient() {
     setBajaItem(it);
     setBajaCant("1");
     setBajaTipo("rotura");
-    setBajaFecha(hoyISO());
+    setBajaFecha(hoy);
     setBajaMotivo("");
     setBajaNota("");
   }
@@ -416,7 +419,7 @@ export function MenajeClient() {
     setCompraCant("");
     setCompraPrecioUnit("");
     setCompraPrecioTotal("");
-    setCompraFecha(hoyISO());
+    setCompraFecha(hoy);
     setCompraFactura(null);
     setCompraMotivo("");
     setCompraNota("");
@@ -494,7 +497,7 @@ export function MenajeClient() {
   function abrirLista() {
     setListaEvento("");
     setListaCliente("");
-    setListaFecha(hoyISO());
+    setListaFecha(hoy);
     setListaNotas("");
     setListaConPrecios(false);
     setListaPct("10");

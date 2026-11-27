@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useJornada } from "@/components/JornadaProvider";
 import {
   esFaltaTablaJornada,
   posponerCierreJornada,
-  revisarJornadaCocina,
   type EstadoJornadaCocina,
 } from "@/lib/data/jornada-cocina";
 
@@ -21,35 +21,23 @@ function horaLocal(iso: string | null): string {
 }
 
 export function AlertaCierreJornada() {
+  const { estado: estadoCtx, recargar } = useJornada();
   const [estado, setEstado] = useState<EstadoJornadaCocina | null>(null);
   const [avisoAuto, setAvisoAuto] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendiente, setPendiente] = useState(false);
 
   useEffect(() => {
-    let cancel = false;
-    (async () => {
-      try {
-        const e = await revisarJornadaCocina();
-        if (cancel || !e) return;
-        setEstado(e);
-        if (e.cerroJornadaId) {
-          setAvisoAuto(
-            "Bolo cerró sola la jornada anterior porque se pasó la hora máxima de cierre. Puedes guardar el cierre de caja cuando quieras; no se cierra otra vez la jornada nueva.",
-          );
-        }
-      } catch (err) {
-        if (cancel) return;
-        if (esFaltaTablaJornada(err)) return;
-        // Sin sesión o sin cliente: no interrumpir la app.
-        const msg = err instanceof Error ? err.message : String(err);
-        if (/session|jwt|not authenticated|api key|supabaseurl/i.test(msg)) return;
-      }
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, []);
+    if (!estadoCtx) return;
+    // El aviso local parte del estado que ya cargó el provider.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEstado(estadoCtx);
+    if (estadoCtx.cerroJornadaId) {
+      setAvisoAuto(
+        "Bolo cerró sola la jornada anterior porque se pasó la hora máxima de cierre. Puedes guardar el cierre de caja cuando quieras; no se cierra otra vez la jornada nueva.",
+      );
+    }
+  }, [estadoCtx]);
 
   async function recordar() {
     setPendiente(true);
@@ -78,6 +66,7 @@ export function AlertaCierreJornada() {
             }
           : prev,
       );
+      void recargar();
     } catch (err) {
       if (esFaltaTablaJornada(err)) return;
       setError("No se pudo posponer el aviso.");

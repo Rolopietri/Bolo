@@ -11,7 +11,7 @@ import { egresoCubiertoPorFijo, rangoMes, resumirGastos, type GastoFijo } from "
 import { listVentasRango, totalesVentasPorMes } from "@/lib/data/ventas";
 import { listTasasBcvRango, listComprasRango, listComprasEgresoMes, listComprasPendientes, listProveedores, listInsumos, marcarCompraPagada, marcarFacturaPagada, getTasaBcvPorFecha, getTasaBcvActual } from "@/lib/data/cocina";
 import { fmtUsdBs } from "@/lib/moneda";
-import { hoyCaracas } from "@/lib/cierre-caja";
+import { useFechaJornadaDefault, useJornadaHoy } from "@/components/JornadaProvider";
 import { montoVenta } from "@/lib/semana";
 import { leerAjustesVentas } from "@/lib/data/ajustes-ventas";
 import type { TasaBcv, Compra, Proveedor as ProveedorCocina, Insumo } from "@/lib/types";
@@ -537,7 +537,7 @@ function SeccionSolicitudes() {
 function NuevaSolicitud() {
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [lineas, setLineas] = useState<LineaForm[]>([]);
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useFechaJornadaDefault();
   const [tasaBcv, setTasaBcv] = useState<{ usdBs?: number; eurBs?: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1151,8 +1151,8 @@ function ConfirmarPago({
 }
 
 // ── Egresos ─────────────────────────────────────────────────────────
-function mesActualISO(): string {
-  return hoyCaracas().slice(0, 7);
+function mesActualISO(hoy: string): string {
+  return hoy.slice(0, 7);
 }
 function nombreMes(iso: string): string {
   const [y, m] = iso.split("-").map((x) => parseInt(x, 10));
@@ -1182,7 +1182,8 @@ function SeccionEgresos() {
 }
 
 function EgresosMes() {
-  const [mes, setMes] = useState<string>(mesActualISO());
+  const hoy = useJornadaHoy();
+  const [mes, setMes] = useState<string>(mesActualISO(hoy));
   const [egresos, setEgresos] = useState<Egreso[]>([]);
   const [compras, setCompras] = useState<Compra[]>([]); // compras de insumos (Cocina) reflejadas
   const [comprasPend, setComprasPend] = useState<Compra[]>([]); // compras por pagar (todas)
@@ -1579,7 +1580,7 @@ function ModalPago({ cuenta, onCerrar, onPagar }: {
   onPagar: (c: CuentaPagar, det: { fecha: string; metodo: string; monto?: number | null; moneda?: string | null; tasa?: number | null }) => Promise<void>;
 }) {
   const esCompra = cuenta.tipo === "compra";
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useFechaJornadaDefault();
   const [metodo, setMetodo] = useState("Transferencia");
   const [moneda, setMoneda] = useState(cuenta.moneda || "Bs");
   const [montoStr, setMontoStr] = useState(cuenta.monto != null ? String(cuenta.monto) : "");
@@ -1693,12 +1694,13 @@ function FormEgreso({
   porPagar?: boolean;
 }) {
   const esEdicion = !!inicial;
+  const fechaJornada = useJornadaHoy();
   // `monto` en el form es la BASE (bienes) sin flete; el guardado suma el flete.
   // En edición, monto guardado = base + flete → se recupera la base restando.
   const fleteIni = inicial?.flete ?? 0;
   const baseIni = inicial?.monto != null ? Math.round((inicial.monto - fleteIni) * 100) / 100 : null;
   const [f, setF] = useState({
-    fecha: inicial?.fecha ?? hoyISO(),
+    fecha: inicial?.fecha ?? fechaJornada,
     categoria_id: inicial?.categoria_id ?? "",
     proveedor_id: inicial?.proveedor_id ?? "",
     concepto: inicial?.concepto ?? "",
@@ -2251,7 +2253,8 @@ function MiniKpi({ titulo, valor, sub }: { titulo: string; valor: string; sub?: 
 }
 
 function IngresosMes() {
-  const [mes, setMes] = useState<string>(mesActualISO());
+  const hoy = useJornadaHoy();
+  const [mes, setMes] = useState<string>(mesActualISO(hoy));
   const [ingresos, setIngresos] = useState<Ingreso[]>([]);
   const [categorias, setCategorias] = useState<CategoriaIngreso[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -2850,7 +2853,8 @@ function CategoriasIngresoCatalogo() {
 // Cruza ingresos y egresos del mes (todo en USD) y saca el balance.
 // No guarda nada: solo lee lo ya registrado en las otras secciones.
 function SeccionEstado() {
-  const [mes, setMes] = useState<string>(mesActualISO());
+  const hoy = useJornadaHoy();
+  const [mes, setMes] = useState<string>(mesActualISO(hoy));
   const [ventasUsd, setVentasUsd] = useState(0);
   const [porPlato, setPorPlato] = useState<[string, number][]>([]);
   const [egresos, setEgresos] = useState<Egreso[]>([]);
@@ -3062,10 +3066,6 @@ const METODOS_COBRO = ["Punto de Venta", "Pago Móvil", "Zelle", "Transferencia"
 // se trata como crédito real del cliente.
 const SOBRANTE_MAX_EUR = 2;
 
-function hoyISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
 function diasHastaCierre(): number {
   const d = new Date();
   const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
@@ -3553,7 +3553,7 @@ function ModalCobro({ cliente, tasaGlobal, onCerrar, onListo }: { cliente: Clien
   const [tasaBsStr, setTasaBsStr] = useState("");
   const [montoStr, setMontoStr] = useState(totalOpenEur.toFixed(2));
   const [metodo, setMetodo] = useState("Punto de Venta");
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useFechaJornadaDefault();
   const [referencia, setReferencia] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3822,6 +3822,7 @@ function TortaIngresos({ titulo, datos }: { titulo: string; datos: RebanadaTorta
 }
 
 function SeccionHistorico() {
+  const hoy = useJornadaHoy();
   const [meses, setMeses] = useState<MesHist[]>([]);
   const [monedas, setMonedas] = useState<string[]>([]);
   const [moneda, setMoneda] = useState<string>("USD");
@@ -3866,7 +3867,7 @@ function SeccionHistorico() {
           if (k.startsWith("obs_") && v) observaciones[k.slice(4)] = v;
         }
         setObs(observaciones);
-        const ultimo = ms.length ? ms[ms.length - 1].mes : mesActualISO();
+        const ultimo = ms.length ? ms[ms.length - 1].mes : mesActualISO(hoy);
         setObsMes(ultimo);
         setObsTexto(observaciones[ultimo] ?? "");
       } catch (e) {
@@ -3876,7 +3877,7 @@ function SeccionHistorico() {
       }
     })();
     return () => { a = false; };
-  }, []);
+  }, [hoy]);
 
   async function guardarObs() {
     setGuardandoObs(true);
@@ -4035,7 +4036,7 @@ function SeccionHistorico() {
             onChange={(e) => { setObsMes(e.target.value); setObsTexto(obs[e.target.value] ?? ""); }}
             className="border border-marfil rounded-lg px-2 py-1.5 text-sm text-cacao bg-white"
           >
-            {(meses.length ? meses.map((m) => m.mes) : [mesActualISO()]).slice().reverse().map((m) => (
+            {(meses.length ? meses.map((m) => m.mes) : [mesActualISO(hoy)]).slice().reverse().map((m) => (
               <option key={m} value={m}>{nombreMes(m)}</option>
             ))}
           </select>

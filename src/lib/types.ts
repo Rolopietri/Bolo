@@ -439,10 +439,10 @@ export type Insumo = {
   unidadBase: string;
   precioCompraUsd: number | null;
   precioBaseUsd: number | null;
-  /** Fecha (YYYY-MM-DD) en que el precio se confirmó por última vez — sea por
-   *  una compra registrada o por un refresco manual ("actualizar a hoy"). Sirve
-   *  para avisar en el costeo cuando un precio quedó viejo. Si es null, se usa
-   *  `ultimaFecha` (fecha de la última compra) como referencia de frescura. */
+  /** Fecha civil (YYYY-MM-DD, America/Caracas) en que el precio se confirmó
+   *  por última vez — sea por una compra registrada o por un refresco manual
+   *  ("actualizar a hoy"). La antigüedad se cuenta en días de calendario, no
+   *  de jornada. Si es null, se usa `ultimaFecha` como referencia de frescura. */
   precioActualizado?: string;
   // ── Stock de 3 capas (M5) ─────────────────────────────────────
   /** Stock físico — solo cambia con compras recibidas o pérdidas/mermas.
@@ -510,8 +510,9 @@ export const PRECIO_VIEJO_DIAS = 90; // 46–90: revisar · >90: viejo
 
 export type NivelFrescuraPrecio = "fresco" | "revisar" | "viejo" | "sin_fecha";
 
-/** Clasifica qué tan viejo es un precio a partir de su fecha (YYYY-MM-DD) y la
- *  fecha de hoy (YYYY-MM-DD). Devuelve el nivel y los días transcurridos. */
+/** Clasifica qué tan viejo es un precio a partir de su fecha civil (YYYY-MM-DD)
+ *  y el día civil de hoy (America/Caracas). La antigüedad se cuenta en días de
+ *  calendario, no de jornada. Devuelve el nivel y los días transcurridos. */
 export function frescuraPrecio(
   fechaISO: string | null | undefined,
   hoyISO: string,
@@ -539,6 +540,8 @@ export type Compra = {
   insumoId: string;
   proveedorId?: string;
   fecha: string;
+  /** Fecha impresa en la factura. La fecha de registro (fecha) sigue la jornada. */
+  fechaDocumento?: string | null;
   cantidad: number;
   precioTotalUsd: number;
   precioTotalBs?: number;

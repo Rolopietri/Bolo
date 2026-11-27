@@ -119,4 +119,6 @@ con operación real. Cómo correrlo: ver el encabezado de ese archivo y el READM
   ```
 
 - Pruebas locales (no correr en producción): `bash scripts/probar-jornada-cierre.sh`
+- Fecha y tasa de la jornada en toda la app: **`cocina-jornada-sincro.sql`** (aditivo, después del de horario). `_prod_hoy()` y `negocio_hoy()` delegan en `jornada_fecha()`. Los defaults de fecha de negocio pasan a `jornada_fecha()`. Cada jornada guarda `tasa_tipo`, `tasa_valor` y `tasa_fecha` (no cambia a mitad de jornada). La factura de compra tiene `fecha_documento`. El resumen de Telegram se manda al cerrar la jornada; el cron de las 11:00 p. m. queda como repesca. La frescura de precios (`precio_actualizado`) se cuenta en días de calendario (`_cocina_fecha_civil`), no de jornada.
+- Pruebas locales (no correr en producción): `bash scripts/probar-jornada-cierre.sh` (incluye cierre, horario y sincro).
 - pg_cron no está instalado hoy; en el archivo de horario hay un ejemplo cada 15 minutos, sin activarlo. No aplicar estos SQL en producción sin la aprobación de Lucia.

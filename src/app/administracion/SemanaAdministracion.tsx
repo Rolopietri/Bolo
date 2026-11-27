@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Semana de Administración: de un vistazo, cómo le fue al local.
 // Lee ventas (public.ventas), costo de receta, compras y bajas de inventario.
 // No escribe nada.
@@ -15,13 +17,13 @@ import { getTasaBcvPorFecha, listComprasRango, listInsumos } from "@/lib/data/co
 import { calcularCostoReceta, listRecetas } from "@/lib/data/recetas";
 import { listPerdidasRango } from "@/lib/data/stock-movimientos";
 import { listVentasRango } from "@/lib/data/ventas";
-import { compararCaja, diasEntre, hoyCaracas, resumenCajaSemana, type EstadoCaja, type ResumenCajaSemana } from "@/lib/cierre-caja";
+import { compararCaja, diasEntre, resumenCajaSemana, type EstadoCaja, type ResumenCajaSemana } from "@/lib/cierre-caja";
 import { CRITERIO_SEMANA, gastoDesdeFila, resumirGastos, restarGastos, type FilaGasto, type GastoFijo } from "@/lib/gastos-fijos";
 import { fmtBs, fmtUsd } from "@/lib/moneda";
 import {
   armarSemana,
+  lunesDe,
   costoTeoricoLinea,
-  lunesSemanaActual,
   montoVenta,
   moverSemana,
   semanaDesdeLunes,
@@ -51,7 +53,8 @@ function diaCorto(iso: string): string {
 }
 
 export function SemanaAdministracion({ onVerCierres, onVerGastos }: { onVerCierres?: () => void; onVerGastos?: () => void }) {
-  const [lunes, setLunes] = useState(() => lunesSemanaActual());
+  const hoyJornada = useJornadaHoy();
+  const [lunes, setLunes] = useState(() => lunesDe(hoyJornada));
   const [resumen, setResumen] = useState<ResumenSemana | null>(null);
   const [caja, setCaja] = useState<ResumenCajaSemana | null>(null);
   const [dias, setDias] = useState<DiaVista[]>([]);
@@ -64,7 +67,7 @@ export function SemanaAdministracion({ onVerCierres, onVerGastos }: { onVerCierr
   const [intento, setIntento] = useState(0);
 
   const semana = semanaDesdeLunes(lunes);
-  const tope = lunesSemanaActual();
+  const tope = lunesDe(hoyJornada);
   const esActual = lunes >= tope;
   const [lunesVisto, setLunesVisto] = useState(lunes);
   if (lunes !== lunesVisto) {
@@ -140,7 +143,7 @@ export function SemanaAdministracion({ onVerCierres, onVerGastos }: { onVerCierr
           const dia = v.fecha.slice(0, 10);
           ventasUsdPorDia[dia] = (ventasUsdPorDia[dia] ?? 0) + montoVenta(v);
         }
-        const hoy = hoyCaracas();
+        const hoy = hoyJornada;
         setCaja(
           resumenCajaSemana({
             desde: esta.desde,
@@ -191,7 +194,7 @@ export function SemanaAdministracion({ onVerCierres, onVerGastos }: { onVerCierr
     return () => {
       cancel = true;
     };
-  }, [lunes, intento]);
+  }, [lunes, intento, hoyJornada]);
 
   function ir(delta: number) {
     setLunes((actual) => {

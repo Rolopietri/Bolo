@@ -1,11 +1,12 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Gastos fijos: alquiler, nómina, servicios, gas u otro.
 // Se anotan una vez. Si se repiten cada mes, no hay que volver a cargarlos.
 
 import { useEffect, useState } from "react";
 import { getTasaBcvPorFecha } from "@/lib/data/cocina";
-import { hoyCaracas } from "@/lib/cierre-caja";
 import {
   CATEGORIAS_GASTO,
   CRITERIO_SEMANA,
@@ -36,6 +37,7 @@ const VACIO: Borrador = {
 };
 
 export function GastosFijosAdmin() {
+  const hoy = useJornadaHoy();
   const [gastos, setGastos] = useState<GastoFijo[]>([]);
   const [pendiente, setPendiente] = useState(false);
   const [cargando, setCargando] = useState(true);
@@ -105,7 +107,7 @@ export function GastosFijosAdmin() {
 
   function abrirNuevo() {
     setEditId(null);
-    setF({ ...VACIO, fecha: hoyCaracas() });
+    setF({ ...VACIO, fecha: hoy });
     setError(null);
     setMsg(null);
     setModo("form");

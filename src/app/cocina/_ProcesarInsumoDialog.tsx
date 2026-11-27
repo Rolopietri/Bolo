@@ -1,12 +1,13 @@
 "use client";
 
+import { useFechaJornadaDefault } from "@/components/JornadaProvider";
+
 import { useMemo, useState } from "react";
 import type { Insumo } from "@/lib/types";
 import { registrarProcesamiento } from "@/lib/data/stock-movimientos";
 import { updateInsumo } from "@/lib/data/cocina";
 import { displayCantidad } from "@/lib/units";
 import { extractError } from "@/lib/data/error";
-import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { umbralDesviacion } from "@/lib/merma-alertas";
 
@@ -31,7 +32,7 @@ export function ProcesarInsumoDialog({
 }) {
   const [crudo, setCrudo] = useState("");
   const [procesado, setProcesado] = useState("");
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useFechaJornadaDefault();
   const [nota, setNota] = useState("");
   const [registrando, setRegistrando] = useState(false);
   const [error, setError] = useState<string | null>(null);

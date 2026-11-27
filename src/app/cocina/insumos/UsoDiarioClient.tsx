@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Uso diario de insumos (pestaña de Insumos). Muestra, día por día, cuánto
 // salió de cada insumo por las ventas de ese día —si se vendieron 10
 // hamburguesas, 10 panes—, más mermas de receta, pérdidas y compras. Reemplaza
@@ -17,7 +19,6 @@ import { listVentasUso } from "@/lib/data/uso-diario";
 import {
   costoPorUnidadBase,
   esTransformacionCrudo,
-  fechaISOEnCaracas,
   restarDiasISO,
 } from "@/lib/stock-liviano";
 import {
@@ -120,7 +121,7 @@ export function UsoDiarioClient({
   /** Dentro del detalle de un insumo: sin selector de insumo ni texto de ayuda. */
   fijo?: boolean;
 }) {
-  const hoy = useMemo(() => fechaISOEnCaracas(), []);
+  const hoy = useJornadaHoy();
   // 14 días, igual que la ventana de consumo de Stock.
   const [periodo, setPeriodo] = useState<Periodo>(14);
   const [insumoSel, setInsumoSel] = useState<string>(insumoInicial ?? "todos");

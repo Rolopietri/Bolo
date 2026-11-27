@@ -48,7 +48,7 @@ import { cantidadEnBase, dimension, displayCantidad, opcionesCantidad, precioLeg
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { CamaraGuiada } from "./_CamaraGuiada";
 import { extractError } from "@/lib/data/error";
-import { hoyISO } from "@/lib/ui";
+import { useJornadaHoy } from "@/components/JornadaProvider";
 
 // Escanear factura: foto → OCR en el teléfono → el MISMO formulario de
 // "Registrar compra", ya lleno. Los datos de la factura (proveedor, fecha, N°,
@@ -116,7 +116,7 @@ type Leido = {
 
 const cabeceraVacia: Cabecera = {
   proveedorId: "",
-  fecha: hoyISO(),
+  fecha: "",
   modalidadPago: "bcv_dolar",
   moneda: "bs",
   ivaModo: "exento",
@@ -386,6 +386,7 @@ export function EscanearFactura({
   /** Abre el formulario manual de siempre (contingencia). */
   onManual: () => void;
 }) {
+  const hoy = useJornadaHoy();
   const [paso, setPaso] = useState<"origen" | "pegar" | "leyendo" | "formulario">("origen");
   const [progreso, setProgreso] = useState<{ etapa: string; pct: number }>({ etapa: "", pct: 0 });
   const [texto, setTexto] = useState("");
@@ -467,7 +468,7 @@ export function EscanearFactura({
     if (paso !== "formulario" || !cab.fecha) return;
     let cancel = false;
     (async () => {
-      const t = await getTasaBcvPorFecha(cab.fecha).catch(() => null);
+      const t = await getTasaBcvPorFecha(hoy).catch(() => null);
       if (cancel || !t) return;
       setTasaDia(t);
       setCab((c) => {
@@ -480,7 +481,7 @@ export function EscanearFactura({
     return () => {
       cancel = true;
     };
-  }, [paso, cab.fecha, tasaFactura]);
+  }, [paso, cab.fecha, tasaFactura, hoy]);
 
   const tasaSugerida = !tasaDia
     ? null
@@ -583,7 +584,7 @@ export function EscanearFactura({
     });
     setCab({
       ...cabeceraVacia,
-      fecha: f.fecha ?? hoyISO(),
+      fecha: f.fecha ?? hoy,
       moneda,
       modalidadPago: moneda === "bs" ? "bcv_dolar" : "divisa",
       notas: f.numeroControl ? `N° de control ${f.numeroControl}` : "",
@@ -1017,7 +1018,8 @@ export function EscanearFactura({
         return {
           insumoId: p.insumoId,
           proveedorId: cab.proveedorId || undefined,
-          fecha: cab.fecha,
+          fecha: hoy,
+          fechaDocumento: cab.fecha || null,
           cantidad: Math.round(enCompra * 1e6) / 1e6,
           precioTotalUsd: c.pagado,
           precioTotalBs: c.bs,
@@ -1387,7 +1389,7 @@ export function EscanearFactura({
             />
             {tasaSugerida !== null && (
               <span className="text-xs text-cacao-mute block mt-1">
-                Tasa BCV del {fmtFecha(cab.fecha)}: Bs {Number(tasaSugerida).toFixed(2)}.{" "}
+                Tasa de la jornada: Bs {Number(tasaSugerida).toFixed(2)}.{" "}
                 {tasaNum > 0 && Math.abs(tasaNum - Number(tasaSugerida)) > 0.009 ? (
                   <button type="button" onClick={() => setCab({ ...cab, tasa: String(tasaSugerida) })} className="underline hover:text-cacao">
                     usar la del día

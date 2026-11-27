@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Mermas y pérdidas de insumos en un solo lugar (pestaña de Insumos):
 //  1. Pérdidas registradas a mano (botón "Pérdida" del catálogo): mal estado,
 //     vencimiento, merma, etc. Valoradas al precio base y con "deshacer".
@@ -9,7 +11,6 @@ import { TIPOS_PERDIDA, type Insumo, type StockMovimiento } from "@/lib/types";
 import { listInsumos } from "@/lib/data/cocina";
 import { listMovimientos, deleteMovimiento } from "@/lib/data/stock-movimientos";
 import { displayCantidad } from "@/lib/units";
-import { hoyISO } from "@/lib/ui";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { ErrorCarga } from "@/components/ErrorCarga";
@@ -51,7 +52,7 @@ export function MermasClient({
   const [periodo, setPeriodo] = useState<Periodo>("30");
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
   const [devolverStock, setDevolverStock] = useState(true);
-  const hoy = useMemo(() => hoyISO(), []);
+  const hoy = useJornadaHoy();
 
   useEffect(() => {
     let cancel = false;

@@ -5,6 +5,7 @@ import { CalculatorIcon, ChevronIcon } from "@/components/icons";
 import { getTasaBcvActual } from "@/lib/data/cocina";
 import { extractError } from "@/lib/data/error";
 import type { TasaBcv } from "@/lib/types";
+import { useJornada } from "@/components/JornadaProvider";
 import {
   bsDesdeUsd,
   CLAVE_TASA_HOY,
@@ -85,6 +86,7 @@ async function tasaEnVivo(): Promise<TasaBcv | null> {
 }
 
 export function BcvRateBanner() {
+  const { tasa: tasaJornada, fijarPropia, listo: jornadaLista } = useJornada();
   const [tasa, setTasa] = useState<TasaBcv | null>(null);
   const [estado, setEstado] = useState<Estado>("cargando");
   const [error, setError] = useState<string | null>(null);
@@ -93,6 +95,23 @@ export function BcvRateBanner() {
   const [customTexto, setCustomTexto] = useState("");
   const [prefsListas, setPrefsListas] = useState(false);
   const [listaAbierta, setListaAbierta] = useState(false);
+  const [fijando, setFijando] = useState(false);
+  const [avisoJornada, setAvisoJornada] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!jornadaLista || !tasaJornada?.valor) return;
+    // La calculadora arranca con la tasa ya guardada de la jornada.
+    if (tasaJornada.tipo === "propia") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPreferida("personalizada");
+      setCustomTexto(String(tasaJornada.valor));
+    } else if (tasaJornada.tipo === "eur_bs") {
+      setPreferida("euro");
+    } else {
+      setPreferida("bcv");
+    }
+  }, [jornadaLista, tasaJornada?.tipo, tasaJornada?.valor]);
+
 
   async function cargar(forzar: boolean) {
     let guardada: TasaBcv | null = null;
@@ -206,6 +225,21 @@ export function BcvRateBanner() {
   const activa = seleccionUsable(preferida, cotizacion, personalizada);
   const valor = valorDeTasa(activa, cotizacion, personalizada);
   const meta = META_TASA[activa];
+  const mismaJornada =
+    jornadaLista &&
+    tasaJornada?.valor != null &&
+    valor != null &&
+    Math.abs(tasaJornada.valor - valor) < 0.0001;
+
+  async function usarEnJornada() {
+    if (valor == null || !(valor > 0)) return;
+    setFijando(true);
+    setAvisoJornada(null);
+    const r = await fijarPropia(valor);
+    setFijando(false);
+    if (r.ok) setAvisoJornada("Quedó como tasa de esta jornada.");
+    else setAvisoJornada(r.error || "No se pudo fijar la tasa de la jornada.");
+  }
 
   return (
     <div className="grid items-start gap-3">
@@ -330,6 +364,29 @@ export function BcvRateBanner() {
           </p>
         ) : null}
         {nota ? <p className="mt-2 text-xs text-cacao-soft">{nota}</p> : null}
+        {jornadaLista && tasaJornada?.valor ? (
+          <p className="mt-2 text-xs text-cacao-soft">
+            Tasa de esta jornada: Bs {formatoTasa(tasaJornada.valor)}
+            {tasaJornada.tipo === "eur_bs"
+              ? " · euro BCV"
+              : tasaJornada.tipo === "propia"
+                ? " · propia"
+                : " · dólar BCV"}
+            .
+            {!mismaJornada && valor != null && valor > 0 ? " La de la calculadora es otra." : ""}
+          </p>
+        ) : null}
+        {jornadaLista && valor != null && valor > 0 && !mismaJornada ? (
+          <button
+            type="button"
+            onClick={() => void usarEnJornada()}
+            disabled={fijando}
+            className="mt-2 text-xs font-semibold uppercase tracking-widest text-terracotta hover:text-cacao disabled:opacity-50"
+          >
+            {fijando ? "Guardando…" : "Usar esta tasa en la jornada"}
+          </button>
+        ) : null}
+        {avisoJornada ? <p className="mt-1 text-xs text-cacao-soft">{avisoJornada}</p> : null}
       </section>
 
       <CalculadoraTasa

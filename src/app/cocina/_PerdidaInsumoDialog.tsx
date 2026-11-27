@@ -1,12 +1,13 @@
 "use client";
 
+import { useFechaJornadaDefault } from "@/components/JornadaProvider";
+
 import { useMemo, useState } from "react";
 import { TIPOS_PERDIDA, type Insumo } from "@/lib/types";
 import { registrarPerdida } from "@/lib/data/stock-movimientos";
 import { displayCantidad, opcionesCantidad } from "@/lib/units";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
 import { extractError } from "@/lib/data/error";
-import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
 type TipoPerdida = (typeof TIPOS_PERDIDA)[number]["value"];
@@ -40,7 +41,7 @@ export function PerdidaInsumoDialog({
   const factor = factorDe(opciones, unidad);
   const unidadLabel = opciones.find((o) => o.key === unidad)?.label ?? insumo.unidadBase;
   const [tipo, setTipo] = useState<TipoPerdida>("perdida");
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useFechaJornadaDefault();
   const [motivo, setMotivo] = useState("");
   const [nota, setNota] = useState("");
   const [cocido, setCocido] = useState(false);

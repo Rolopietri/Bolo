@@ -6,7 +6,7 @@
 // tabla soporta movimientos de la capa "comprometido" sin migración.
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { hoyISO } from "@/lib/ui";
+import { jornadaHoy } from "@/lib/data/jornada-cocina";
 import {
   TIPOS_PERDIDA,
   type StockMovimiento,
@@ -124,7 +124,7 @@ export async function registrarPerdida(
     p_tipo: input.tipo,
     p_cantidad: Math.abs(input.cantidad),
     p_motivo: input.motivo?.trim() || null,
-    p_fecha: input.fecha ?? hoyISO(),
+    p_fecha: input.fecha ?? (await jornadaHoy()),
     p_nota: input.nota?.trim() || null,
   });
   if (error) throw error;
@@ -178,7 +178,7 @@ export async function registrarProcesamiento(
     p_insumo_id: input.insumoId,
     p_crudo: input.crudo,
     p_procesado: input.procesado,
-    p_fecha: input.fecha ?? hoyISO(),
+    p_fecha: input.fecha ?? (await jornadaHoy()),
     p_nota: input.nota?.trim() || null,
     p_responsable: input.responsable?.trim() || null,
     p_origen: input.origen ?? "manual",

@@ -10,6 +10,7 @@ export type HorarioNegocio = {
   horaAperturaHabitual: string | null;
   horaCierreMaxima: string | null;
   jornadaHorarioNota: string | null;
+  tasaPredeterminada: "usd_bs" | "eur_bs";
   /** False si aún no está la migración de horario. */
   horarioDisponible: boolean;
 };
@@ -20,6 +21,7 @@ const VACIO: HorarioNegocio = {
   horaAperturaHabitual: null,
   horaCierreMaxima: null,
   jornadaHorarioNota: null,
+  tasaPredeterminada: "usd_bs",
   horarioDisponible: false,
 };
 
@@ -32,7 +34,7 @@ function hhmm(v: string | null | undefined): string | null {
 export async function getHorarioNegocio(): Promise<HorarioNegocio> {
   const sb = createSupabaseBrowserClient();
   const completo =
-    "nombre, zona_horaria, hora_apertura_habitual, hora_cierre_maxima, jornada_horario_nota";
+    "nombre, zona_horaria, hora_apertura_habitual, hora_cierre_maxima, jornada_horario_nota, tasa_predeterminada";
   let { data, error } = await sb.from("negocio_config").select(completo).eq("id", 1).maybeSingle();
   if (error && (esColumnaAusente(error) || esFaltaTablaJornada(error))) {
     const r2 = await sb.from("negocio_config").select("nombre, zona_horaria").eq("id", 1).maybeSingle();
@@ -54,6 +56,7 @@ export async function getHorarioNegocio(): Promise<HorarioNegocio> {
     hora_apertura_habitual?: string | null;
     hora_cierre_maxima?: string | null;
     jornada_horario_nota?: string | null;
+    tasa_predeterminada?: string | null;
   };
   return {
     nombre: (row.nombre ?? "").trim(),
@@ -61,6 +64,7 @@ export async function getHorarioNegocio(): Promise<HorarioNegocio> {
     horaAperturaHabitual: hhmm(row.hora_apertura_habitual),
     horaCierreMaxima: hhmm(row.hora_cierre_maxima),
     jornadaHorarioNota: row.jornada_horario_nota ?? null,
+    tasaPredeterminada: row.tasa_predeterminada === "eur_bs" ? "eur_bs" : "usd_bs",
     horarioDisponible: true,
   };
 }
@@ -70,6 +74,7 @@ export async function guardarHorarioNegocio(patch: {
   horaAperturaHabitual: string | null;
   horaCierreMaxima: string | null;
   jornadaHorarioNota: string | null;
+  tasaPredeterminada: "usd_bs" | "eur_bs";
 }): Promise<HorarioNegocio> {
   const sb = createSupabaseBrowserClient();
   const db: Record<string, unknown> = {
@@ -78,6 +83,7 @@ export async function guardarHorarioNegocio(patch: {
     hora_apertura_habitual: patch.horaAperturaHabitual,
     hora_cierre_maxima: patch.horaCierreMaxima,
     jornada_horario_nota: patch.jornadaHorarioNota?.trim() || null,
+    tasa_predeterminada: patch.tasaPredeterminada,
     updated_at: new Date().toISOString(),
   };
   const { error } = await sb.from("negocio_config").update(db).eq("id", 1);

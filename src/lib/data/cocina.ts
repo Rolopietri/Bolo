@@ -1,7 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
-import { hoyISO } from "@/lib/ui";
+import { fechaCivilCaracas, getTasaJornadaPorFecha, jornadaHoy } from "@/lib/data/jornada-cocina";
 import { normalizarNombreCatalogo } from "@/lib/text";
 import { esColumnaAusente, esFuncionAusente, filaCompra } from "@/lib/iva-compra";
 import type {
@@ -334,8 +334,9 @@ export async function deleteInsumo(id: string): Promise<void> {
 
 /** Refresca el precio de un insumo al precio de hoy SIN registrar una compra.
  *  Recalcula el precio por unidad base y estampa `precio_actualizado` con la
- *  fecha de hoy, para que el costeo deje de marcarlo como viejo. Pensado para
- *  cuando conoces el precio de mercado actual pero no compraste todavía. */
+ *  fecha civil de hoy (America/Caracas), no la de la jornada: la frescura se
+ *  cuenta en días de calendario. Pensado para cuando conoces el precio de
+ *  mercado actual pero no compraste todavía. */
 /** Cambia SOLO la categoría de un insumo (para clasificar ítems de reventa
  *  desde Análisis de ventas). No toca precio ni lo demás. */
 export async function setInsumoCategoria(
@@ -367,7 +368,7 @@ export async function actualizarPrecioInsumo(
   cantidadPorCompra: number,
 ): Promise<Insumo> {
   const sb = createSupabaseBrowserClient();
-  const hoy = hoyISO();
+  const hoy = fechaCivilCaracas();
   const precioBase =
     cantidadPorCompra > 0
       ? precioCompraUsd / cantidadPorCompra
@@ -393,6 +394,7 @@ type CompraRow = {
   insumo_id: string;
   proveedor_id: string | null;
   fecha: string;
+  fecha_documento?: string | null;
   cantidad: number | string;
   precio_total_usd: number | string;
   precio_total_bs: number | string | null;
@@ -416,6 +418,7 @@ function rowToCompra(r: CompraRow): Compra {
     insumoId: r.insumo_id,
     proveedorId: r.proveedor_id ?? undefined,
     fecha: r.fecha,
+    fechaDocumento: r.fecha_documento ?? null,
     cantidad: Number(r.cantidad),
     precioTotalUsd: Number(r.precio_total_usd),
     precioTotalBs: r.precio_total_bs === null ? undefined : Number(r.precio_total_bs),
@@ -537,6 +540,14 @@ async function insertarCompras(inputs: CompraInput[]): Promise<Compra[]> {
   if (res.error && esColumnaAusente(res.error)) {
     res = await sb.from("compras").insert(inputs.map((input) => filaCompra(input, false))).select("*");
   }
+  if (res.error && esColumnaAusente(res.error)) {
+    const sinDoc = inputs.map((input) => {
+      const f = filaCompra(input, false);
+      delete f.fecha_documento;
+      return f;
+    });
+    res = await sb.from("compras").insert(sinDoc).select("*");
+  }
   if (res.error) throw res.error;
   return ((res.data ?? []) as CompraRow[]).map(rowToCompra);
 }
@@ -578,7 +589,21 @@ export async function updateCompra(
     p_exento_usd: input.exentoUsd ?? null,
     p_costo_usd: input.costoUsd ?? null,
   });
-  if (!error && data) return rowToCompra(data as CompraRow);
+  if (!error && data) {
+    const row = data as CompraRow;
+    const doc = input.fechaDocumento ?? null;
+    if (doc !== (row.fecha_documento ?? null)) {
+      const upd = await sb
+        .from("compras")
+        .update({ fecha_documento: doc })
+        .eq("id", id)
+        .select("*")
+        .maybeSingle();
+      if (!upd.error && upd.data) return rowToCompra(upd.data as CompraRow);
+      return rowToCompra({ ...row, fecha_documento: doc });
+    }
+    return rowToCompra(row);
+  }
   if (error && (esFuncionAusente(error) || esColumnaAusente(error))) {
     const nueva = await createCompra(input);
     const borrado = await sb.from("compras").delete().eq("id", id);
@@ -602,7 +627,7 @@ export async function marcarCompraPagada(
   const sb = createSupabaseBrowserClient();
   const { error } = await sb
     .from("compras")
-    .update({ pagada, fecha_pago: pagada ? (fechaPago ?? hoyISO()) : null })
+    .update({ pagada, fecha_pago: pagada ? (fechaPago ?? (await jornadaHoy())) : null })
     .eq("id", id);
   if (error) throw error;
 }
@@ -619,7 +644,7 @@ export async function marcarFacturaPagada(
   const sb = createSupabaseBrowserClient();
   let q = sb
     .from("compras")
-    .update({ pagada, fecha_pago: pagada ? (fechaPago ?? hoyISO()) : null })
+    .update({ pagada, fecha_pago: pagada ? (fechaPago ?? (await jornadaHoy())) : null })
     .eq("numero_factura", numeroFactura);
   q = proveedorId ? q.eq("proveedor_id", proveedorId) : q.is("proveedor_id", null);
   const { data, error } = await q.select("id");
@@ -675,6 +700,21 @@ export async function listTasasBcvRango(desde: string, hasta: string): Promise<T
  *  no publica fines de semana/feriados, así que se usa la última vigente). Si no
  *  hay ninguna anterior, cae a la más antigua disponible. null si no hay tasas. */
 export async function getTasaBcvPorFecha(fecha: string): Promise<TasaBcv | null> {
+  // Preferir la tasa de la jornada de esa fecha de negocio (fija). Si aún no
+  // hay jornada, se cae a la tasa oficial del BCV de esa fecha civil.
+  try {
+    const j = await getTasaJornadaPorFecha(fecha);
+    if (j?.valor && j.valor > 0) {
+      return {
+        fecha: String(j.tasaFecha ?? j.fecha ?? fecha).slice(0, 10),
+        usdBs: j.valor,
+        eurBs: j.tipo === "eur_bs" ? j.valor : undefined,
+        fuente: j.tipo === "propia" ? "propia" : "jornada",
+      };
+    }
+  } catch {
+    /* sin migración o sin sesión: tasa oficial */
+  }
   const sb = createSupabaseBrowserClient();
   const toTasa = (r: TasaRow): TasaBcv => ({
     fecha: r.fecha,
