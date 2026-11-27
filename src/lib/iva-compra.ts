@@ -209,6 +209,7 @@ export function filaCompra(
     insumoId: string;
     proveedorId?: string;
     fecha: string;
+    fechaDocumento?: string | null;
     cantidad: number;
     precioTotalUsd: number;
     precioTotalBs?: number;
@@ -231,6 +232,7 @@ export function filaCompra(
     insumo_id: input.insumoId,
     proveedor_id: input.proveedorId ?? null,
     fecha: input.fecha,
+    fecha_documento: input.fechaDocumento ?? null,
     cantidad: input.cantidad,
     precio_total_usd: input.precioTotalUsd,
     precio_total_bs: input.precioTotalBs ?? null,

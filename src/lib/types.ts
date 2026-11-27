@@ -539,6 +539,8 @@ export type Compra = {
   insumoId: string;
   proveedorId?: string;
   fecha: string;
+  /** Fecha impresa en la factura. La fecha de registro (fecha) sigue la jornada. */
+  fechaDocumento?: string | null;
   cantidad: number;
   precioTotalUsd: number;
   precioTotalBs?: number;

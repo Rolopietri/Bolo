@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Análisis administrativo: agrupa el análisis de Ventas y el de Compras, y un
 // Resumen que los combina para ver la UTILIDAD REAL del período.
 import { useEffect, useMemo, useState } from "react";
@@ -8,7 +10,6 @@ import { AnalisisCompras } from "./AnalisisCompras";
 import { usdDeCompra, sumarVentasUsd } from "@/lib/admin/cuadre";
 import { getTasaBcvPorFecha, listComprasRango } from "@/lib/data/cocina";
 import { listVentasRango } from "@/lib/data/ventas";
-import { hoyCaracas } from "@/lib/cierre-caja";
 import { fmtBs, fmtUsd } from "@/lib/moneda";
 import { WarningIcon } from "@/components/icons";
 
@@ -32,8 +33,7 @@ export function AnalisisAdministrativo() {
 
 // ── Resumen / Utilidad real ────────────────────────────────────────────────
 const fPct = (n: number) => `${n.toFixed(1)}%`;
-function rangoMes() {
-  const hoy = hoyCaracas();
+function rangoMes(hoy: string) {
   return { desde: `${hoy.slice(0, 8)}01`, hasta: hoy };
 }
 
@@ -46,7 +46,8 @@ type Gastos = {
 } | null;
 
 function ResumenUtilidad() {
-  const ini = rangoMes();
+  const hoy = useJornadaHoy();
+  const ini = rangoMes(hoy);
   const [desde, setDesde] = useState(ini.desde);
   const [hasta, setHasta] = useState(ini.hasta);
   const [ventasNetasSrc, setVentasNetasSrc] = useState(0);
@@ -106,7 +107,7 @@ function ResumenUtilidad() {
       : "ok";
 
   const pill = (active: boolean) => `px-3 py-1 rounded-full text-[11px] uppercase tracking-widest ring-1 ${active ? "bg-cacao text-white ring-cacao" : "bg-white text-cacao-soft ring-marfil hover:bg-marfil-soft"}`;
-  function preset(which: "mes" | "rango") { if (which === "mes") { const m = rangoMes(); setDesde(m.desde); setHasta(m.hasta); } }
+  function preset(which: "mes" | "rango") { if (which === "mes") { const m = rangoMes(hoy); setDesde(m.desde); setHasta(m.hasta); } }
 
   return (
     <div className="space-y-5">
@@ -115,7 +116,7 @@ function ResumenUtilidad() {
           <button type="button" onClick={() => preset("mes")} className={pill(false)}>Mes actual</button>
           <div className="flex items-center gap-2 ml-auto">
             <label className="flex items-center gap-1 text-xs text-cacao-soft">Desde<input type="date" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" /></label>
-            <label className="flex items-center gap-1 text-xs text-cacao-soft">Hasta<input type="date" value={hasta} min={desde} max={hoyCaracas()} onChange={(e) => setHasta(e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" /></label>
+            <label className="flex items-center gap-1 text-xs text-cacao-soft">Hasta<input type="date" value={hasta} min={desde} max={hoy} onChange={(e) => setHasta(e.target.value)} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" /></label>
           </div>
         </div>
       </section>

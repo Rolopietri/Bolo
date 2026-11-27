@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Análisis de Compras — módulo ESPEJO de Análisis de Ventas, adaptado a la
 // realidad de las compras (tabla `compras` de Cocina). Misma arquitectura:
 // filtros globales (período, categoría, insumo, proveedor, estado, modalidad),
@@ -24,7 +26,6 @@ import {
   setCategoriaInsumoExcluirRanking,
   type CategoriaInsumo,
 } from "@/lib/data/categoriasInsumo";
-import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import {
   BarrasH,
@@ -58,8 +59,8 @@ function normCat(s: string): string {
 }
 
 type Preset = "dia" | "semana" | "mes" | "rango";
-function rangoDePreset(preset: Preset): { desde: string; hasta: string } {
-  const hoy = new Date();
+function rangoDePreset(preset: Preset, hoyISO?: string): { desde: string; hasta: string } {
+  const hoy = hoyISO ? new Date(hoyISO + 'T12:00:00') : new Date();
   if (preset === "dia") return { desde: isoLocal(hoy), hasta: isoLocal(hoy) };
   if (preset === "semana") {
     const d = new Date(hoy);
@@ -116,8 +117,9 @@ function aggProveedor(rows: EnrRow[]): ProvAgg[] {
 }
 
 export function AnalisisCompras() {
+  const hoy = useJornadaHoy();
   const [preset, setPreset] = useState<Preset>("mes");
-  const inicial = rangoDePreset("mes");
+  const inicial = rangoDePreset("mes", hoy);
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
   const [filtroCat, setFiltroCat] = useState<string>("all");
@@ -515,11 +517,11 @@ export function AnalisisCompras() {
 
   function aplicarPreset(p: Preset) {
     setPreset(p);
-    if (p !== "rango") { const r = rangoDePreset(p); setDesde(r.desde); setHasta(r.hasta); }
+    if (p !== "rango") { const r = rangoDePreset(p, hoy); setDesde(r.desde); setHasta(r.hasta); }
   }
   function limpiarFiltros() {
     setPreset("mes");
-    const r = rangoDePreset("mes");
+    const r = rangoDePreset("mes", hoy);
     setDesde(r.desde); setHasta(r.hasta);
     setFiltroCat("all"); setFiltroIns("all"); setFiltroProv("all");
     setFiltroEstado("all"); setFiltroModalidad("all");
@@ -550,7 +552,7 @@ export function AnalisisCompras() {
               <input type="date" value={desde} max={hasta} onChange={(e) => { setPreset("rango"); setDesde(e.target.value); }} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" />
             </label>
             <label className="flex items-center gap-1 text-xs text-cacao-soft">Hasta
-              <input type="date" value={hasta} min={desde} max={hoyISO()} onChange={(e) => { setPreset("rango"); setHasta(e.target.value); }} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" />
+              <input type="date" value={hasta} min={desde} max={hoy} onChange={(e) => { setPreset("rango"); setHasta(e.target.value); }} className="rounded-lg ring-1 ring-marfil px-2 py-1 text-sm bg-white" />
             </label>
           </div>
         </div>

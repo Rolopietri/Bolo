@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
       );
       break;
     case "gerente_vinculado":
-      await responder("Listo: cada noche te enviaré aquí el resumen de producción del día. Escribe /resumen para verlo en cualquier momento.");
+      await responder("Listo: te enviaré aquí el resumen de producción al cerrar la caja (o cuando Bolo cierre sola la jornada). Escribe /resumen para verlo en cualquier momento.");
       break;
     case "gerente_codigo_invalido":
     case "codigo_invalido":
@@ -130,7 +130,9 @@ export async function POST(req: NextRequest) {
       );
       break;
     case "resumen_pedido": {
-      const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
+      let hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Caracas" }).format(new Date());
+      const { data: fJor } = await sb.rpc("jornada_fecha");
+      if (typeof fJor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(fJor)) hoy = fJor;
       const { data: rs, error: e } = await sb.rpc("telegram_resumen_secreto", { p_secreto: secreto, p_fecha: hoy });
       if (e) console.error("telegram_resumen_secreto", e.message);
       else await responder(textoResumen((rs as { datos: DatosResumen }).datos));

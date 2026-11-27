@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -66,7 +68,6 @@ import {
   type LineaStock,
   type OrdenStock,
 } from "@/lib/stock-liviano";
-import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
@@ -277,7 +278,7 @@ export function InsumosClient({
   // las categorías de venta de Administración.
   const [categoriasInsumo, setCategoriasInsumo] = useState<CategoriaInsumo[]>([]);
   // Fecha de hoy (YYYY-MM-DD) para medir la frescura de cada precio.
-  const hoy = useMemo(() => hoyISO(), []);
+  const hoy = useJornadaHoy();
 
   useEffect(() => {
     let cancelled = false;

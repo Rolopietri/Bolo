@@ -12,7 +12,8 @@ export function pillClass(active: boolean): string {
   }`;
 }
 
-/** Fecha de hoy en ISO corto (YYYY-MM-DD), para inputs date y defaults. */
+/** Fecha de hoy en ISO corto (YYYY-MM-DD) en UTC. No usar para fechas de
+ *  negocio: esas van con jornadaHoy() / useJornadaHoy(). */
 export function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prueba local de supabase/cocina-jornada-cierre.sql y
-# cocina-jornada-horario.sql en una base descartable.
+# cocina-jornada-horario.sql y cocina-jornada-sincro.sql en una base descartable.
 # NO apunta a producción.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,6 +29,9 @@ do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then
     create role authenticated nologin;
   end if;
+  if not exists (select 1 from pg_roles where rolname = 'service_role') then
+    create role service_role nologin;
+  end if;
 end $$;
 
 create table public.cocina_config (
@@ -53,6 +56,7 @@ create table public.insumos (
   unidad_base text,
   stock_actual numeric default 0,
   stock_procesado numeric default 0,
+  merma_coccion_porc numeric,
   activo boolean default true
 );
 
@@ -68,7 +72,91 @@ create table public.procesamientos_abiertos (
   id uuid primary key default gen_random_uuid(),
   insumo_id uuid not null references public.insumos(id),
   crudo numeric not null,
+  responsable text,
   abierto_at timestamptz not null default now()
+);
+
+
+create table if not exists public.tasa_bcv (
+  fecha date primary key,
+  usd_bs numeric(20,4),
+  eur_bs numeric(20,4),
+  paralela_bs numeric(20,4),
+  fuente text,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.ventas (
+  id uuid primary key default gen_random_uuid(),
+  fecha date not null default current_date,
+  receta_nombre text,
+  cantidad numeric default 1,
+  total_usd numeric default 0
+);
+
+create table if not exists public.stock_movimientos (
+  id uuid primary key default gen_random_uuid(),
+  insumo_id uuid references public.insumos(id),
+  tipo text,
+  capa text,
+  cantidad numeric,
+  motivo text,
+  fecha date default current_date,
+  nota text,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.procesamientos (
+  id uuid primary key default gen_random_uuid(),
+  insumo_id uuid references public.insumos(id),
+  fecha date default current_date,
+  crudo numeric,
+  procesado numeric,
+  merma_porc numeric,
+  nota text,
+  responsable text,
+  origen text,
+  created_by uuid,
+  created_at timestamptz default now()
+);
+
+create table if not exists public.cocina_planes_produccion (
+  id uuid primary key default gen_random_uuid(),
+  receta_id uuid,
+  receta_nombre text,
+  raciones numeric,
+  raciones_consumidas numeric default 0,
+  fecha_objetivo date,
+  nota text,
+  estado text default 'pendiente',
+  cancelado_at timestamptz
+);
+create table if not exists public.cocina_plan_compromisos (
+  plan_id uuid references public.cocina_planes_produccion(id) on delete cascade,
+  insumo_id uuid references public.insumos(id),
+  cantidad numeric,
+  unidad_base text
+);
+alter table public.insumos add column if not exists stock_comprometido numeric default 0;
+
+create table if not exists public.produccion_pendientes (
+  id uuid primary key default gen_random_uuid(),
+  estado text,
+  remitente text,
+  resultado text,
+  texto text,
+  enviado_at timestamptz default now(),
+  foto_file_id text
+);
+create table if not exists public.avisos_inventario (
+  id uuid primary key default gen_random_uuid(),
+  estado text
+);
+create table if not exists public.produccion_telegram (
+  id integer primary key,
+  secreto text,
+  bot_token text,
+  resumen_chat_id bigint
 );
 
 insert into public.insumos (id, nombre, unidad_base, stock_actual, stock_procesado, activo) values
@@ -78,7 +166,9 @@ SQL
 
 "${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-cierre.sql"
 "${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-horario.sql"
+"${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-sincro.sql"
 "${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-cierre-pruebas.sql"
+"${PSQL[@]}" -d "$DB" -f "$ROOT/supabase/cocina-jornada-sincro-pruebas.sql"
 
 dropdb "$DB"
 echo "OK: pruebas de jornada de cocina en base local descartable."

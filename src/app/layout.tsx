@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AsistentePlataforma } from "./_AsistentePlataforma";
 import { AlertaCierreJornada } from "@/components/AlertaCierreJornada";
+import { JornadaProvider } from "@/components/JornadaProvider";
 
 export const metadata: Metadata = {
   title: "bolo",
@@ -38,9 +39,11 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col font-sans">
+        <JornadaProvider>
         {children}
         <AlertaCierreJornada />
         <AsistentePlataforma />
+        </JornadaProvider>
         <script
           dangerouslySetInnerHTML={{
             __html:

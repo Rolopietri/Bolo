@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ErrorCarga } from "@/components/ErrorCarga";
@@ -12,7 +14,7 @@ import {
   type CierreCaja,
 } from "@/lib/data/cierre-caja";
 import { totalesVentasPorDia } from "@/lib/data/ventas";
-import { compararCaja, etiquetaFecha, hoyCaracas, type ComparacionCaja } from "@/lib/cierre-caja";
+import { compararCaja, etiquetaFecha, type ComparacionCaja } from "@/lib/cierre-caja";
 import { fmtUsd } from "@/lib/moneda";
 
 type Fila = { cierre: CierreCaja; comp: ComparacionCaja | null };
@@ -24,7 +26,7 @@ export function CierreCajaAdmin() {
   const [aviso, setAviso] = useState<string | null>(null);
   const [avisoVentas, setAvisoVentas] = useState<string | null>(null);
   const [intento, setIntento] = useState(0);
-  const hoy = hoyCaracas();
+  const hoy = useJornadaHoy();
 
   useEffect(() => {
     let cancel = false;

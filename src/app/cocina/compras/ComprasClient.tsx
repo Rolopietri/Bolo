@@ -31,7 +31,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { CalendarIcon, CameraIcon, ChevronIcon, WarningIcon } from "@/components/icons";
 import { displayCantidad, opcionesCantidad, precioLegible } from "@/lib/units";
 import { CantidadUnidad, factorDe } from "@/components/CantidadUnidad";
-import { hoyISO } from "@/lib/ui";
+import { useJornadaHoy } from "@/components/JornadaProvider";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import {
@@ -61,6 +61,7 @@ type FormState = {
   insumoId: string;
   proveedorId: string;
   fecha: string;
+  fechaDocumento: string;
   /** Lo que se escribió, en la unidad `unidadEntrada`. Al guardar se pasa a
    *  unidades de compra (que es lo que guarda la compra). */
   cantidad: string;
@@ -83,10 +84,6 @@ type FormState = {
   /** true = la factura se paga después (cuenta por pagar). */
   pagarDespues: boolean;
 };
-
-function todayISO() {
-  return hoyISO();
-}
 
 /** Formatea una cantidad evitando artefactos de coma flotante (ej. 349.9999). */
 function fmtQty(n: number): string {
@@ -130,7 +127,8 @@ function modalidadesQueAcepta(p: Proveedor): ModalidadPago[] {
 const emptyForm: FormState = {
   insumoId: "",
   proveedorId: "",
-  fecha: todayISO(),
+  fecha: "",
+  fechaDocumento: "",
   cantidad: "1",
   unidadEntrada: "compra",
   modalidadPago: "divisa",
@@ -147,6 +145,7 @@ const emptyForm: FormState = {
 };
 
 export function ComprasClient() {
+  const hoy = useJornadaHoy();
   const [compras, setCompras] = useState<Compra[]>([]);
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -160,6 +159,9 @@ export function ComprasClient() {
   // Escáner de facturas (la forma principal de registrar compras).
   const [escaneando, setEscaneando] = useState(false);
   const [form, setForm] = useState<FormState>({ ...emptyForm });
+  if (!form.fecha && hoy) {
+    setForm((f) => (f.fecha ? f : { ...f, fecha: hoy }));
+  }
   const [pendienteBorrar, setPendienteBorrar] = useState<string | null>(null);
   const [alarmaStock, setAlarmaStock] = useState<AlarmaStock | null>(null);
   // Edición de una compra existente (null = alta nueva).
@@ -275,7 +277,7 @@ export function ComprasClient() {
 
   function resetForm() {
     editandoRef.current = null;
-    setForm({ ...emptyForm, fecha: todayISO() });
+    setForm({ ...emptyForm, fecha: hoy });
     setAdding(false);
     setEditingId(null);
     setCreandoProveedor(false);
@@ -335,6 +337,7 @@ export function ComprasClient() {
       insumoId: c.insumoId,
       proveedorId: c.proveedorId ?? "",
       fecha: c.fecha,
+      fechaDocumento: c.fechaDocumento ?? "",
       cantidad: String(c.cantidad),
       unidadEntrada: "compra",
       modalidadPago: c.modalidadPago ?? "divisa",
@@ -383,7 +386,7 @@ export function ComprasClient() {
         setCompras((prev) =>
           prev.map((c) =>
             set.has(c.id)
-              ? { ...c, pagada, fechaPago: pagada ? todayISO() : undefined }
+              ? { ...c, pagada, fechaPago: pagada ? hoy : undefined }
               : c,
           ),
         );
@@ -392,7 +395,7 @@ export function ComprasClient() {
         setCompras((prev) =>
           prev.map((c) =>
             c.id === id
-              ? { ...c, pagada, fechaPago: pagada ? todayISO() : undefined }
+              ? { ...c, pagada, fechaPago: pagada ? hoy : undefined }
               : c,
           ),
         );
@@ -524,7 +527,7 @@ export function ComprasClient() {
     }
     const dias = Math.round(
       (new Date(`${form.fecha}T12:00:00`).getTime() -
-        new Date(`${hoyISO()}T12:00:00`).getTime()) /
+        new Date(`${hoy}T12:00:00`).getTime()) /
         86400000,
     );
     if (dias > 0) out.push(`La fecha es futura (${fmtFecha(form.fecha)}).`);
@@ -725,6 +728,7 @@ export function ComprasClient() {
       insumoId: form.insumoId,
       proveedorId: form.proveedorId || undefined,
       fecha: form.fecha,
+      fechaDocumento: form.fechaDocumento.trim() || null,
       // La compra guarda unidades de compra; se convierte desde lo escrito.
       cantidad: Math.round(cantidadEnCompra * 1e6) / 1e6,
       precioTotalUsd: precioUsd,
@@ -849,7 +853,7 @@ export function ComprasClient() {
     setProveedorAuto(false);
     setForm({
       ...emptyForm,
-      fecha: todayISO(),
+      fecha: hoy,
       tasaBcvUsada: tasa ? String(tasa.usdBs) : "",
     });
     setAdding(true);
@@ -1064,12 +1068,22 @@ export function ComprasClient() {
           </div>
 
           <label className="text-sm text-cacao block">
-            Fecha
+            Fecha de registro
             <input
               type="date"
               required
               value={form.fecha}
               onChange={(e) => setForm({ ...form, fecha: e.target.value })}
+              className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
+            />
+            <span className="mt-1 block text-xs text-cacao-mute">Es la fecha de la jornada, no la impresa en la factura.</span>
+          </label>
+          <label className="text-sm text-cacao block">
+            Fecha de la factura
+            <input
+              type="date"
+              value={form.fechaDocumento}
+              onChange={(e) => setForm({ ...form, fechaDocumento: e.target.value })}
               className="mt-1 w-full rounded-lg ring-1 ring-marfil px-3 py-2"
             />
           </label>

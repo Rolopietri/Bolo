@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { CheckIcon, WarningIcon } from "@/components/icons";
@@ -19,7 +21,6 @@ import {
   type ResumenReposicion,
 } from "@/lib/reposicion";
 import { displayCantidad } from "@/lib/units";
-import { hoyISO } from "@/lib/ui";
 
 type Decision = {
   pedir: boolean;
@@ -44,6 +45,7 @@ function dinero(n: number): string {
 }
 
 export function ReposicionClient({ onVerRaciones }: { onVerRaciones: () => void }) {
+  const hoy = useJornadaHoy();
   const [resumen, setResumen] = useState<ResumenReposicion | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -207,6 +209,7 @@ function Editor({
   sinMinimo: number;
   onHecho: (mensaje: string, referencia: string) => void;
 }) {
+  const hoy = useJornadaHoy();
   const [decisiones, setDecisiones] = useState(() => decisionesIniciales(lineas));
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -270,7 +273,7 @@ function Editor({
       precioUnitarioUsd: a.precio ?? 0,
     }));
     const referencia = referenciaPedido();
-    const prep = prepararComprasReposicion(borrador, { fecha: hoyISO(), numeroFactura: referencia });
+    const prep = prepararComprasReposicion(borrador, { fecha: hoy, numeroFactura: referencia });
     if (prep.error) {
       setError(prep.error);
       return;

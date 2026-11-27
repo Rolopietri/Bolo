@@ -67,7 +67,7 @@ export function esFaltaTablaJornada(e: unknown): boolean {
     code === "42P01" ||
     code === "PGRST202" ||
     code === "PGRST205" ||
-    /cocina_tablero_en_uso|cocina_jornadas|cocina_jornada_revisar|cocina_jornada_posponer|cocina_jornada_estado|jornada_actual|jornada_de|jornada_fecha|schema cache/i.test(msg)
+    /cocina_tablero_en_uso|cocina_jornadas|cocina_jornada_revisar|cocina_jornada_posponer|cocina_jornada_estado|cocina_jornada_fijar_tasa_propia|jornada_actual|jornada_de|jornada_fecha|tasa_jornada|schema cache/i.test(msg)
   );
 }
 
@@ -99,6 +99,10 @@ export type EstadoJornadaCocina = {
   debeCerrar: boolean;
   /** Jornada que esta llamada acaba de cerrar en automático, si hubo. */
   cerroJornadaId: string | null;
+  tasaTipo: "usd_bs" | "eur_bs" | "propia" | null;
+  tasaValor: number | null;
+  tasaFecha: string | null;
+  tasaPredeterminada: "usd_bs" | "eur_bs" | null;
 };
 
 type EstadoRow = {
@@ -115,6 +119,10 @@ type EstadoRow = {
   mostrar_alerta?: boolean | null;
   debe_cerrar?: boolean | null;
   cerro_jornada_id?: string | null;
+  tasa_tipo?: string | null;
+  tasa_valor?: number | string | null;
+  tasa_fecha?: string | null;
+  tasa_predeterminada?: string | null;
 };
 
 function deEstado(r: EstadoRow | null | undefined): EstadoJornadaCocina {
@@ -133,7 +141,20 @@ function deEstado(r: EstadoRow | null | undefined): EstadoJornadaCocina {
     mostrarAlerta: !!row.mostrar_alerta,
     debeCerrar: !!row.debe_cerrar,
     cerroJornadaId: row.cerro_jornada_id ?? null,
+    tasaTipo: asTasaTipo(row.tasa_tipo),
+    tasaValor: row.tasa_valor == null || row.tasa_valor === "" ? null : num(row.tasa_valor) || null,
+    tasaFecha: row.tasa_fecha ?? null,
+    tasaPredeterminada: asTasaPred(row.tasa_predeterminada),
   };
+}
+
+function asTasaTipo(v: string | null | undefined): EstadoJornadaCocina["tasaTipo"] {
+  if (v === "usd_bs" || v === "eur_bs" || v === "propia") return v;
+  return null;
+}
+function asTasaPred(v: string | null | undefined): EstadoJornadaCocina["tasaPredeterminada"] {
+  if (v === "usd_bs" || v === "eur_bs") return v;
+  return null;
 }
 
 /** Revisa si toca el cierre automático y devuelve el estado de la jornada
@@ -176,4 +197,100 @@ export async function posponerCierreJornada(): Promise<ResultadoPosponer> {
     posposiciones: num(r.posposiciones),
     limiteEfectivo: r.limite_efectivo ?? null,
   };
+}
+
+
+/** YYYY-MM-DD civil en America/Caracas, solo como respaldo si falta la migración. */
+export function fechaCivilCaracas(ahora = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Caracas",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(ahora);
+}
+
+/** Fecha de negocio de la jornada abierta. Si la migración no está, cae al día civil de Caracas. */
+export async function jornadaHoy(): Promise<string> {
+  try {
+    const e = await revisarJornadaCocina();
+    if (e?.fecha) return String(e.fecha).slice(0, 10);
+  } catch {
+    /* sin sesión o sin migración */
+  }
+  return fechaCivilCaracas();
+}
+
+export type TasaJornada = {
+  jornadaId: string | null;
+  fecha: string | null;
+  tipo: "usd_bs" | "eur_bs" | "propia" | null;
+  valor: number | null;
+  tasaFecha: string | null;
+};
+
+export async function tasaJornada(): Promise<TasaJornada | null> {
+  try {
+    const e = await revisarJornadaCocina();
+    if (!e) return null;
+    return {
+      jornadaId: e.jornadaId,
+      fecha: e.fecha,
+      tipo: e.tasaTipo,
+      valor: e.tasaValor,
+      tasaFecha: e.tasaFecha,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Tasa guardada de la jornada de esa fecha de negocio (o la BCV oficial si no hay). */
+export async function getTasaJornadaPorFecha(fecha: string): Promise<TasaJornada | null> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("tasa_jornada_de_fecha", { p_fecha: fecha });
+  if (error) {
+    if (esFaltaTablaJornada(error)) return null;
+    throw error;
+  }
+  const row = (Array.isArray(data) ? data[0] : data) as {
+    jornada_id?: string | null;
+    fecha?: string | null;
+    tasa_tipo?: string | null;
+    tasa_valor?: number | string | null;
+    tasa_fecha?: string | null;
+  } | null;
+  if (!row) return null;
+  const valor = row.tasa_valor == null || row.tasa_valor === "" ? null : Number(row.tasa_valor);
+  return {
+    jornadaId: row.jornada_id ?? null,
+    fecha: row.fecha ?? fecha,
+    tipo: asTasaTipo(row.tasa_tipo),
+    valor: valor != null && Number.isFinite(valor) && valor > 0 ? valor : null,
+    tasaFecha: row.tasa_fecha ?? null,
+  };
+}
+
+export async function fijarTasaPropia(valor: number): Promise<{ ok: boolean; error?: string }> {
+  const sb = createSupabaseBrowserClient();
+  const { data, error } = await sb.rpc("cocina_jornada_fijar_tasa_propia", { p_valor: valor });
+  if (error) {
+    if (esFaltaTablaJornada(error)) return { ok: false, error: "sin_migracion" };
+    throw error;
+  }
+  const r = (data ?? {}) as { ok?: boolean; error?: string };
+  return { ok: !!r.ok, error: r.error };
+}
+
+/** Pide que se envíe el resumen de Telegram de las jornadas cerradas pendientes. */
+export async function pedirResumenJornadaPendiente(jornadaId?: string | null): Promise<void> {
+  try {
+    await fetch("/api/cron/resumen-produccion", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(jornadaId ? { jornadaId } : { pendientes: true }),
+    });
+  } catch {
+    /* el cron de repesca lo intenta después */
+  }
 }

@@ -1,10 +1,12 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { extractError } from "@/lib/data/error";
-import { getTasaBcvPorFecha } from "@/lib/data/cocina";
+import { getTasaJornadaPorFecha } from "@/lib/data/jornada-cocina";
 import { totalesVentasPorDia } from "@/lib/data/ventas";
 import {
   AVISO_MIGRACION_CIERRE,
@@ -19,7 +21,6 @@ import {
   etiquetaFecha,
   etiquetaMetodo,
   formatoMonto,
-  hoyCaracas,
   monedaCanon,
   parseMonto,
   type LineaMonto,
@@ -82,8 +83,10 @@ function leerBorrador(montos: Montos, otroMonto: string, otroMoneda: MonedaCaja,
 }
 
 export function CierreCajaPantalla({ fechaInicial }: { fechaInicial: string | null }) {
+  const hoy = useJornadaHoy();
   const valida = fechaInicial && /^\d{4}-\d{2}-\d{2}$/.test(fechaInicial) ? fechaInicial : null;
-  const [fecha, setFecha] = useState(() => valida ?? hoyCaracas());
+  const [fecha, setFecha] = useState(() => valida ?? hoy);
+  if (!valida && fecha !== hoy) setFecha(hoy);
   return <CierreCajaForm fecha={fecha} onFecha={setFecha} mostrarFecha />;
 }
 
@@ -99,6 +102,7 @@ export function CierreCajaForm({
   /** Sube cuando cambian las ventas del día, para refrescar la comparación. */
   revision?: number;
 }) {
+  const hoyJornada = useJornadaHoy();
   const [montos, setMontos] = useState<Montos>(VACIOS);
   const [otroMonto, setOtroMonto] = useState("");
   const [otroMoneda, setOtroMoneda] = useState<MonedaCaja>("Bs");
@@ -138,7 +142,7 @@ export function CierreCajaForm({
     (async () => {
       const [cierreR, tasaR, ventasR] = await Promise.allSettled([
         leerCierre(fecha),
-        getTasaBcvPorFecha(fecha),
+        getTasaJornadaPorFecha(fecha),
         totalesVentasPorDia(fecha, fecha),
       ]);
       if (cancel) return;
@@ -152,8 +156,8 @@ export function CierreCajaForm({
         setError(mensajeError(cierreR.reason, "No se pudo leer el cierre"));
       }
 
-      if (tasaR.status === "fulfilled" && tasaR.value && tasaR.value.usdBs > 0) {
-        setTasaHoy({ usdBs: tasaR.value.usdBs, fecha: tasaR.value.fecha });
+      if (tasaR.status === "fulfilled" && tasaR.value && (tasaR.value.valor ?? 0) > 0) {
+        setTasaHoy({ usdBs: tasaR.value.valor as number, fecha: String(tasaR.value.tasaFecha ?? tasaR.value.fecha ?? fecha).slice(0, 10) });
       } else {
         setTasaHoy(null);
       }
@@ -283,7 +287,7 @@ export function CierreCajaForm({
     fn();
   }
 
-  const hoy = hoyCaracas();
+  const hoy = hoyJornada;
 
   return (
     <section id="cierre-caja" className="rounded-2xl bg-white ring-1 ring-marfil p-5 space-y-4">

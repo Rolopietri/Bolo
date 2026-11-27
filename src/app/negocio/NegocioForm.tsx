@@ -23,6 +23,7 @@ export function NegocioForm() {
   const [cierre, setCierre] = useState("");
   const [nota, setNota] = useState("");
   const [zona, setZona] = useState("America/Caracas");
+  const [tasaPred, setTasaPred] = useState<"usd_bs" | "eur_bs">("usd_bs");
 
   useEffect(() => {
     let cancel = false;
@@ -35,6 +36,7 @@ export function NegocioForm() {
         setCierre(h.horaCierreMaxima ?? "");
         setNota(h.jornadaHorarioNota ?? "");
         setZona(h.zonaHoraria);
+        setTasaPred(h.tasaPredeterminada ?? "usd_bs");
         setDisponible(h.horarioDisponible);
       } catch (e) {
         if (cancel) return;
@@ -78,6 +80,7 @@ export function NegocioForm() {
         horaAperturaHabitual: hA,
         horaCierreMaxima: hC,
         jornadaHorarioNota: nota,
+        tasaPredeterminada: tasaPred,
       });
       setOk(true);
     } catch (e) {
@@ -168,6 +171,36 @@ export function NegocioForm() {
         />
         <p className="mt-1 text-xs text-cacao-mute">{nota.trim().length}/500</p>
       </div>
+
+      <div>
+        <p className="block text-sm font-medium text-cacao">Tasa predeterminada de la jornada</p>
+        <p className="mt-1 text-sm text-cacao-soft">
+          Cada jornada toma sola esta tasa oficial del BCV al abrir y la deja fija, aunque el banco publique otra a media jornada. Si en un turno quieren otra, se escribe al iniciar o desde el aviso de la tasa.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-3">
+          <label className="flex items-center gap-2 text-sm text-cacao">
+            <input
+              type="radio"
+              name="tasa-predeterminada"
+              checked={tasaPred === "usd_bs"}
+              onChange={() => setTasaPred("usd_bs")}
+              disabled={!disponible}
+            />
+            Dólar BCV
+          </label>
+          <label className="flex items-center gap-2 text-sm text-cacao">
+            <input
+              type="radio"
+              name="tasa-predeterminada"
+              checked={tasaPred === "eur_bs"}
+              onChange={() => setTasaPred("eur_bs")}
+              disabled={!disponible}
+            />
+            Euro BCV
+          </label>
+        </div>
+      </div>
+
       {error && (
         <p className="rounded-lg bg-[#F9EBE7] ring-1 ring-[#E8C5BC] p-3 text-sm text-[#7A2419]">{error}</p>
       )}

@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy, useFechaJornadaDefault } from "@/components/JornadaProvider";
+
 import { useEffect, useMemo, useState } from "react";
 import type {
   Receta,
@@ -34,7 +36,6 @@ import {
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { normalizarBusqueda } from "@/lib/text";
 import { CalendarIcon, ChevronIcon, WarningIcon } from "@/components/icons";
-import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { extractError } from "@/lib/data/error";
 import { ErrorCarga } from "@/components/ErrorCarga";
@@ -80,13 +81,10 @@ function nuevoBatchId() {
   return crypto.randomUUID();
 }
 
-function todayISO() {
-  return hoyISO();
-}
-
 type Tab = "registrar" | "importar" | "clasificacion" | "historial";
 
 export function VentasClient() {
+  const hoy = useJornadaHoy();
   const [tab, setTab] = useState<Tab>("registrar");
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [ventas, setVentas] = useState<Venta[]>([]);
@@ -125,11 +123,11 @@ export function VentasClient() {
   });
 
   // Registro manual por plato
-  const [mFecha, setMFecha] = useState(todayISO());
+  const [mFecha, setMFecha] = useFechaJornadaDefault();
   const [revVentas, setRevVentas] = useState(0);
 
   // Importar
-  const [iFecha, setIFecha] = useState(todayISO());
+  const [iFecha, setIFecha] = useFechaJornadaDefault();
   // Fecha detectada en el nombre del archivo de Xetux (para avisarle al usuario).
   const [fechaDeArchivo, setFechaDeArchivo] = useState<string | null>(null);
   const [csvText, setCsvText] = useState("");

@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Producción: el cocinero registra, por insumo, cuánto tomó y cuánto le quedó
 // útil (a mano en la app, escaneando la plantilla impresa o desde los mensajes
 // del grupo de Telegram, siempre aprobando lo leído). Abajo se compara la merma real con la de la ficha y lo producido con
@@ -85,7 +87,7 @@ function Pill({ meta }: { meta: { label: string; cls: string; dot: string } }) {
 }
 
 export function ProduccionClient() {
-  const hoy = useMemo(() => fechaISOEnCaracas(), []);
+  const hoy = useJornadaHoy();
   const [insumos, setInsumos] = useState<Insumo[]>([]);
   const [cargando, setCargando] = useState(true);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);

@@ -1,5 +1,7 @@
 "use client";
 
+import { useJornadaHoy } from "@/components/JornadaProvider";
+
 // Dashboard "Análisis de Ventas". Usa exactamente los mismos datos que el
 // reporte detallado (tabla `ventas`, es_merma=false). No crea datos paralelos:
 // carga las ventas del rango + las recetas (para la categoría) y agrega todo en
@@ -10,13 +12,11 @@ import { Plegable } from "@/components/Plegable";
 import type { Venta, Receta, Insumo } from "@/lib/types";
 import { categoriaRecetaLabel, categoriaInsumoLabel } from "@/lib/types";
 import { listVentasRango, normPos } from "@/lib/data/ventas";
-import { hoyCaracas } from "@/lib/cierre-caja";
 import { montoVenta } from "@/lib/semana";
 import { listRecetas, setRecetaCategoria, calcularCostoReceta } from "@/lib/data/recetas";
 import { listInsumos, setInsumoCategoria } from "@/lib/data/cocina";
 import { listCategoriasProducto, createCategoriaProducto, renameCategoriaProducto, deleteCategoriaProducto, setCategoriaExcluirRanking, type CategoriaProducto } from "@/lib/data/categorias";
 import { listCategoriasPorNombre, setCategoriaPorNombre } from "@/lib/data/categoriasNombre";
-import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import {
   BarrasH,
@@ -64,8 +64,7 @@ function restarDiasISO(iso: string, dias: number): string {
 
 // Rango de fechas para cada preset, en el calendario de Caracas.
 // "semana" son los últimos 7 días (hoy incluido), no la semana lunes-domingo.
-function rangoDePreset(preset: Preset): { desde: string; hasta: string } {
-  const hoy = hoyCaracas();
+function rangoDePreset(preset: Preset, hoy: string): { desde: string; hasta: string } {
   if (preset === "dia") return { desde: hoy, hasta: hoy };
   if (preset === "semana") return { desde: restarDiasISO(hoy, 6), hasta: hoy };
   return { desde: `${hoy.slice(0, 8)}01`, hasta: hoy };
@@ -166,8 +165,9 @@ function grupoDeCategoria(catLabel: string): { key: string; label: string } {
 type OrdenTabla = "monto" | "unidades" | "pct";
 
 export function AnalisisVentas() {
+  const hoy = useJornadaHoy();
   const [preset, setPreset] = useState<Preset>("mes");
-  const inicial = rangoDePreset("mes");
+  const inicial = rangoDePreset("mes", hoy);
   const [desde, setDesde] = useState(inicial.desde);
   const [hasta, setHasta] = useState(inicial.hasta);
   const [filtroCat, setFiltroCat] = useState<string>("all");
@@ -657,7 +657,7 @@ export function AnalisisVentas() {
 
   function limpiarFiltros() {
     setPreset("mes");
-    const r = rangoDePreset("mes");
+    const r = rangoDePreset("mes", hoy);
     setDesde(r.desde);
     setHasta(r.hasta);
     setFiltroCat("all");
@@ -669,7 +669,7 @@ export function AnalisisVentas() {
   function aplicarPreset(p: Preset) {
     setPreset(p);
     if (p !== "rango") {
-      const r = rangoDePreset(p);
+      const r = rangoDePreset(p, hoy);
       setDesde(r.desde);
       setHasta(r.hasta);
     }
@@ -855,7 +855,7 @@ export function AnalisisVentas() {
                 type="date"
                 value={hasta}
                 min={desde}
-                max={hoyISO()}
+                max={hoy}
                 onChange={(e) => {
                   setPreset("rango");
                   setHasta(e.target.value);

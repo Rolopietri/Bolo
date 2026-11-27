@@ -1,6 +1,7 @@
 "use client";
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { pedirResumenJornadaPendiente } from "@/lib/data/jornada-cocina";
 import { extractError } from "@/lib/data/error";
 import {
   monedaCanon,
@@ -185,6 +186,7 @@ export async function guardarCierre(input: GuardarCierreInput): Promise<CierreCa
       .single();
     if (error) throw error;
     id = (data as { id: string }).id;
+    void pedirResumenJornadaPendiente();
   }
 
   if (lineas.length > 0) {

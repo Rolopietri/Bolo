@@ -1,5 +1,7 @@
 "use client";
 
+import { useFechaJornadaDefault } from "@/components/JornadaProvider";
+
 import { useMemo, useState } from "react";
 import {
   MOTIVOS_MERMA_PRODUCCION,
@@ -10,7 +12,6 @@ import {
 import { registrarMerma } from "@/lib/data/ventas";
 import { calcularCostoReceta } from "@/lib/data/recetas";
 import { extractError } from "@/lib/data/error";
-import { hoyISO } from "@/lib/ui";
 import { ErrorBanner } from "@/components/ErrorBanner";
 
 /**
@@ -36,7 +37,7 @@ export function MermaRecetaDialog({
   const [unidad, setUnidad] = useState<"raciones" | "gramos">("raciones");
   const [gramos, setGramos] = useState("");
   const [motivo, setMotivo] = useState<string>(MOTIVOS_MERMA_PRODUCCION[0]);
-  const [fecha, setFecha] = useState(hoyISO());
+  const [fecha, setFecha] = useFechaJornadaDefault();
   const [nota, setNota] = useState("");
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
