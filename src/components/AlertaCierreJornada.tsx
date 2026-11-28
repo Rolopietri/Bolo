@@ -39,7 +39,9 @@ export function AlertaCierreJornada() {
     }
   }, [estadoCtx]);
 
-  async function recordar() {
+  async function recordar(ev?: { preventDefault(): void; stopPropagation(): void }) {
+    ev?.preventDefault();
+    ev?.stopPropagation();
     setPendiente(true);
     setError(null);
     try {
@@ -85,7 +87,7 @@ export function AlertaCierreJornada() {
   const hora = horaLocal(estado?.limiteEfectivo ?? null);
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-14 z-40 flex justify-center px-4">
+    <div className="pointer-events-none fixed inset-x-0 top-16 z-20 flex justify-center px-4">
       <div
         role={mostrarAlerta ? "alertdialog" : "status"}
         aria-labelledby="alerta-cierre-jornada-titulo"
@@ -121,7 +123,7 @@ export function AlertaCierreJornada() {
               <button
                 type="button"
                 disabled={pendiente || !estado?.puedePosponer}
-                onClick={recordar}
+                onClick={(ev) => void recordar(ev)}
                 className="rounded-lg px-4 py-2 text-sm font-medium text-cacao ring-1 ring-marfil hover:bg-marfil-light disabled:opacity-50"
               >
                 Recordar en 1 hora

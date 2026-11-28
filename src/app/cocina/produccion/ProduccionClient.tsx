@@ -570,20 +570,41 @@ export function ProduccionClient() {
         </p>
       )}
 
-      {/* ── Mensajes de texto de antes del cambio a registro directo ── */}
+      {/* ── Textos que no se registraron solos (fallo, o anteriores al cambio) ── */}
       {pendientesTexto.length > 0 && (
-        <section aria-label="Mensajes anteriores" className="space-y-2 border-y border-marfil py-3">
+        <section aria-label="Mensajes pendientes del grupo" className="space-y-2 border-y border-marfil py-3">
           <p className="text-sm text-cacao">
-            {pendientesTexto.length === 1 ? "Queda 1 mensaje" : `Quedan ${pendientesTexto.length} mensajes`} del grupo de
-            antes del cambio. Ahora el grupo se registra solo, sin aprobación.
+            {pendientesTexto.length === 1 ? "Queda 1 mensaje" : `Quedan ${pendientesTexto.length} mensajes`} del grupo
+            que no se {pendientesTexto.length === 1 ? "registró" : "registraron"} solo
+            {pendientesTexto.length === 1 ? "" : "s"}. Puedes descartarlo o intentar registrarlo otra vez.
           </p>
+          <ul className="divide-y divide-marfil border-y border-marfil">
+            {pendientesTexto.map((p) => (
+              <li key={p.id} className="flex items-center gap-3 py-2.5">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-cacao">{p.texto || "Mensaje sin texto"}</span>
+                  <span className="block text-xs text-cacao-soft">
+                    {p.remitente ?? "Sin nombre"} · {horaCorta(p.enviadoAt)}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void descartarGrupo([p])}
+                  disabled={aplicando}
+                  className="min-h-10 shrink-0 rounded-lg px-3 text-sm text-cacao-soft ring-1 ring-marfil hover:bg-marfil-soft hover:text-terracotta disabled:opacity-50"
+                >
+                  Descartar
+                </button>
+              </li>
+            ))}
+          </ul>
           <button
             type="button"
             onClick={() => void aplicarAnteriores()}
             disabled={aplicando || insumos.length === 0}
             className="min-h-10 rounded-lg bg-terracotta px-4 text-sm font-semibold text-white hover:bg-terracotta-deep disabled:opacity-60"
           >
-            {aplicando ? "Aplicando…" : "Aplicarlos ahora"}
+            {aplicando ? "Aplicando…" : "Registrarlos ahora"}
           </button>
         </section>
       )}

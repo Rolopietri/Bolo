@@ -81,26 +81,26 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
     );
   }
 
-  // Aviso de arriba, tipo casillas de tabla: "lo usual" vs "lo que está
-  // pasando" (resaltado), en gramos además del %. Usa la última producción
-  // (puntual) o el promedio de las últimas (deriva).
-  const alerta = evaluacion?.puntual ?? evaluacion?.deriva ?? null;
+  // Aviso de arriba: siempre el último lote frente al estándar (en gramos y %).
+  // Si además hay deriva, se menciona el promedio de las últimas N.
+  const ultimo = procs[0];
   const comparacion =
-    alerta && estandar != null
+    estandar != null && ultimo
       ? (() => {
-          const considerados = procs.slice(0, alerta.n);
-          const prom = (f: (p: Procesamiento) => number) =>
-            considerados.reduce((s, p) => s + f(p), 0) / considerados.length;
-          const crudoProm = prom((p) => p.crudo);
-          const perdidoReal = prom((p) => Math.max(0, p.crudo - p.procesado));
-          const perdidoNormal = (crudoProm * estandar) / 100;
+          const perdidoReal = Math.max(0, ultimo.crudo - ultimo.procesado);
+          const perdidoNormal = (ultimo.crudo * estandar) / 100;
+          const puntual = evaluacion?.puntual;
+          const deriva = evaluacion?.deriva;
           return {
-            n: alerta.n,
-            malo: alerta.sentido === "alta",
-            actualPorc: alerta.valor,
+            malo: puntual?.sentido === "alta",
+            mejor: puntual?.sentido === "baja",
+            alerta: !!(puntual || deriva),
+            actualPorc: ultimo.mermaPorc,
             perdidoReal,
             perdidoNormal,
             diferencia: Math.abs(perdidoReal - perdidoNormal),
+            promedioN: deriva?.n ?? 0,
+            promedioPorc: deriva?.valor ?? null,
           };
         })()
       : null;
@@ -122,7 +122,7 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
             </div>
             <div className="py-3">
               <div className="text-[10px] uppercase tracking-widest text-cacao-mute">
-                {comparacion.n === 1 ? "Esta vez" : `Últimas ${comparacion.n}`}
+                Último lote
               </div>
               <div
                 className={`mt-1 font-cinzel text-lg tabular-nums ${
@@ -144,24 +144,31 @@ export function ProcesamientosClient({ insumo }: { insumo: Insumo }) {
             {comparacion.diferencia > 0 ? (
               <>
                 Son{" "}
-                <b className={comparacion.malo ? "text-[#7A2419]" : "text-oliva"}>
+                <b className={comparacion.malo ? "text-[#7A2419]" : comparacion.mejor ? "text-oliva" : "text-cacao"}>
                   {displayCantidad(comparacion.diferencia, u)}
                 </b>{" "}
-                de {comparacion.malo ? "más" : "menos"} de lo usual.{" "}
+                de {comparacion.perdidoReal > comparacion.perdidoNormal ? "más" : "menos"} de lo usual.{" "}
               </>
             ) : null}
-            {comparacion.malo ? (
+            {comparacion.promedioN > 1 && comparacion.promedioPorc != null ? (
+              <>
+                El promedio de las últimas {comparacion.promedioN} fue {fmtPorc(comparacion.promedioPorc)}.{" "}
+              </>
+            ) : null}
+            {comparacion.alerta && comparacion.malo ? (
               <Link
                 href="/cocina/produccion"
                 className="text-[#7A2419] underline decoration-dotted underline-offset-2 hover:decoration-solid"
                 title="Ir a Producción para revisar la merma y ver si conviene ajustar"
               >
-                El proceso viene con más merma de lo normal; conviene
+                El último lote viene con más merma de lo normal; conviene
                 revisarlo.
               </Link>
-            ) : (
+            ) : comparacion.alerta && comparacion.mejor ? (
               "Rindió mejor de lo esperado."
-            )}
+            ) : !comparacion.alerta ? (
+              "La merma de este lote está dentro de lo usual."
+            ) : null}
           </p>
         </div>
       ) : null}

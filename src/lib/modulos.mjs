@@ -20,7 +20,7 @@
  */
 export const MODULOS = [
   { id: "cocina", href: "/cocina", title: "Cocina", desc: "Insumos, recetas y compras." },
-  { id: "administracion", href: "/administracion", title: "Administración", desc: "Cuentas y dinero." },
+  { id: "administracion", href: "/administracion", title: "Administración", desc: "Semana, cuentas y dinero." },
   { id: "marketplace", href: "/marketplace", title: "Mercado", desc: "Proveedores, equipos y reventa." },
   { id: "tareas", href: "/tareas", title: "Tareas", desc: "Lo que hay que hacer." },
   { id: "eventos", href: "/eventos", title: "Eventos", desc: "Próximos eventos." },

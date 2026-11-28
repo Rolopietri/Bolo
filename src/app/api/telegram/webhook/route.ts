@@ -31,6 +31,7 @@ import {
   type ResultadoBot,
 } from "@/lib/telegram-acciones";
 import { textoResumen, type DatosResumen } from "@/lib/telegram-resumen";
+import { respuestaStockNegativo } from "@/lib/stock-compra";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -299,7 +300,20 @@ async function aplicarMensaje(sb: SupabaseClient, secreto: string, r: Recibido, 
     });
     if (e2) {
       console.error("telegram_aplicar", e2.message);
-      await responder("No pude registrar este mensaje por un error de Bolo. Inténtalo de nuevo en un momento.");
+      if (r.id) {
+        await sb.rpc("telegram_marcar", {
+          p_secreto: secreto,
+          p_pendiente: r.id,
+          p_estado: "rechazado",
+          p_resultado: { error: e2.message },
+        });
+      }
+      await responder(
+        respuestaStockNegativo(
+          e2.message,
+          "No pude registrar este mensaje por un error de Bolo. Inténtalo de nuevo en un momento.",
+        ),
+      );
       return;
     }
     resultados = (res ?? []) as ResultadoBot[];
@@ -374,7 +388,18 @@ async function completarCantidad(
   });
   if (error) {
     console.error("telegram_aplicar", error.message);
-    await responder("No pude registrar la cantidad por un error de Bolo. Inténtalo de nuevo en un momento.");
+    await sb.rpc("telegram_marcar", {
+      p_secreto: secreto,
+      p_pendiente: r.id,
+      p_estado: "rechazado",
+      p_resultado: { error: error.message },
+    });
+    await responder(
+      respuestaStockNegativo(
+        error.message,
+        "No pude registrar la cantidad por un error de Bolo. Inténtalo de nuevo en un momento.",
+      ),
+    );
     return true;
   }
   const resultados = (res ?? []) as ResultadoBot[];
