@@ -15,6 +15,7 @@
     "test:reposicion": "node --no-warnings scripts/check-reposicion.mjs",
     "test:stock": "node --no-warnings --import ./scripts/alias-loader.mjs scripts/check-stock-liviano.mjs",
     "test:plan": "node --no-warnings scripts/check-plan-demanda.mjs",
+    "test:tablero": "node --no-warnings --import ./scripts/alias-loader.mjs scripts/check-tablero-en-uso.mjs",
     "test:merma": "node --no-warnings --import ./scripts/alias-loader.mjs scripts/check-merma-alertas.mjs",
     "test:semana": "node --no-warnings --import ./scripts/alias-loader.mjs scripts/check-semana.mjs",
     "test:gastos": "node --no-warnings scripts/check-gastos.mjs",
