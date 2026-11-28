@@ -19,9 +19,14 @@ export default function ProduccionPage() {
               Cuánto entra sin procesar, cuánto queda procesado y cuánto se desecha.
             </p>
           </div>
-          <Link href="/cocina" className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao">
-            ← Cocina
-          </Link>
+          <div className="flex items-center gap-5">
+            <Link href="/cocina/produccion/en-uso" className="text-xs font-bold uppercase tracking-widest text-cacao hover:text-terracotta-deep">
+              En uso →
+            </Link>
+            <Link href="/cocina" className="text-xs uppercase tracking-widest text-cacao-soft hover:text-cacao">
+              ← Cocina
+            </Link>
+          </div>
         </section>
         <ProduccionClient />
       </main>
