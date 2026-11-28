@@ -5,13 +5,16 @@
 // Cada aro lleva solo nombre y cantidad. El trazo se parte en dos tonos:
 // verde oscuro = viene de la jornada anterior, turquesa = habilitado en esta.
 // Datos reales: cocina_tablero_en_uso() + la categoría de compra del insumo
-// (la misma agrupación que Inventario).
+// (la misma agrupación que Inventario). «Subrecetas» y «Desde Producción»
+// solo si hay recetas con es_subreceta y saldo en uso. se_procesa no cuenta.
+// Hoy las recetas no traen stock, así que ese grupo no sale.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ErrorCarga } from "@/components/ErrorCarga";
 import { listInsumos } from "@/lib/data/cocina";
 import { listTableroEnUso } from "@/lib/data/jornada-cocina";
 import { extractError } from "@/lib/data/error";
+import { listRecetas } from "@/lib/data/recetas";
 import {
   armarItemsEnUso,
   categoriasEnUso,
@@ -118,7 +121,7 @@ function Flecha({ color }: { color: string }) {
   );
 }
 
-/** Dos caminos hacia En uso: las subrecetas bajan de Producción y lo demás entra directo del Almacén. */
+/** Dos caminos hacia En uso. «Desde Producción» solo si hay subrecetas reales en uso; lo demás entra del Almacén. */
 function Flujo({ conSub, conDirecto }: { conSub: boolean; conDirecto: boolean }) {
   if (!conSub && !conDirecto) return null;
   return (
@@ -220,13 +223,18 @@ export function EnUsoClient() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
-      const [filas, insumos] = await Promise.all([listTableroEnUso(), listInsumos()]);
+      const [filas, insumos, recetas] = await Promise.all([
+        listTableroEnUso(),
+        listInsumos(),
+        listRecetas(),
+      ]);
       if (filas === null) {
         setSinMigracion(true);
         setItems([]);
       } else {
         setSinMigracion(false);
-        setItems(armarItemsEnUso(filas, insumos));
+        // Las recetas no tienen saldo: sin cantidadEnUso ninguna entra como subreceta.
+        setItems(armarItemsEnUso(filas, insumos, recetas));
       }
       setError(null);
     } catch (e) {

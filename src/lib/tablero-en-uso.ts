@@ -4,8 +4,10 @@
 // Módulo puro (sin React ni Supabase) para probarlo con `node`:
 // `npm run test:tablero`. Las filas salen de `cocina_tablero_en_uso()` (ver
 // `listTableroEnUso`), la categoría es la MISMA de Inventario (la categoría de
-// compra del insumo agrupada con `categoriaVisible`) y «viene de Producción»
-// sale de `insumos.se_procesa`.
+// compra del insumo agrupada con `categoriaVisible`). «Subrecetas» / «Desde
+// Producción» solo si el ítem es una receta con `es_subreceta` y tiene saldo
+// en uso. `se_procesa` no sirve de sustituto: hoy las recetas no traen stock,
+// así que ese grupo no aparece y todo queda bajo «En uso» (desde Almacén).
 
 import type { TableroEnUso } from "@/lib/data/jornada-cocina";
 import { categoriaVisible, GRUPOS_CATEGORIA_STOCK, SIN_CATEGORIA_STOCK } from "@/lib/stock-liviano";
@@ -14,7 +16,28 @@ import { categoriaVisible, GRUPOS_CATEGORIA_STOCK, SIN_CATEGORIA_STOCK } from "@
 export type InsumoParaTablero = {
   id: string;
   categoriaCompra?: string | null;
-  seProcesa?: boolean | null;
+};
+
+/**
+ * Receta que podría entrar al tablero como subreceta.
+ * Solo cuenta si `esSubreceta` y `cantidadEnUso` > 0. Hoy `recetas` no tiene
+ * saldo, así que sin `cantidadEnUso` no aparece. Cuando ese saldo exista se
+ * pasa aquí, sin cambiar la pantalla.
+ */
+export type SubrecetaParaTablero = {
+  id: string;
+  nombre: string;
+  esSubreceta?: boolean | null;
+  activo?: boolean | null;
+  unidadBase?: string | null;
+  /** Unidad de rendimiento de la receta, si no hay `unidadBase`. */
+  rendimientoUnidad?: string | null;
+  categoriaCompra?: string | null;
+  /** Saldo en uso (unidad base). Sin este número la subreceta no entra. */
+  cantidadEnUso?: number | null;
+  vieneDeAnterior?: number | null;
+  habilitadoEsta?: number | null;
+  procesadoHabilitado?: number | null;
 };
 
 export type ItemEnUso = {
@@ -31,7 +54,7 @@ export type ItemEnUso = {
   fillAnterior: number;
   fillHoy: number;
   categoria: string;
-  /** Pasó por Producción (se procesa): va bajo «Subrecetas». */
+  /** Receta con es_subreceta y saldo en uso: va bajo «Subrecetas». */
   deProduccion: boolean;
 };
 
@@ -41,8 +64,13 @@ function pos(n: number): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** Una fila del tablero convertida para dibujar. Devuelve null si no hay nada en uso. */
-export function itemDeFila(fila: TableroEnUso, insumo: InsumoParaTablero | undefined): ItemEnUso | null {
+/** Una fila del tablero convertida para dibujar. Devuelve null si no hay nada en uso.
+ *  `deProduccion` solo lo enciende quien ya comprobó que la fila es una subreceta real. */
+export function itemDeFila(
+  fila: TableroEnUso,
+  insumo: InsumoParaTablero | undefined,
+  deProduccion = false,
+): ItemEnUso | null {
   const hoyFila = pos(fila.habilitadoEsta);
   const cantidad = pos(fila.stockProcesado) > 0 ? pos(fila.stockProcesado) : pos(fila.vieneDeAnterior) + hoyFila;
   // Lo de antes nunca pasa de lo que hay ahora.
@@ -63,16 +91,55 @@ export function itemDeFila(fila: TableroEnUso, insumo: InsumoParaTablero | undef
     fillAnterior,
     fillHoy,
     categoria: categoriaVisible(insumo?.categoriaCompra),
-    deProduccion: !!insumo?.seProcesa,
+    deProduccion,
   };
 }
 
-/** Filas del tablero → aros, ordenados por nombre. */
-export function armarItemsEnUso(filas: TableroEnUso[], insumos: InsumoParaTablero[]): ItemEnUso[] {
+/** Arma la fila de una subreceta real. Sin saldo (el caso de hoy) devuelve null. */
+export function filaDeSubreceta(s: SubrecetaParaTablero): TableroEnUso | null {
+  if (!s.esSubreceta || s.activo === false) return null;
+  const cantidad = pos(s.cantidadEnUso ?? NaN);
+  if (cantidad <= EPS) return null;
+  const anterior = Math.min(pos(s.vieneDeAnterior ?? 0), cantidad);
+  const hoy = s.habilitadoEsta == null ? Math.max(0, cantidad - anterior) : pos(s.habilitadoEsta);
+  return {
+    insumoId: s.id,
+    nombre: s.nombre,
+    unidadBase: s.unidadBase || s.rendimientoUnidad || "",
+    stockActual: 0,
+    stockProcesado: cantidad,
+    vieneDeAnterior: anterior,
+    habilitadoEsta: hoy,
+    procesadoHabilitado: s.procesadoHabilitado == null ? hoy : pos(s.procesadoHabilitado),
+    jornadaId: null,
+    jornadaIniciadoAt: null,
+    pendientesAbiertos: 0,
+    lotesPendientes: 0,
+  };
+}
+
+/** Filas del tablero → aros, ordenados por nombre.
+ *  Los insumos nunca son subreceta (aunque `se_procesa`). Las subrecetas entran
+ *  solo por `subrecetas`, y solo si son recetas con es_subreceta y saldo. */
+export function armarItemsEnUso(
+  filas: TableroEnUso[],
+  insumos: InsumoParaTablero[],
+  subrecetas: SubrecetaParaTablero[] = [],
+): ItemEnUso[] {
   const porId = new Map(insumos.map((i) => [i.id, i]));
   const items: ItemEnUso[] = [];
   for (const f of filas) {
-    const it = itemDeFila(f, porId.get(f.insumoId));
+    const it = itemDeFila(f, porId.get(f.insumoId), false);
+    if (it) items.push(it);
+  }
+  for (const s of subrecetas) {
+    const fila = filaDeSubreceta(s);
+    if (!fila) continue;
+    const it = itemDeFila(
+      fila,
+      { id: s.id, categoriaCompra: s.categoriaCompra },
+      true,
+    );
     if (it) items.push(it);
   }
   return items.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -87,7 +154,7 @@ export function categoriasEnUso(items: ItemEnUso[]): string[] {
   return [...set].sort((a, b) => (ORDEN.get(a) ?? 99) - (ORDEN.get(b) ?? 99) || a.localeCompare(b, "es"));
 }
 
-/** Subrecetas (vienen de Producción) y el resto (directo del almacén). */
+/** Subrecetas reales en uso (desde Producción) y el resto (directo del almacén). */
 export function partirPorOrigen(items: ItemEnUso[]): { subrecetas: ItemEnUso[]; directo: ItemEnUso[] } {
   return {
     subrecetas: items.filter((i) => i.deProduccion),
